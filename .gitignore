@@ -1,0 +1,22 @@
+# Hasil build
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Rahasia: jangan pernah commit file .env
+.env
+.env.*
+!.env.example
+
+# Installer yang tidak sengaja ter-download ke folder project
+*.tar.gz
+*.zip
+/kubectl
+/minikube-linux-amd64
+
+# Editor & OS
+.idea/
+.DS_Store
+.vscode
