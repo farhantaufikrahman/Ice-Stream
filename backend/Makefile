@@ -2,9 +2,12 @@
 -include .env
 export
 
-.PHONY: run docker-push test test-race fmt vet tidy docker-build docker-run k8s-up k8s-restart k8s-logs k8s-forward
+.PHONY: run test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
+
+MIGRATE_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-migrations:dev
+
 docker-push: 
 	docker push $(IMAGE)
 
@@ -44,3 +47,18 @@ k8s-logs: ## Lihat log API gateway secara live
 
 k8s-forward: ## Akses API dari PC
 	kubectl -n ice-stream port-forward svc/api 4010:80
+
+migrate-build: ## Build image migrasi (Flyway + file SQL di folder migrations)
+	docker build -t $(MIGRATE_IMAGE) migrations
+
+migrate-push: ## Upload image migrasi ke Docker Hub
+	docker push $(MIGRATE_IMAGE)
+
+k8s-migrate: ## Jalankan migrasi schema AUTH_SVC di Kubernetes lalu tampilkan lognya
+	kubectl -n ice-stream delete job migrate-auth --ignore-not-found
+	kubectl apply -f ../infra/k8s/jobs/migrate-auth.yaml
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-auth --timeout=300s
+	kubectl -n ice-stream logs job/migrate-auth
+
+k8s-forward-db: ## Buka Oracle di localhost:1521 (untuk make run dan aplikasi database di laptop)
+	kubectl -n ice-stream port-forward svc/oracle 1521:1521

@@ -37,6 +37,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: AUTH_SVC_PASSWORD
           readinessProbe:
             httpGet:
               path: /readyz
