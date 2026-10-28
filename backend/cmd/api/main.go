@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/farhantaufikrahman/ice-stream/internal/config"
-	"github.com/farhantaufikrahman/ice-stream/internal/httpserver"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
 )
 
 func main() {

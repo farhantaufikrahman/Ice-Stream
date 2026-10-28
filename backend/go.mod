@@ -1,4 +1,4 @@
-module github.com/farhantaufikrahman/ice-stream
+module github.com/farhantaufikrahman/ice-stream/backend
 
 go 1.27.3
 

@@ -10,7 +10,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	"github.com/farhantaufikrahman/ice-stream/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 )
 
 // ReadinessCheck memeriksa satu dependensi (Oracle, NATS, dan seterusnya).

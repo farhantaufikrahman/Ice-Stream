@@ -1,0 +1,16 @@
+# Konfigurasi non-rahasia untuk API gateway.
+# Rahasia (password Oracle, API key LiveKit) nanti masuk ke Secret, bukan di sini.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: ice-stream
+data:
+  APP_ENV: production
+  HTTP_PORT: "8080"
+  # Tambahkan domain Vercel kamu di sini nanti, pisahkan dengan koma.
+  CORS_ALLOWED_ORIGINS: http://localhost:5173
+  SHUTDOWN_TIMEOUT: 10s

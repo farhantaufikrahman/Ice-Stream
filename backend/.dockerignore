@@ -1,0 +1,9 @@
+# File yang tidak perlu dikirim ke Docker saat build.
+.git
+.env
+.env.*
+!.env.example
+bin/
+*.tar.gz
+*.zip
+*.md
