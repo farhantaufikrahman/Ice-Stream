@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/database"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
 )
 
@@ -35,9 +36,29 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	db, err := database.OpenOracle(cfg.DB)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Cek sekali saat start hanya untuk log. Kalau gagal, server tetap jalan
+	// dan /readyz menjawab 503 sampai Oracle siap.
+	pingCtx, cancelPing := context.WithTimeout(ctx, 5*time.Second)
+	if err := db.PingContext(pingCtx); err != nil {
+		logger.Warn("oracle belum bisa dihubungi", slog.Any("error", err))
+	} else {
+		logger.Info("terhubung ke oracle", slog.String("host", cfg.DB.Host), slog.String("service", cfg.DB.Service))
+	}
+	cancelPing()
+
+	checks := map[string]httpserver.ReadinessCheck{
+		"oracle": db.PingContext,
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpserver.NewRouter(cfg, logger, nil),
+		Handler:           httpserver.NewRouter(cfg, logger, checks),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
