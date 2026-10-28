@@ -1,5 +1,5 @@
 # Hasil build
-/bin/
+bin/
 *.exe
 *.test
 *.out

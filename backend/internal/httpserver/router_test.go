@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/farhantaufikrahman/ice-stream/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 )
 
 func newTestRouter(t *testing.T, checks map[string]ReadinessCheck) *gin.Engine {
