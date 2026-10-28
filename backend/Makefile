@@ -2,9 +2,11 @@
 -include .env
 export
 
-.PHONY: run test test-race fmt vet tidy docker-build docker-run k8s-up k8s-restart k8s-logs k8s-forward
+.PHONY: run docker-push test test-race fmt vet tidy docker-build docker-run k8s-up k8s-restart k8s-logs k8s-forward
 
-IMAGE ?= ice-stream-api:dev
+IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
+docker-push: 
+	docker push $(IMAGE)
 
 run: ## Jalankan API gateway
 	go run ./cmd/api
