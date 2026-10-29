@@ -9,6 +9,8 @@ coverage.*
 .env
 .env.*
 !.env.example
+# Password untuk Secret Kubernetes (dibaca secretGenerator)
+infra/k8s/secrets/*.env
 
 # Installer yang tidak sengaja ter-download ke folder project
 *.tar.gz

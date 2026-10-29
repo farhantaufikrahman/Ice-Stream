@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: oracle
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: oracle
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  serviceName: oracle
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oracle
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oracle
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      # Beri Oracle waktu untuk menutup database dengan rapi.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # 54321 = user "oracle" dan grup "oinstall" di image gvenzl.
+        runAsUser: 54321
+        runAsGroup: 54321
+        fsGroup: 54321
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Beberapa storage lokal (termasuk hostpath Docker Desktop) membuat
+        # folder volume milik root. Container ini mengubah pemiliknya ke
+        # user oracle sebelum Oracle start. Hanya folder teratas, bukan -R.
+        - name: fix-permissions
+          image: busybox:1.37
+          command: ["sh", "-c", "chown 54321:54321 /opt/oracle/oradata"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+          volumeMounts:
+            - name: data
+              mountPath: /opt/oracle/oradata
+      containers:
+        - name: oracle
+          image: gvenzl/oracle-free:23-slim
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: oracle
+              containerPort: 1521
+          env:
+            # Ketiga nilai ini HANYA dipakai saat database pertama kali dibuat
+            # (volume masih kosong). Mengubahnya nanti tidak mengganti password.
+            - name: ORACLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: ORACLE_PASSWORD
+            - name: APP_USER
+              value: auth_svc
+            - name: APP_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: AUTH_SVC_PASSWORD
+          # Start pertama kali bisa beberapa menit. startupProbe memberi
+          # waktu sampai 10 menit (60 x 10 detik) sebelum dianggap gagal.
+          startupProbe:
+            exec:
+              command: ["/opt/oracle/healthcheck.sh"]
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["/opt/oracle/healthcheck.sh"]
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          # Liveness cukup cek port terbuka. Jangan terlalu agresif:
+          # me-restart database di tengah jalan lebih berbahaya.
+          livenessProbe:
+            tcpSocket:
+              port: oracle
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            # Oracle Free memakai sekitar 2 GiB RAM saat idle.
+            requests:
+              cpu: 250m
+              memory: 2Gi
+            limits:
+              memory: 3Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /opt/oracle/oradata
+  # Setiap pod mendapat PVC sendiri (data-oracle-0) yang TIDAK ikut terhapus
+  # saat StatefulSet dihapus, jadi data aman.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: oracle
+          app.kubernetes.io/part-of: ice-stream
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

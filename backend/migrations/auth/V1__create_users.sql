@@ -1,0 +1,20 @@
+CREATE TABLE users (
+    id                NUMBER(19)              GENERATED ALWAYS AS IDENTITY,
+    username          VARCHAR2(30 CHAR)       NOT NULL,
+    email             VARCHAR2(254 CHAR)      NOT NULL,
+    password_hash     VARCHAR2(255 CHAR)      NOT NULL,
+    display_name      VARCHAR2(50 CHAR)       NOT NULL,
+    avatar_url        VARCHAR2(500 CHAR),
+    bio               VARCHAR2(500 CHAR),
+    role              VARCHAR2(10 CHAR)       DEFAULT 'USER'   NOT NULL,
+    status            VARCHAR2(10 CHAR)       DEFAULT 'ACTIVE' NOT NULL,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+    created_at        TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    updated_at        TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    deleted_at        TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT users_pk          PRIMARY KEY (id),
+    CONSTRAINT users_username_uq UNIQUE (username),
+    CONSTRAINT users_email_uq    UNIQUE (email),
+    CONSTRAINT users_role_ck     CHECK (role IN ('USER', 'ADMIN')),
+    CONSTRAINT users_status_ck   CHECK (status IN ('ACTIVE', 'BANNED'))
+);
