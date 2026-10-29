@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+// Kontrak gRPC AuthService. Hanya dipanggil dari dalam cluster (oleh API
+// gateway), tidak pernah langsung dari browser.
+package auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service AuthService {
+  // Register membuat akun baru. Error ALREADY_EXISTS jika username atau
+  // email sudah dipakai, INVALID_ARGUMENT jika input tidak valid.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // Login memeriksa password lalu memberi access token + refresh token.
+  // Error UNAUTHENTICATED jika username/email atau password salah.
+  rpc Login(LoginRequest) returns (LoginResponse);
+  // RefreshToken menukar refresh token dengan pasangan token baru.
+  // Refresh token lama langsung tidak berlaku (rotasi).
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  // Logout mencabut refresh token. Aman dipanggil berkali-kali.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+}
+
+message User {
+  int64 id = 1;
+  string username = 2;
+  string email = 3;
+  string display_name = 4;
+  // "USER" atau "ADMIN".
+  string role = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message TokenPair {
+  // JWT berumur pendek, dikirim di header Authorization: Bearer <token>.
+  string access_token = 1;
+  google.protobuf.Timestamp access_token_expires_at = 2;
+  // String acak berumur panjang, disimpan di cookie httpOnly oleh gateway.
+  string refresh_token = 3;
+  google.protobuf.Timestamp refresh_token_expires_at = 4;
+}
+
+// ClientInfo dicatat bersama refresh token, supaya nanti user bisa melihat
+// perangkat mana saja yang sedang login.
+message ClientInfo {
+  string user_agent = 1;
+  string ip_address = 2;
+}
+
+message RegisterRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+  // Opsional; jika kosong, memakai username.
+  string display_name = 4;
+}
+
+message RegisterResponse {
+  User user = 1;
+}
+
+message LoginRequest {
+  // Username atau email.
+  string login = 1;
+  string password = 2;
+  ClientInfo client = 3;
+}
+
+message LoginResponse {
+  User user = 1;
+  TokenPair tokens = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+  ClientInfo client = 2;
+}
+
+message RefreshTokenResponse {
+  TokenPair tokens = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
