@@ -45,18 +45,13 @@ func (c Config) IsProduction() bool {
 	return c.Env == "production"
 }
 
-// Load membaca konfigurasi dari environment variable dan memvalidasinya.
+// Load membaca konfigurasi API gateway dari environment variable dan memvalidasinya.
 func Load() (Config, error) {
 	shutdownTimeout, err := getDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
 	if err != nil {
 		return Config{}, err
 	}
-
-	dbPort, err := getInt("DB_PORT", 1521)
-	if err != nil {
-		return Config{}, err
-	}
-	dbMaxOpen, err := getInt("DB_MAX_OPEN_CONNS", 10)
+	db, err := loadDB()
 	if err != nil {
 		return Config{}, err
 	}
@@ -66,14 +61,7 @@ func Load() (Config, error) {
 		HTTPAddr:           ":" + getString("HTTP_PORT", "8080"),
 		CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		ShutdownTimeout:    shutdownTimeout,
-		DB: DBConfig{
-			Host:         getString("DB_HOST", "localhost"),
-			Port:         dbPort,
-			Service:      getString("DB_SERVICE", "FREEPDB1"),
-			User:         getString("DB_USER", "auth_svc"),
-			Password:     os.Getenv("DB_PASSWORD"), // sengaja tanpa default
-			MaxOpenConns: dbMaxOpen,
-		},
+		DB:                 db,
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -86,23 +74,54 @@ func (c Config) validate() error {
 	if c.Env != "development" && c.Env != "production" {
 		return fmt.Errorf("APP_ENV harus \"development\" atau \"production\", dapat %q", c.Env)
 	}
-	port := strings.TrimPrefix(c.HTTPAddr, ":")
-	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
-		return fmt.Errorf("HTTP_PORT tidak valid: %q", port)
+	if err := validPort("HTTP_PORT", strings.TrimPrefix(c.HTTPAddr, ":")); err != nil {
+		return err
 	}
 	if len(c.CORSAllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS tidak boleh kosong")
 	}
-	if c.DB.Port < 1 || c.DB.Port > 65535 {
-		return fmt.Errorf("DB_PORT tidak valid: %d", c.DB.Port)
+	return c.DB.validate()
+}
+
+// loadDB membaca pengaturan Oracle (DB_*). Dipakai oleh semua service.
+func loadDB() (DBConfig, error) {
+	port, err := getInt("DB_PORT", 1521)
+	if err != nil {
+		return DBConfig{}, err
 	}
-	if c.DB.MaxOpenConns < 1 {
-		return fmt.Errorf("DB_MAX_OPEN_CONNS minimal 1, dapat %d", c.DB.MaxOpenConns)
+	maxOpen, err := getInt("DB_MAX_OPEN_CONNS", 10)
+	if err != nil {
+		return DBConfig{}, err
+	}
+	return DBConfig{
+		Host:         getString("DB_HOST", "localhost"),
+		Port:         port,
+		Service:      getString("DB_SERVICE", "FREEPDB1"),
+		User:         getString("DB_USER", "auth_svc"),
+		Password:     os.Getenv("DB_PASSWORD"), // sengaja tanpa default
+		MaxOpenConns: maxOpen,
+	}, nil
+}
+
+func (d DBConfig) validate() error {
+	if d.Port < 1 || d.Port > 65535 {
+		return fmt.Errorf("DB_PORT tidak valid: %d", d.Port)
+	}
+	if d.MaxOpenConns < 1 {
+		return fmt.Errorf("DB_MAX_OPEN_CONNS minimal 1, dapat %d", d.MaxOpenConns)
 	}
 	// Password tidak diberi default agar tidak ada password bawaan yang
 	// ikut ter-commit. Isi lewat .env (lokal) atau Secret (Kubernetes).
-	if c.DB.Password == "" {
+	if d.Password == "" {
 		return fmt.Errorf("DB_PASSWORD wajib diisi")
+	}
+	return nil
+}
+
+// validPort memeriksa bahwa nilai port berupa angka 1 sampai 65535.
+func validPort(key, port string) error {
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("%s tidak valid: %q", key, port)
 	}
 	return nil
 }
