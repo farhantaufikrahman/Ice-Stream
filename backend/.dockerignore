@@ -7,3 +7,5 @@ bin/
 *.tar.gz
 *.zip
 *.md
+secrets/
+*.pem
