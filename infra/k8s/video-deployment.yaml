@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: video
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: video
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: video
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      # Harus lebih lama dari SHUTDOWN_TIMEOUT (10s).
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: video
+          # Image dari akun Docker Hub kamu (farhanrahman27).
+          image: farhanrahman27/ice-stream-video:dev
+          imagePullPolicy: Always
+          ports:
+            - name: grpc
+              containerPort: 50052
+          envFrom:
+            - configMapRef:
+                name: video-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: VIDEO_SVC_PASSWORD
+            # Untuk lokal, VideoService memakai user admin RustFS. Di
+            # production sebaiknya dibuat access key khusus yang hanya boleh
+            # mengakses bucket videos.
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_ACCESS_KEY
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_SECRET_KEY
+          # NOT_SERVING jika Oracle atau RustFS tidak bisa dihubungi.
+          readinessProbe:
+            grpc:
+              port: 50052
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

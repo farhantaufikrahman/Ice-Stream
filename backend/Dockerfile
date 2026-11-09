@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 
-# Satu Dockerfile, dua image. Pilih dengan --target:
-#   docker build --target api  -t .../ice-stream-api:dev  .
-#   docker build --target auth -t .../ice-stream-auth:dev .
+# Satu Dockerfile, tiga image. Pilih dengan --target:
+#   docker build --target api   -t .../ice-stream-api:dev   .
+#   docker build --target auth  -t .../ice-stream-auth:dev  .
+#   docker build --target video -t .../ice-stream-video:dev .
 #
 # Kenapa dibedakan? API gateway tidak memakai database (hanya memanggil
-# AuthService lewat gRPC), jadi bisa jadi binary statis di image distroless
-# yang sangat kecil. AuthService memakai GORM + godror yang butuh CGO dan
-# Oracle Instant Client, jadi butuh libc (glibc) dan library Oracle di
-# dalam image.
+# service lain lewat gRPC), jadi bisa jadi binary statis di image distroless
+# yang sangat kecil. AuthService dan VideoService memakai GORM + godror yang
+# butuh CGO dan Oracle Instant Client, jadi butuh libc (glibc) dan library
+# Oracle di dalam image.
 
 # Samakan versi ini dengan baris `go` di go.mod.
 ARG GO_VERSION=1.27
@@ -49,11 +50,12 @@ USER 65532:65532
 ENTRYPOINT ["/app"]
 
 # =====================================================================
-# Target "auth": binary CGO + Oracle Instant Client di debian-slim
+# Target "auth" dan "video": binary CGO + Oracle Instant Client
 # =====================================================================
 # Image golang berbasis Debian sudah berisi gcc, yang dibutuhkan CGO.
 # Builder dan runtime sama-sama Debian 13 (trixie) supaya versi glibc cocok.
-FROM golang:${GO_VERSION}-trixie AS build-auth
+# Kedua binary dibangun di tahap yang sama; cache Go membuat build kedua cepat.
+FROM golang:${GO_VERSION}-trixie AS build-cgo
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -64,7 +66,8 @@ COPY . .
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/app ./cmd/auth
+    CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/auth ./cmd/auth \
+ && CGO_ENABLED=1 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/video ./cmd/video
 
 # Tahap terpisah untuk download + cek checksum Instant Client, supaya curl
 # dan unzip tidak ikut masuk ke image akhir.
@@ -80,13 +83,16 @@ RUN curl -fsSL -o /tmp/instantclient.zip "${INSTANTCLIENT_URL}" \
  && unzip -q /tmp/instantclient.zip -d /opt/oracle \
  && rm /tmp/instantclient.zip
 
-FROM debian:trixie-slim AS auth
+# Dasar bersama untuk semua service yang memakai Oracle.
+FROM debian:trixie-slim AS oracle-runtime
 ARG INSTANTCLIENT_DIR
 # libaio1t64: dibutuhkan Instant Client. Di Debian 13 namanya berakhiran
 # t64 dan filenya libaio.so.1t64, sedangkan Instant Client mencari
 # libaio.so.1, jadi dibuatkan symlink.
+# ca-certificates: supaya service bisa memanggil HTTPS (misalnya AWS S3 atau
+# Cloudflare R2 nanti).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libaio1t64 \
+ && apt-get install -y --no-install-recommends libaio1t64 ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
 COPY --from=instantclient ${INSTANTCLIENT_DIR} ${INSTANTCLIENT_DIR}
@@ -94,8 +100,14 @@ COPY --from=instantclient ${INSTANTCLIENT_DIR} ${INSTANTCLIENT_DIR}
 # libclntsh.so tanpa perlu LD_LIBRARY_PATH.
 RUN echo "${INSTANTCLIENT_DIR}" > /etc/ld.so.conf.d/oracle-instantclient.conf \
  && ldconfig
-COPY --from=build-auth /out/app /app
 ENV APP_ENV=production
 # Debian tidak punya user 65532, tapi UID angka tetap bisa dipakai.
 USER 65532:65532
+
+FROM oracle-runtime AS auth
+COPY --from=build-cgo /out/auth /app
+ENTRYPOINT ["/app"]
+
+FROM oracle-runtime AS video
+COPY --from=build-cgo /out/video /app
 ENTRYPOINT ["/app"]

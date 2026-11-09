@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+// Kontrak gRPC VideoService. Seperti AuthService, hanya dipanggil oleh API
+// gateway dari dalam cluster. Gateway yang memeriksa access token, lalu
+// mengirim id user yang sudah terverifikasi di field requester_id/viewer_id.
+package video.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service VideoService {
+  // CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memberi URL
+  // presigned untuk mengunggah file langsung dari browser ke object storage.
+  // Error INVALID_ARGUMENT jika judul, tipe file, atau ukuran tidak valid.
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+  // CompleteUpload dipanggil setelah browser selesai mengunggah. Service
+  // memeriksa file di storage, lalu mengubah status menjadi UPLOADED.
+  // Error NOT_FOUND jika video tidak ada atau bukan milik requester,
+  // FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+  // GetVideo mengambil satu video beserta URL untuk memutarnya. Video yang
+  // belum selesai diunggah hanya bisa dilihat pemiliknya.
+  rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
+  // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
+  rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
+}
+
+enum VideoStatus {
+  VIDEO_STATUS_UNSPECIFIED = 0;
+  // Baris sudah dibuat, file belum (selesai) diunggah.
+  VIDEO_STATUS_PENDING_UPLOAD = 1;
+  // File sudah ada di storage dan ukurannya sudah dicek.
+  VIDEO_STATUS_UPLOADED = 2;
+}
+
+message Video {
+  int64 id = 1;
+  int64 owner_id = 2;
+  string title = 3;
+  string description = 4;
+  VideoStatus status = 5;
+  string content_type = 6;
+  int64 size_bytes = 7;
+  google.protobuf.Timestamp created_at = 8;
+  // Kosong selama status masih PENDING_UPLOAD.
+  google.protobuf.Timestamp uploaded_at = 9;
+}
+
+message CreateUploadRequest {
+  int64 requester_id = 1;
+  string title = 2;
+  string description = 3;
+  // Misalnya "video/mp4". Harus sama persis dengan header Content-Type
+  // yang dikirim browser saat mengunggah.
+  string content_type = 4;
+  int64 size_bytes = 5;
+}
+
+message CreateUploadResponse {
+  Video video = 1;
+  // URL tujuan PUT. Hanya berlaku sampai upload_url_expires_at.
+  string upload_url = 2;
+  google.protobuf.Timestamp upload_url_expires_at = 3;
+  // Header yang WAJIB ikut dikirim bersama PUT (termasuk Content-Type),
+  // karena ikut ditandatangani di dalam URL.
+  map<string, string> upload_headers = 4;
+}
+
+message CompleteUploadRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message CompleteUploadResponse {
+  Video video = 1;
+}
+
+message GetVideoRequest {
+  int64 video_id = 1;
+  // 0 berarti pengunjung belum login.
+  int64 viewer_id = 2;
+}
+
+message GetVideoResponse {
+  Video video = 1;
+  // URL presigned untuk memutar file. Kosong selama PENDING_UPLOAD.
+  string playback_url = 2;
+  google.protobuf.Timestamp playback_url_expires_at = 3;
+}
+
+message ListMyVideosRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListMyVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}

@@ -2,11 +2,13 @@
 -include .env
 export
 
-.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
 
 AUTH_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-auth:dev
+
+VIDEO_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-video:dev
 
 MIGRATE_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-migrations:dev
 
@@ -16,12 +18,20 @@ docker-push: ## Upload image ke Docker Hub (jalankan docker login sekali dulu)
 docker-push-auth: ## Upload image AuthService ke Docker Hub
 	docker push $(AUTH_IMAGE)
 
+docker-push-video: ## Upload image VideoService ke Docker Hub
+	docker push $(VIDEO_IMAGE)
+
 run: ## Jalankan API gateway
 	go run ./cmd/api
 
 
 run-auth: ## Jalankan AuthService (gRPC) di port 50051
 	go run ./cmd/auth
+
+# $$VIDEO_DB_PASSWORD (dua tanda $) dibaca oleh shell dari .env, bukan oleh
+# make, jadi password tidak ikut tercetak di terminal.
+run-video: ## Jalankan VideoService (gRPC) di port 50052; butuh make k8s-forward-db dan k8s-forward-storage
+	DB_USER=video_svc DB_PASSWORD="$$VIDEO_DB_PASSWORD" GRPC_PORT=50052 go run ./cmd/video
 
 proto: ## Buat ulang kode Go dari file .proto (folder gen/)
 	buf generate
@@ -50,6 +60,9 @@ docker-build: ## Build image Docker untuk API gateway
 docker-build-auth: ## Build image Docker untuk AuthService
 	docker build --target auth -t $(AUTH_IMAGE) .
 
+docker-build-video: ## Build image Docker untuk VideoService
+	docker build --target video -t $(VIDEO_IMAGE) .
+
 docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService harus jalan (make run-auth)
 	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 \
 		-e AUTH_GRPC_ADDR=host.docker.internal:50051 \
@@ -60,16 +73,20 @@ docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000;
 k8s-up: ## Pasang atau perbarui semua manifest di namespace ice-stream
 	kubectl apply -k ../infra/k8s/
 
-k8s-restart: ## Restart pod gateway dan auth supaya memakai image yang baru di-push
-	kubectl -n ice-stream rollout restart deployment/api deployment/auth
+k8s-restart: ## Restart pod gateway, auth, dan video supaya memakai image yang baru di-push
+	kubectl -n ice-stream rollout restart deployment/api deployment/auth deployment/video
 	kubectl -n ice-stream rollout status deployment/auth --timeout=120s
+	kubectl -n ice-stream rollout status deployment/video --timeout=120s
 	kubectl -n ice-stream rollout status deployment/api --timeout=60s
 
 k8s-logs: ## Lihat log API gateway secara live
 	kubectl -n ice-stream logs -f deployment/api
-	
+
 k8s-logs-auth: ## Lihat log AuthService secara live
 	kubectl -n ice-stream logs -f deployment/auth
+
+k8s-logs-video: ## Lihat log VideoService secara live
+	kubectl -n ice-stream logs -f deployment/video
 
 k8s-forward: ## Akses API dari PC
 	kubectl -n ice-stream port-forward svc/api 4010:80
@@ -88,3 +105,13 @@ k8s-migrate: ## Jalankan migrasi schema AUTH_SVC di Kubernetes lalu tampilkan lo
 
 k8s-forward-db: ## Buka Oracle di localhost:1521 (untuk make run-auth dan aplikasi database di laptop)
 	kubectl -n ice-stream port-forward svc/oracle 1521:1521
+
+k8s-migrate-video: ## Buat user VIDEO_SVC + tabel videos di Kubernetes lalu tampilkan lognya
+	kubectl -n ice-stream delete job migrate-video --ignore-not-found
+	kubectl apply -f ../infra/k8s/jobs/migrate-video.yaml
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-video --timeout=300s
+	kubectl -n ice-stream logs job/migrate-video -c bootstrap
+	kubectl -n ice-stream logs job/migrate-video -c video
+
+k8s-forward-storage: ## Buka RustFS di localhost:9000 (API S3) dan localhost:9001 (console)
+	kubectl -n ice-stream port-forward svc/storage 9000:9000 9001:9001

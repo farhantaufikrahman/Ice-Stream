@@ -4,9 +4,6 @@
 // 	protoc        (unknown)
 // source: auth/v1/auth.proto
 
-// Kontrak gRPC AuthService. Hanya dipanggil dari dalam cluster (oleh API
-// gateway), tidak pernah langsung dari browser.
-
 package authv1
 
 import (
@@ -26,12 +23,11 @@ const (
 )
 
 type User struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Id          int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Username    string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
-	Email       string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
-	DisplayName string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	// "USER" atau "ADMIN".
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	Email         string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Role          string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -111,11 +107,9 @@ func (x *User) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type TokenPair struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// JWT berumur pendek, dikirim di header Authorization: Bearer <token>.
-	AccessToken          string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	AccessTokenExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=access_token_expires_at,json=accessTokenExpiresAt,proto3" json:"access_token_expires_at,omitempty"`
-	// String acak berumur panjang, disimpan di cookie httpOnly oleh gateway.
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken           string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	AccessTokenExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=access_token_expires_at,json=accessTokenExpiresAt,proto3" json:"access_token_expires_at,omitempty"`
 	RefreshToken          string                 `protobuf:"bytes,3,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	RefreshTokenExpiresAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=refresh_token_expires_at,json=refreshTokenExpiresAt,proto3" json:"refresh_token_expires_at,omitempty"`
 	unknownFields         protoimpl.UnknownFields
@@ -180,8 +174,6 @@ func (x *TokenPair) GetRefreshTokenExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// ClientInfo dicatat bersama refresh token, supaya nanti user bisa melihat
-// perangkat mana saja yang sedang login.
 type ClientInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserAgent     string                 `protobuf:"bytes,1,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
@@ -235,12 +227,11 @@ func (x *ClientInfo) GetIpAddress() string {
 }
 
 type RegisterRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Username string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Email    string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Password string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
-	// Opsional; jika kosong, memakai username.
-	DisplayName   string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Password      string                 `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,11 +339,10 @@ func (x *RegisterResponse) GetUser() *User {
 }
 
 type LoginRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Username atau email.
-	Login         string      `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
-	Password      string      `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	Client        *ClientInfo `protobuf:"bytes,3,opt,name=client,proto3" json:"client,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Login         string                 `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Client        *ClientInfo            `protobuf:"bytes,3,opt,name=client,proto3" json:"client,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
