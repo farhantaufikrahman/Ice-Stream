@@ -13,6 +13,11 @@ resources:
   - auth-configmap.yaml
   - auth-deployment.yaml
   - auth-service.yaml
+  - storage-service.yaml
+  - storage-statefulset.yaml
+  - video-configmap.yaml
+  - video-deployment.yaml
+  - video-service.yaml
 
 # Membuat Secret "oracle-credentials" dari file secrets/oracle.env
 # (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).
@@ -33,6 +38,12 @@ secretGenerator:
     namespace: ice-stream
     files:
       - secrets/jwt-private.pem
+  # Access key dan secret key admin RustFS (dari secrets/storage.env, tidak
+  # di-commit). Dipakai RustFS dan VideoService.
+  - name: storage-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/storage.env
 
 # Kunci PUBLIK JWT untuk gateway. Bukan rahasia, jadi cukup ConfigMap.
 configMapGenerator:

@@ -1,0 +1,20 @@
+# Alamat RustFS di dalam cluster: http://storage:9000 (API S3) dan
+# http://storage:9001 (console). Dari laptop: make k8s-forward-storage.
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: storage
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console

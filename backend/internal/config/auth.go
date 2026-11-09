@@ -44,7 +44,7 @@ func LoadAuth() (AuthConfig, error) {
 	if err != nil {
 		return AuthConfig{}, err
 	}
-	db, err := loadDB()
+	db, err := loadDB("auth_svc")
 	if err != nil {
 		return AuthConfig{}, err
 	}

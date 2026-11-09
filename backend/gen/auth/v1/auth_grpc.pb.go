@@ -4,9 +4,6 @@
 // - protoc             (unknown)
 // source: auth/v1/auth.proto
 
-// Kontrak gRPC AuthService. Hanya dipanggil dari dalam cluster (oleh API
-// gateway), tidak pernah langsung dari browser.
-
 package authv1
 
 import (
@@ -32,16 +29,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthServiceClient interface {
-	// Register membuat akun baru. Error ALREADY_EXISTS jika username atau
-	// email sudah dipakai, INVALID_ARGUMENT jika input tidak valid.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	// Login memeriksa password lalu memberi access token + refresh token.
-	// Error UNAUTHENTICATED jika username/email atau password salah.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
-	// RefreshToken menukar refresh token dengan pasangan token baru.
-	// Refresh token lama langsung tidak berlaku (rotasi).
 	RefreshToken(ctx context.Context, in *RefreshTokenRequest, opts ...grpc.CallOption) (*RefreshTokenResponse, error)
-	// Logout mencabut refresh token. Aman dipanggil berkali-kali.
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 }
 
@@ -97,16 +87,9 @@ func (c *authServiceClient) Logout(ctx context.Context, in *LogoutRequest, opts 
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
 type AuthServiceServer interface {
-	// Register membuat akun baru. Error ALREADY_EXISTS jika username atau
-	// email sudah dipakai, INVALID_ARGUMENT jika input tidak valid.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	// Login memeriksa password lalu memberi access token + refresh token.
-	// Error UNAUTHENTICATED jika username/email atau password salah.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
-	// RefreshToken menukar refresh token dengan pasangan token baru.
-	// Refresh token lama langsung tidak berlaku (rotasi).
 	RefreshToken(context.Context, *RefreshTokenRequest) (*RefreshTokenResponse, error)
-	// Logout mencabut refresh token. Aman dipanggil berkali-kali.
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }

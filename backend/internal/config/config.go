@@ -131,7 +131,7 @@ func parseSameSite(v string) (http.SameSite, error) {
 
 // loadDB membaca pengaturan Oracle (DB_*). Dipakai oleh service yang
 // memegang database, seperti AuthService. Gateway tidak memakainya.
-func loadDB() (DBConfig, error) {
+func loadDB(defaultUser string) (DBConfig, error) {
 	port, err := getInt("DB_PORT", 1521)
 	if err != nil {
 		return DBConfig{}, err
@@ -144,7 +144,7 @@ func loadDB() (DBConfig, error) {
 		Host:         getString("DB_HOST", "localhost"),
 		Port:         port,
 		Service:      getString("DB_SERVICE", "FREEPDB1"),
-		User:         getString("DB_USER", "auth_svc"),
+		User:         getString("DB_USER", defaultUser),
 		Password:     os.Getenv("DB_PASSWORD"), // sengaja tanpa default
 		MaxOpenConns: maxOpen,
 	}, nil
