@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -184,10 +184,7 @@ func TestLoginIssuesVerifiableAccessToken(t *testing.T) {
 	assert.NotEmpty(t, pair.RefreshToken)
 
 	// Periksa token dengan kunci PUBLIK, persis seperti yang nanti dilakukan gateway.
-	var claims AccessClaims
-	_, err = jwt.ParseWithClaims(pair.AccessToken, &claims, func(*jwt.Token) (any, error) { return pub, nil },
-		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
-		jwt.WithIssuer(TokenIssuer), jwt.WithAudience(TokenAudience))
+	claims, err := accesstoken.NewVerifier(pub).Verify(pair.AccessToken)
 	require.NoError(t, err)
 	assert.Equal(t, strconv.FormatInt(reg.ID, 10), claims.Subject)
 	assert.Equal(t, RoleUser, claims.Role)

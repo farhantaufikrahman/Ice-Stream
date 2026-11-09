@@ -10,6 +10,9 @@ resources:
   - api-httproute.yaml
   - oracle-service.yaml
   - oracle-statefulset.yaml
+  - auth-configmap.yaml
+  - auth-deployment.yaml
+  - auth-service.yaml
 
 # Membuat Secret "oracle-credentials" dari file secrets/oracle.env
 # (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).
@@ -22,3 +25,18 @@ secretGenerator:
       # Nama Secret tetap "oracle-credentials" (tanpa akhiran acak), supaya
       # Job migrasi yang dipasang terpisah bisa memakainya juga.
       disableNameSuffixHash: true
+  # Kunci PRIVAT JWT, hanya untuk AuthService. File-nya disalin dari
+  # backend/secrets/ (tidak di-commit). Tanpa disableNameSuffixHash, nama
+  # Secret mendapat akhiran acak (misalnya auth-jwt-7h2k9), dan Deployment
+  # otomatis di-restart saat kunci diganti.
+  - name: auth-jwt
+    namespace: ice-stream
+    files:
+      - secrets/jwt-private.pem
+
+# Kunci PUBLIK JWT untuk gateway. Bukan rahasia, jadi cukup ConfigMap.
+configMapGenerator:
+  - name: jwt-public
+    namespace: ice-stream
+    files:
+      - secrets/jwt-public.pem

@@ -1,0 +1,24 @@
+# Konfigurasi non-rahasia untuk AuthService.
+# Password Oracle diambil dari Secret oracle-credentials, kunci JWT dari
+# Secret auth-jwt (keduanya dibuat oleh kustomization.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: ice-stream
+data:
+  APP_ENV: production
+  GRPC_PORT: "50051"
+  SHUTDOWN_TIMEOUT: 10s
+  DB_HOST: oracle
+  DB_PORT: "1521"
+  DB_SERVICE: FREEPDB1
+  DB_USER: auth_svc
+  DB_MAX_OPEN_CONNS: "10"
+  # Lokasi file kunci privat di dalam container (lihat volumeMounts).
+  JWT_PRIVATE_KEY_FILE: /etc/ice-stream/jwt/jwt-private.pem
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 720h

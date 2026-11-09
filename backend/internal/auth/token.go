@@ -15,19 +15,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-)
 
-// Nilai iss dan aud di dalam JWT. Gateway menolak token yang nilainya beda.
-const (
-	TokenIssuer   = "ice-stream-auth"
-	TokenAudience = "ice-stream-api"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 )
-
-// AccessClaims adalah isi access token.
-type AccessClaims struct {
-	Role string `json:"role"`
-	jwt.RegisteredClaims
-}
 
 // TokenMaker membuat access token (JWT) yang ditandatangani dengan Ed25519.
 // Hanya AuthService yang memegang kunci privat; gateway cukup memegang kunci
@@ -67,12 +57,12 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 // AccessToken membuat JWT untuk user dan waktu kedaluwarsanya.
 func (m *TokenMaker) AccessToken(u User, now time.Time) (string, time.Time, error) {
 	expiresAt := now.Add(m.ttl)
-	claims := AccessClaims{
+	claims := accesstoken.Claims{
 		Role: u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    TokenIssuer,
+			Issuer:    accesstoken.Issuer,
 			Subject:   strconv.FormatInt(u.ID, 10),
-			Audience:  jwt.ClaimStrings{TokenAudience},
+			Audience:  jwt.ClaimStrings{accesstoken.Audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},

@@ -16,19 +16,22 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 )
 
-func newTestRouter(t *testing.T, checks map[string]ReadinessCheck) *gin.Engine {
+func newTestRouter(t *testing.T, deps Deps) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	cfg := config.Config{
 		Env:                "development",
 		CORSAllowedOrigins: []string{"http://localhost:5173"},
+		Cookie:             config.CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewRouter(cfg, logger, checks)
+	r, err := NewRouter(cfg, logger, deps)
+	require.NoError(t, err)
+	return r
 }
 
 func TestHealthz(t *testing.T) {
-	r := newTestRouter(t, nil)
+	r := newTestRouter(t, Deps{})
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
@@ -67,7 +70,7 @@ func TestReadyz(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newTestRouter(t, tt.checks)
+			r := newTestRouter(t, Deps{Checks: tt.checks})
 
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
@@ -78,7 +81,7 @@ func TestReadyz(t *testing.T) {
 }
 
 func TestCORS(t *testing.T) {
-	r := newTestRouter(t, nil)
+	r := newTestRouter(t, Deps{})
 
 	t.Run("origin yang diizinkan mendapat header CORS", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/ping", nil)

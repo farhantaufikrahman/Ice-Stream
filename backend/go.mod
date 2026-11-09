@@ -8,7 +8,6 @@ require (
 	github.com/godror/godror v0.51.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/oracle-samples/gorm-oracle v1.1.3
-	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/crypto v0.58.0
 	google.golang.org/grpc v1.85.0

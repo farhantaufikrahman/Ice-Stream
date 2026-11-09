@@ -35,6 +35,9 @@ func TestLoadAuthInvalid(t *testing.T) {
 		"ACCESS_TOKEN_TTL terlalu lama": {"ACCESS_TOKEN_TTL", "2h"},
 		"REFRESH lebih pendek":          {"REFRESH_TOKEN_TTL", "10m"},
 		"DB_PASSWORD kosong":            {"DB_PASSWORD", ""},
+		"DB_PORT bukan angka":           {"DB_PORT", "abc"},
+		"DB_PORT di luar batas":         {"DB_PORT", "0"},
+		"DB_MAX_OPEN_CONNS nol":         {"DB_MAX_OPEN_CONNS", "0"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
