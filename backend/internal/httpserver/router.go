@@ -3,6 +3,7 @@ package httpserver
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 )
 
@@ -17,14 +20,29 @@ import (
 // Kembalikan error jika dependensi belum siap menerima traffic.
 type ReadinessCheck func(ctx context.Context) error
 
-// NewRouter membuat router dengan middleware dan route dasar.
-// checks berisi pemeriksaan untuk /readyz; boleh kosong di tahap awal.
-func NewRouter(cfg config.Config, logger *slog.Logger, checks map[string]ReadinessCheck) *gin.Engine {
+// Deps berisi semua yang dibutuhkan router dari luar. Dikumpulkan dalam satu
+// struct supaya mudah diganti dengan versi palsu di test.
+type Deps struct {
+	// Checks berisi pemeriksaan untuk /readyz; boleh kosong.
+	Checks map[string]ReadinessCheck
+	// Auth adalah klien gRPC ke AuthService.
+	Auth authv1.AuthServiceClient
+	// Verifier memeriksa access token di endpoint yang butuh login.
+	Verifier *accesstoken.Verifier
+}
+
+// NewRouter membuat router dengan middleware dan semua route.
+func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, error) {
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	r := gin.New()
+	// Hanya percaya header X-Forwarded-For dari proxy yang terdaftar.
+	// Tanpa ini, siapa pun bisa memalsukan IP-nya dengan header tersebut.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("TRUSTED_PROXIES tidak valid: %w", err)
+	}
 	r.Use(gin.Recovery(), requestLogger(logger))
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
@@ -36,14 +54,22 @@ func NewRouter(cfg config.Config, logger *slog.Logger, checks map[string]Readine
 
 	// Probe Kubernetes ada di luar /api/v1, sesuai rancangan.
 	r.GET("/healthz", healthz)
-	r.GET("/readyz", readyz(checks))
+	r.GET("/readyz", readyz(deps.Checks))
 
 	v1 := r.Group("/api/v1")
 	v1.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
-	return r
+	auth := &authHandler{client: deps.Auth, cookie: cfg.Cookie, logger: logger}
+	authGroup := v1.Group("/auth", limitBody(maxAuthBodyBytes))
+	authGroup.POST("/register", auth.register)
+	authGroup.POST("/login", auth.login)
+	authGroup.POST("/refresh", auth.refresh)
+	authGroup.POST("/logout", auth.logout)
+	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
+
+	return r, nil
 }
 
 // healthz (liveness) hanya menjawab "proses ini hidup".

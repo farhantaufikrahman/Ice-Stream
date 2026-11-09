@@ -1,11 +1,12 @@
 // Package config membaca konfigurasi aplikasi dari environment variable.
 //
-// Semua nilai punya default yang aman untuk development lokal, kecuali
-// DB_PASSWORD yang wajib diisi lewat .env atau Secret Kubernetes.
+// Hampir semua nilai punya default yang aman untuk development lokal.
+// Yang wajib diisi hanya rahasia dan lokasi file kunci (lihat .env.example).
 package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -23,8 +24,23 @@ type Config struct {
 	// ShutdownTimeout adalah batas waktu menunggu request yang sedang berjalan
 	// selesai saat server dimatikan.
 	ShutdownTimeout time.Duration
-	// DB berisi pengaturan koneksi ke Oracle.
-	DB DBConfig
+	// TrustedProxies berisi IP/CIDR proxy yang boleh mengisi header
+	// X-Forwarded-For. Kosong = header itu diabaikan (paling aman).
+	TrustedProxies []string
+	// AuthGRPCAddr adalah alamat AuthService, misalnya "auth:50051".
+	AuthGRPCAddr string
+	// JWTPublicKeyFile adalah file kunci publik untuk memeriksa access token.
+	JWTPublicKeyFile string
+	// Cookie mengatur cookie refresh token.
+	Cookie CookieConfig
+}
+
+// CookieConfig mengatur cookie refresh token.
+type CookieConfig struct {
+	// Secure = cookie hanya dikirim lewat HTTPS. Wajib true di production.
+	Secure bool
+	// SameSite mengatur kapan browser mengirim cookie ke domain lain.
+	SameSite http.SameSite
 }
 
 // DBConfig berisi pengaturan koneksi ke Oracle.
@@ -51,17 +67,27 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	db, err := loadDB()
+	env := getString("APP_ENV", "development")
+	// Default Secure mengikuti APP_ENV: true di production, false di laptop
+	// (http://localhost tidak memakai HTTPS).
+	cookieSecure, err := getBool("COOKIE_SECURE", env == "production")
+	if err != nil {
+		return Config{}, err
+	}
+	sameSite, err := parseSameSite(getString("COOKIE_SAMESITE", "lax"))
 	if err != nil {
 		return Config{}, err
 	}
 
 	cfg := Config{
-		Env:                getString("APP_ENV", "development"),
+		Env:                env,
 		HTTPAddr:           ":" + getString("HTTP_PORT", "8080"),
 		CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		ShutdownTimeout:    shutdownTimeout,
-		DB:                 db,
+		TrustedProxies:     getList("TRUSTED_PROXIES", nil),
+		AuthGRPCAddr:       getString("AUTH_GRPC_ADDR", "localhost:50051"),
+		JWTPublicKeyFile:   getString("JWT_PUBLIC_KEY_FILE", ""),
+		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -80,10 +106,31 @@ func (c Config) validate() error {
 	if len(c.CORSAllowedOrigins) == 0 {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS tidak boleh kosong")
 	}
-	return c.DB.validate()
+	if c.JWTPublicKeyFile == "" {
+		return fmt.Errorf("JWT_PUBLIC_KEY_FILE wajib diisi")
+	}
+	// Browser menolak cookie SameSite=None yang tidak Secure.
+	if c.Cookie.SameSite == http.SameSiteNoneMode && !c.Cookie.Secure {
+		return fmt.Errorf("COOKIE_SAMESITE=none wajib disertai COOKIE_SECURE=true")
+	}
+	return nil
 }
 
-// loadDB membaca pengaturan Oracle (DB_*). Dipakai oleh semua service.
+// parseSameSite mengubah "lax", "strict", atau "none" menjadi http.SameSite.
+func parseSameSite(v string) (http.SameSite, error) {
+	switch strings.ToLower(v) {
+	case "lax":
+		return http.SameSiteLaxMode, nil
+	case "strict":
+		return http.SameSiteStrictMode, nil
+	case "none":
+		return http.SameSiteNoneMode, nil
+	}
+	return 0, fmt.Errorf("COOKIE_SAMESITE harus lax, strict, atau none, dapat %q", v)
+}
+
+// loadDB membaca pengaturan Oracle (DB_*). Dipakai oleh service yang
+// memegang database, seperti AuthService. Gateway tidak memakainya.
 func loadDB() (DBConfig, error) {
 	port, err := getInt("DB_PORT", 1521)
 	if err != nil {
@@ -143,6 +190,18 @@ func getDuration(key string, fallback time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("%s tidak valid (contoh: 10s, 1m): %w", key, err)
 	}
 	return d, nil
+}
+
+func getBool(key string, fallback bool) (bool, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	b, err := strconv.ParseBool(strings.TrimSpace(v))
+	if err != nil {
+		return false, fmt.Errorf("%s harus true atau false: %w", key, err)
+	}
+	return b, nil
 }
 
 func getInt(key string, fallback int) (int, error) {

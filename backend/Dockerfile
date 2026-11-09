@@ -4,10 +4,11 @@
 #   docker build --target api  -t .../ice-stream-api:dev  .
 #   docker build --target auth -t .../ice-stream-auth:dev .
 #
-# Kenapa dibedakan? API gateway memakai go-ora (pure Go), jadi bisa jadi
-# binary statis di image distroless yang sangat kecil. AuthService memakai
-# GORM + godror yang butuh CGO dan Oracle Instant Client, jadi butuh libc
-# (glibc) dan library Oracle di dalam image.
+# Kenapa dibedakan? API gateway tidak memakai database (hanya memanggil
+# AuthService lewat gRPC), jadi bisa jadi binary statis di image distroless
+# yang sangat kecil. AuthService memakai GORM + godror yang butuh CGO dan
+# Oracle Instant Client, jadi butuh libc (glibc) dan library Oracle di
+# dalam image.
 
 # Samakan versi ini dengan baris `go` di go.mod.
 ARG GO_VERSION=1.27

@@ -37,12 +37,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-config
-          env:
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: oracle-credentials
-                  key: AUTH_SVC_PASSWORD
+          volumeMounts:
+            - name: jwt-public
+              mountPath: /etc/ice-stream/jwt
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -67,3 +65,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+      volumes:
+        # Hanya kunci PUBLIK. Gateway bisa memeriksa token, tapi tidak bisa membuatnya.
+        - name: jwt-public
+          configMap:
+            name: jwt-public

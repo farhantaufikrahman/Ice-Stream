@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
 
@@ -50,18 +50,26 @@ docker-build: ## Build image Docker untuk API gateway
 docker-build-auth: ## Build image Docker untuk AuthService
 	docker build --target auth -t $(AUTH_IMAGE) .
 
-docker-run: ## Jalankan image di Docker (tanpa Kubernetes) di port 4000
-	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 $(IMAGE)
+docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService harus jalan (make run-auth)
+	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 \
+		-e AUTH_GRPC_ADDR=host.docker.internal:50051 \
+		-e JWT_PUBLIC_KEY_FILE=/secrets/jwt-public.pem \
+		-v $(CURDIR)/secrets/jwt-public.pem:/secrets/jwt-public.pem:ro \
+		$(IMAGE)
 
 k8s-up: ## Pasang atau perbarui semua manifest di namespace ice-stream
 	kubectl apply -k ../infra/k8s/
 
-k8s-restart: ## Restart pod supaya memakai image yang baru di-build
-	kubectl -n ice-stream rollout restart deployment/api
+k8s-restart: ## Restart pod gateway dan auth supaya memakai image yang baru di-push
+	kubectl -n ice-stream rollout restart deployment/api deployment/auth
+	kubectl -n ice-stream rollout status deployment/auth --timeout=120s
 	kubectl -n ice-stream rollout status deployment/api --timeout=60s
 
 k8s-logs: ## Lihat log API gateway secara live
 	kubectl -n ice-stream logs -f deployment/api
+	
+k8s-logs-auth: ## Lihat log AuthService secara live
+	kubectl -n ice-stream logs -f deployment/auth
 
 k8s-forward: ## Akses API dari PC
 	kubectl -n ice-stream port-forward svc/api 4010:80
@@ -78,5 +86,5 @@ k8s-migrate: ## Jalankan migrasi schema AUTH_SVC di Kubernetes lalu tampilkan lo
 	kubectl -n ice-stream wait --for=condition=complete job/migrate-auth --timeout=300s
 	kubectl -n ice-stream logs job/migrate-auth
 
-k8s-forward-db: ## Buka Oracle di localhost:1521 (untuk make run dan aplikasi database di laptop)
+k8s-forward-db: ## Buka Oracle di localhost:1521 (untuk make run-auth dan aplikasi database di laptop)
 	kubectl -n ice-stream port-forward svc/oracle 1521:1521

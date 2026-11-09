@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -12,12 +13,12 @@ func TestLoadDefaults(t *testing.T) {
 	// Kosongkan env agar test tidak terpengaruh isi terminal kamu.
 	for _, key := range []string{
 		"APP_ENV", "HTTP_PORT", "CORS_ALLOWED_ORIGINS", "SHUTDOWN_TIMEOUT",
-		"DB_HOST", "DB_PORT", "DB_SERVICE", "DB_USER", "DB_MAX_OPEN_CONNS",
+		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
 	} {
 		t.Setenv(key, "")
 	}
-	// DB_PASSWORD tidak punya default, jadi wajib diisi.
-	t.Setenv("DB_PASSWORD", "rahasia")
+	// JWT_PUBLIC_KEY_FILE tidak punya default, jadi wajib diisi.
+	t.Setenv("JWT_PUBLIC_KEY_FILE", "/secrets/jwt-public.pem")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -26,10 +27,11 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, ":8080", cfg.HTTPAddr)
 	assert.Equal(t, []string{"http://localhost:5173"}, cfg.CORSAllowedOrigins)
 	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
-	assert.Equal(t, DBConfig{
-		Host: "localhost", Port: 1521, Service: "FREEPDB1",
-		User: "auth_svc", Password: "rahasia", MaxOpenConns: 10,
-	}, cfg.DB)
+	assert.Empty(t, cfg.TrustedProxies)
+	assert.Equal(t, "localhost:50051", cfg.AuthGRPCAddr)
+	assert.Equal(t, "/secrets/jwt-public.pem", cfg.JWTPublicKeyFile)
+	// Di development cookie tidak Secure, karena localhost memakai http.
+	assert.Equal(t, CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode}, cfg.Cookie)
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -38,12 +40,11 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("HTTP_PORT", "4000")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://ice-stream.vercel.app, http://localhost:5173")
 	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
-	t.Setenv("DB_HOST", "oracle.ice-stream.svc.cluster.local")
-	t.Setenv("DB_PORT", "1522")
-	t.Setenv("DB_SERVICE", "OTHERPDB")
-	t.Setenv("DB_USER", "video_svc")
-	t.Setenv("DB_PASSWORD", "rahasia")
-	t.Setenv("DB_MAX_OPEN_CONNS", "20")
+	t.Setenv("TRUSTED_PROXIES", "10.0.0.0/8")
+	t.Setenv("AUTH_GRPC_ADDR", "auth:50051")
+	t.Setenv("JWT_PUBLIC_KEY_FILE", "/etc/ice-stream/jwt/jwt-public.pem")
+	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("COOKIE_SAMESITE", "None")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -52,28 +53,31 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, ":4000", cfg.HTTPAddr)
 	assert.Equal(t, []string{"https://ice-stream.vercel.app", "http://localhost:5173"}, cfg.CORSAllowedOrigins)
 	assert.Equal(t, 30*time.Second, cfg.ShutdownTimeout)
-	assert.Equal(t, DBConfig{
-		Host: "oracle.ice-stream.svc.cluster.local", Port: 1522, Service: "OTHERPDB",
-		User: "video_svc", Password: "rahasia", MaxOpenConns: 20,
-	}, cfg.DB)
+	assert.Equal(t, []string{"10.0.0.0/8"}, cfg.TrustedProxies)
+	assert.Equal(t, "auth:50051", cfg.AuthGRPCAddr)
+	assert.Equal(t, "/etc/ice-stream/jwt/jwt-public.pem", cfg.JWTPublicKeyFile)
+	// Di production Secure otomatis true.
+	assert.Equal(t, CookieConfig{Secure: true, SameSite: http.SameSiteNoneMode}, cfg.Cookie)
 }
 
 func TestLoadInvalid(t *testing.T) {
-	tests := map[string]struct{ key, value string }{
-		"APP_ENV salah":           {"APP_ENV", "staging"},
-		"HTTP_PORT bukan angka":   {"HTTP_PORT", "abc"},
-		"HTTP_PORT di luar batas": {"HTTP_PORT", "70000"},
-		"SHUTDOWN_TIMEOUT salah":  {"SHUTDOWN_TIMEOUT", "sepuluh"},
-		"DB_PORT bukan angka":     {"DB_PORT", "abc"},
-		"DB_PORT di luar batas":   {"DB_PORT", "0"},
-		"DB_MAX_OPEN_CONNS nol":   {"DB_MAX_OPEN_CONNS", "0"},
-		"DB_PASSWORD kosong":      {"DB_PASSWORD", ""},
+	tests := map[string]map[string]string{
+		"APP_ENV salah":               {"APP_ENV": "staging"},
+		"HTTP_PORT bukan angka":       {"HTTP_PORT": "abc"},
+		"HTTP_PORT di luar batas":     {"HTTP_PORT": "70000"},
+		"SHUTDOWN_TIMEOUT salah":      {"SHUTDOWN_TIMEOUT": "sepuluh"},
+		"JWT_PUBLIC_KEY_FILE kosong":  {"JWT_PUBLIC_KEY_FILE": ""},
+		"COOKIE_SECURE bukan boolean": {"COOKIE_SECURE": "ya"},
+		"COOKIE_SAMESITE salah":       {"COOKIE_SAMESITE": "kadang"},
+		"SameSite none tanpa Secure":  {"COOKIE_SAMESITE": "none", "COOKIE_SECURE": "false"},
 	}
-	for name, tt := range tests {
+	for name, env := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Isi password dulu supaya hanya tt.key yang membuat Load gagal.
-			t.Setenv("DB_PASSWORD", "rahasia")
-			t.Setenv(tt.key, tt.value)
+			// Isi nilai wajib dulu supaya hanya env di atas yang membuat Load gagal.
+			t.Setenv("JWT_PUBLIC_KEY_FILE", "/secrets/jwt-public.pem")
+			for k, v := range env {
+				t.Setenv(k, v)
+			}
 			_, err := Load()
 			assert.Error(t, err)
 		})
