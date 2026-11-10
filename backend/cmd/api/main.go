@@ -18,6 +18,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
@@ -48,32 +49,30 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	// grpc.NewClient belum membuka koneksi; koneksi dibuat saat RPC pertama
-	// dan otomatis disambung ulang jika putus. Di dalam cluster lalu lintas
-	// gRPC belum dienkripsi (insecure); mTLS bisa ditambahkan nanti.
-	conn, err := grpc.NewClient(cfg.AuthGRPCAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Jeda sambung ulang bawaan bisa naik sampai 2 menit. Dibatasi 5 detik
-		// supaya gateway cepat pulih setelah pod auth restart.
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff:           backoff.Config{BaseDelay: time.Second, Multiplier: 1.6, Jitter: 0.2, MaxDelay: 5 * time.Second},
-			MinConnectTimeout: 5 * time.Second,
-		}),
-	)
+	authConn, err := newGRPCClient(cfg.AuthGRPCAddr)
 	if err != nil {
 		return fmt.Errorf("menyiapkan klien auth %s: %w", cfg.AuthGRPCAddr, err)
 	}
-	defer conn.Close()
+	defer authConn.Close()
 
-	// Gateway tidak lagi terhubung ke Oracle. Yang dicek sekarang adalah
-	// AuthService, yang sendiri sudah memeriksa Oracle.
+	videoConn, err := newGRPCClient(cfg.VideoGRPCAddr)
+	if err != nil {
+		return fmt.Errorf("menyiapkan klien video %s: %w", cfg.VideoGRPCAddr, err)
+	}
+	defer videoConn.Close()
+
+	// Gateway tidak terhubung ke Oracle. Yang dicek hanya AuthService, karena
+	// tanpa auth hampir semua fitur tidak bisa dipakai. VideoService sengaja
+	// tidak dicek: kalau video mati, login dan halaman lain tetap jalan, dan
+	// endpoint video menjawab 503 sendiri.
 	checks := map[string]httpserver.ReadinessCheck{
-		"auth": grpcHealthCheck(healthpb.NewHealthClient(conn), authv1.AuthService_ServiceDesc.ServiceName),
+		"auth": grpcHealthCheck(healthpb.NewHealthClient(authConn), authv1.AuthService_ServiceDesc.ServiceName),
 	}
 
 	router, err := httpserver.NewRouter(cfg, logger, httpserver.Deps{
 		Checks:   checks,
-		Auth:     authv1.NewAuthServiceClient(conn),
+		Auth:     authv1.NewAuthServiceClient(authConn),
+		Videos:   videov1.NewVideoServiceClient(videoConn),
 		Verifier: accesstoken.NewVerifier(publicKey),
 	})
 	if err != nil {
@@ -112,6 +111,22 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("server berhenti dengan rapi")
 	return nil
+}
+
+// newGRPCClient menyiapkan klien gRPC ke service lain di dalam cluster.
+// grpc.NewClient belum membuka koneksi; koneksi dibuat saat RPC pertama dan
+// otomatis disambung ulang jika putus. Di dalam cluster lalu lintas gRPC
+// belum dienkripsi (insecure); mTLS bisa ditambahkan nanti.
+func newGRPCClient(addr string) (*grpc.ClientConn, error) {
+	return grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Jeda sambung ulang bawaan bisa naik sampai 2 menit. Dibatasi 5 detik
+		// supaya gateway cepat pulih setelah pod service restart.
+		grpc.WithConnectParams(grpc.ConnectParams{
+			Backoff:           backoff.Config{BaseDelay: time.Second, Multiplier: 1.6, Jitter: 0.2, MaxDelay: 5 * time.Second},
+			MinConnectTimeout: 5 * time.Second,
+		}),
+	)
 }
 
 // grpcHealthCheck memanggil health check standar gRPC milik service lain.

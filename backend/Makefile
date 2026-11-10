@@ -63,9 +63,10 @@ docker-build-auth: ## Build image Docker untuk AuthService
 docker-build-video: ## Build image Docker untuk VideoService
 	docker build --target video -t $(VIDEO_IMAGE) .
 
-docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService harus jalan (make run-auth)
+docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService dan VideoService harus jalan (make run-auth, make run-video)
 	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 \
 		-e AUTH_GRPC_ADDR=host.docker.internal:50051 \
+		-e VIDEO_GRPC_ADDR=host.docker.internal:50052 \
 		-e JWT_PUBLIC_KEY_FILE=/secrets/jwt-public.pem \
 		-v $(CURDIR)/secrets/jwt-public.pem:/secrets/jwt-public.pem:ro \
 		$(IMAGE)

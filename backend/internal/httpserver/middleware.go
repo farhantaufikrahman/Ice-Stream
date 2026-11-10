@@ -36,6 +36,22 @@ func RequireAuth(v *accesstoken.Verifier) gin.HandlerFunc {
 	}
 }
 
+// OptionalAuth dipakai di endpoint yang boleh dibuka tanpa login, tapi
+// hasilnya bisa berbeda untuk user yang login (misalnya pemilik video
+// melihat videonya yang belum selesai diunggah). Tanpa header Authorization,
+// request diteruskan sebagai pengunjung. Dengan header tapi tokennya tidak
+// sah, request ditolak 401, supaya frontend tahu harus refresh token.
+func OptionalAuth(v *accesstoken.Verifier) gin.HandlerFunc {
+	required := RequireAuth(v)
+	return func(c *gin.Context) {
+		if c.GetHeader("Authorization") == "" {
+			c.Next()
+			return
+		}
+		required(c)
+	}
+}
+
 // CurrentUser mengembalikan klaim yang disimpan RequireAuth.
 func CurrentUser(c *gin.Context) (accesstoken.Claims, bool) {
 	v, ok := c.Get(claimsKey)

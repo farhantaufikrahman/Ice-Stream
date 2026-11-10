@@ -13,7 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	// Kosongkan env agar test tidak terpengaruh isi terminal kamu.
 	for _, key := range []string{
 		"APP_ENV", "HTTP_PORT", "CORS_ALLOWED_ORIGINS", "SHUTDOWN_TIMEOUT",
-		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
+		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "VIDEO_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
 	} {
 		t.Setenv(key, "")
 	}
@@ -29,6 +29,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
 	assert.Empty(t, cfg.TrustedProxies)
 	assert.Equal(t, "localhost:50051", cfg.AuthGRPCAddr)
+	assert.Equal(t, "localhost:50052", cfg.VideoGRPCAddr)
 	assert.Equal(t, "/secrets/jwt-public.pem", cfg.JWTPublicKeyFile)
 	// Di development cookie tidak Secure, karena localhost memakai http.
 	assert.Equal(t, CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode}, cfg.Cookie)
@@ -42,6 +43,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
 	t.Setenv("TRUSTED_PROXIES", "10.0.0.0/8")
 	t.Setenv("AUTH_GRPC_ADDR", "auth:50051")
+	t.Setenv("VIDEO_GRPC_ADDR", "video:50052")
 	t.Setenv("JWT_PUBLIC_KEY_FILE", "/etc/ice-stream/jwt/jwt-public.pem")
 	t.Setenv("COOKIE_SECURE", "")
 	t.Setenv("COOKIE_SAMESITE", "None")
@@ -55,6 +57,7 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.ShutdownTimeout)
 	assert.Equal(t, []string{"10.0.0.0/8"}, cfg.TrustedProxies)
 	assert.Equal(t, "auth:50051", cfg.AuthGRPCAddr)
+	assert.Equal(t, "video:50052", cfg.VideoGRPCAddr)
 	assert.Equal(t, "/etc/ice-stream/jwt/jwt-public.pem", cfg.JWTPublicKeyFile)
 	// Di production Secure otomatis true.
 	assert.Equal(t, CookieConfig{Secure: true, SameSite: http.SameSiteNoneMode}, cfg.Cookie)

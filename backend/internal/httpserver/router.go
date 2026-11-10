@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 )
@@ -27,6 +28,8 @@ type Deps struct {
 	Checks map[string]ReadinessCheck
 	// Auth adalah klien gRPC ke AuthService.
 	Auth authv1.AuthServiceClient
+	// Videos adalah klien gRPC ke VideoService.
+	Videos videov1.VideoServiceClient
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
 }
@@ -68,6 +71,14 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	authGroup.POST("/refresh", auth.refresh)
 	authGroup.POST("/logout", auth.logout)
 	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
+
+	videos := &videoHandler{client: deps.Videos, logger: logger}
+	requireAuth := RequireAuth(deps.Verifier)
+	videoGroup := v1.Group("/videos", limitBody(maxVideoBodyBytes))
+	videoGroup.POST("", requireAuth, videos.create)
+	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
+	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
+	v1.GET("/me/videos", requireAuth, videos.listMine)
 
 	return r, nil
 }
