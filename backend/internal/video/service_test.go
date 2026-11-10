@@ -22,10 +22,13 @@ type fakeRepo struct {
 	likes map[int64]map[int64]bool
 	// incrementErr diisi test untuk mensimulasikan Oracle yang gagal.
 	incrementErr error
+	// terms[videoID] = kata pencarian; video yang tidak ada di map ini
+	// belum diindeks.
+	terms map[int64][]SearchTerm
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}}
+	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}}
 }
 
 func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {
@@ -74,6 +77,7 @@ func (r *fakeRepo) Create(_ context.Context, nv NewVideo) (Video, error) {
 		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(),
 	}
 	r.videos[v.ID] = v
+	r.terms[v.ID] = nv.SearchTerms
 	return v, nil
 }
 

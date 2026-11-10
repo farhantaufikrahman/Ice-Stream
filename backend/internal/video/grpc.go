@@ -93,6 +93,18 @@ func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequ
 	return resp, nil
 }
 
+func (s *GRPCServer) SearchVideos(ctx context.Context, req *videov1.SearchVideosRequest) (*videov1.SearchVideosResponse, error) {
+	videos, next, err := s.svc.SearchVideos(ctx, req.GetQuery(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.SearchVideosResponse{NextPageToken: next}
+	for _, v := range videos {
+		resp.Videos = append(resp.Videos, s.toProtoVideo(v))
+	}
+	return resp, nil
+}
+
 func (s *GRPCServer) RecordView(ctx context.Context, req *videov1.RecordViewRequest) (*videov1.RecordViewResponse, error) {
 	r, err := s.svc.RecordView(ctx, req.GetVideoId(), req.GetViewerKey())
 	if err != nil {

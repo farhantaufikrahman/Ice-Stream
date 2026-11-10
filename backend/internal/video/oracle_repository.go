@@ -44,6 +44,8 @@ type videoRow struct {
 	// Migrasi V6. "<-:update" = tidak ikut INSERT, hanya diubah lewat
 	// UPDATE di Like dan Unlike.
 	LikeCount int64 `gorm:"column:like_count;<-:update"`
+	// Migrasi V8: waktu kata-kata video ini disimpan untuk pencarian.
+	SearchIndexedAt *time.Time `gorm:"column:search_indexed_at"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -116,8 +118,18 @@ func (r *OracleRepository) Create(ctx context.Context, v NewVideo) (Video, error
 	if v.Description != "" {
 		row.Description = &v.Description
 	}
-	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-		return Video{}, fmt.Errorf("insert video: %w", err)
+	now := time.Now().UTC()
+	row.SearchIndexedAt = &now
+	// Video dan kata-katanya disimpan dalam satu transaksi: tidak ada video
+	// yang tersimpan tanpa kata pencarian, atau sebaliknya.
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&row).Error; err != nil {
+			return fmt.Errorf("insert video: %w", err)
+		}
+		return insertTerms(tx, row.ID, v.SearchTerms)
+	})
+	if err != nil {
+		return Video{}, err
 	}
 	return row.toVideo(), nil
 }
@@ -356,4 +368,154 @@ func (r *OracleRepository) IsLiked(ctx context.Context, videoID, userID int64) (
 		return false, fmt.Errorf("select like: %w", err)
 	}
 	return n > 0, nil
+}
+
+// searchTermRow memetakan tabel VIDEO_SEARCH_TERMS (migrasi V8).
+type searchTermRow struct {
+	Term    string `gorm:"column:term;primaryKey"`
+	VideoID int64  `gorm:"column:video_id;primaryKey"`
+	Weight  int    `gorm:"column:weight"`
+}
+
+func (searchTermRow) TableName() string { return "video_search_terms" }
+
+// insertTerms menyimpan kata-kata satu video, 100 baris per INSERT.
+func insertTerms(tx *gorm.DB, videoID int64, terms []SearchTerm) error {
+	if len(terms) == 0 {
+		return nil
+	}
+	rows := make([]searchTermRow, len(terms))
+	for i, t := range terms {
+		rows[i] = searchTermRow{Term: t.Term, VideoID: videoID, Weight: t.Weight}
+	}
+	if err := tx.CreateInBatches(rows, 100).Error; err != nil {
+		return fmt.Errorf("insert search terms: %w", err)
+	}
+	return nil
+}
+
+// searchHit adalah satu baris hasil query pencarian: id video dan skornya.
+type searchHit struct {
+	VideoID int64 `gorm:"column:video_id"`
+	Score   int   `gorm:"column:score"`
+}
+
+// Search mencari dalam dua query. Query pertama mencari id video yang
+// cocok beserta urutannya. Untuk terms ["belajar", "go"]:
+//
+//	SELECT s.video_id AS "video_id", s.score AS "score" FROM (
+//	  SELECT video_id, SUM(w) AS score FROM (
+//	    SELECT video_id, MAX(weight) AS w FROM video_search_terms
+//	     WHERE term LIKE 'belajar%' GROUP BY video_id
+//	    UNION ALL
+//	    SELECT video_id, MAX(weight) AS w FROM video_search_terms
+//	     WHERE term LIKE 'go%' GROUP BY video_id
+//	  ) GROUP BY video_id
+//	  HAVING COUNT(*) = 2            -- video harus cocok dengan SEMUA kata
+//	) s JOIN videos v ON v.id = s.video_id
+//	WHERE v.status = 'READY' AND v.deleted_at IS NULL
+//	ORDER BY s.score DESC, v.view_count DESC, v.id DESC
+//	OFFSET 0 ROWS FETCH NEXT 21 ROWS ONLY
+//
+// Setiap subquery menghasilkan paling banyak satu baris per video, jadi
+// COUNT(*) = jumlah kata yang cocok. "LIKE 'go%'" (tanpa % di depan) bisa
+// memakai index: Oracle langsung melompat ke kata yang diawali "go". Kata
+// dari ParseSearchQuery hanya berisi huruf dan angka, jadi tidak ada % atau
+// _ yang perlu di-escape.
+//
+// Query kedua mengambil data lengkap video-video itu dengan model GORM
+// biasa (videoRow), lalu disusun ulang mengikuti urutan query pertama.
+func (r *OracleRepository) Search(ctx context.Context, terms []string, offset, limit int) ([]Video, error) {
+	parts := make([]string, len(terms))
+	args := make([]any, 0, len(terms)+4)
+	for i, t := range terms {
+		parts[i] = "SELECT video_id, MAX(weight) AS w FROM video_search_terms WHERE term LIKE ? GROUP BY video_id"
+		args = append(args, t+"%")
+	}
+	// Alias dengan tanda kutip ("video_id") supaya Oracle mengembalikan nama
+	// kolom huruf kecil persis seperti tag GORM di searchHit. Tanpa kutip,
+	// Oracle mengembalikan VIDEO_ID dan GORM tidak mengisi field VideoID.
+	sql := `SELECT s.video_id AS "video_id", s.score AS "score" FROM (` +
+		"SELECT video_id, SUM(w) AS score FROM (" + strings.Join(parts, " UNION ALL ") + ") " +
+		"GROUP BY video_id HAVING COUNT(*) = ?" +
+		") s JOIN videos v ON v.id = s.video_id " +
+		"WHERE v.status = ? AND v.deleted_at IS NULL " +
+		"ORDER BY s.score DESC, v.view_count DESC, v.id DESC " +
+		"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+	args = append(args, len(terms), StatusReady, offset, limit)
+
+	var hits []searchHit
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&hits).Error; err != nil {
+		return nil, fmt.Errorf("search videos: %w", err)
+	}
+	if len(hits) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, len(hits))
+	for i, h := range hits {
+		ids[i] = h.VideoID
+	}
+	var rows []videoRow
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select search results: %w", err)
+	}
+	byID := make(map[int64]videoRow, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	videos := make([]Video, 0, len(hits))
+	for _, h := range hits {
+		// Video yang dihapus di antara dua query dilewati saja.
+		if row, ok := byID[h.VideoID]; ok {
+			videos = append(videos, row.toVideo())
+		}
+	}
+	return videos, nil
+}
+
+// ListUnindexed mengambil video yang search_indexed_at-nya masih NULL.
+func (r *OracleRepository) ListUnindexed(ctx context.Context, limit int) ([]Video, error) {
+	var rows []videoRow
+	err := r.db.WithContext(ctx).Select("id", "title", "description").
+		Where("search_indexed_at IS NULL").Order("id").Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("select unindexed videos: %w", err)
+	}
+	videos := make([]Video, len(rows))
+	for i, row := range rows {
+		videos[i] = row.toVideo()
+	}
+	return videos, nil
+}
+
+// SaveSearchTerms mengunci baris video (SELECT ... FOR UPDATE) lalu
+// memeriksa ulang search_indexed_at. Jika dua pod VideoService start
+// bersamaan, pod kedua menunggu kunci, melihat video sudah diindeks, dan
+// tidak menyimpan kata yang sama dua kali.
+func (r *OracleRepository) SaveSearchTerms(ctx context.Context, videoID int64, terms []SearchTerm, now time.Time) (bool, error) {
+	saved := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row videoRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id", "search_indexed_at").Where("id = ?", videoID).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("select video for update: %w", err)
+		}
+		if row.SearchIndexedAt != nil {
+			return nil
+		}
+		if err := insertTerms(tx, videoID, terms); err != nil {
+			return err
+		}
+		err = tx.Model(&videoRow{}).Where("id = ?", videoID).UpdateColumn("search_indexed_at", now).Error
+		if err != nil {
+			return fmt.Errorf("update search_indexed_at: %w", err)
+		}
+		saved = true
+		return nil
+	})
+	return saved, err
 }

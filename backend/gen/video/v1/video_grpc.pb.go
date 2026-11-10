@@ -31,6 +31,7 @@ const (
 	VideoService_RecordView_FullMethodName     = "/video.v1.VideoService/RecordView"
 	VideoService_LikeVideo_FullMethodName      = "/video.v1.VideoService/LikeVideo"
 	VideoService_UnlikeVideo_FullMethodName    = "/video.v1.VideoService/UnlikeVideo"
+	VideoService_SearchVideos_FullMethodName   = "/video.v1.VideoService/SearchVideos"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -67,6 +68,13 @@ type VideoServiceClient interface {
 	LikeVideo(ctx context.Context, in *LikeVideoRequest, opts ...grpc.CallOption) (*LikeVideoResponse, error)
 	// UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
 	UnlikeVideo(ctx context.Context, in *UnlikeVideoRequest, opts ...grpc.CallOption) (*UnlikeVideoResponse, error)
+	// SearchVideos mencari video READY yang judul atau deskripsinya berisi
+	// SEMUA kata di query. Setiap kata cocok dengan awal kata, jadi "gol"
+	// menemukan "Golang". Urutan: paling relevan (kata di judul lebih
+	// penting), lalu views terbanyak. Boleh dipanggil tanpa login.
+	// Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
+	// berisi kata dengan 2 huruf atau lebih.
+	SearchVideos(ctx context.Context, in *SearchVideosRequest, opts ...grpc.CallOption) (*SearchVideosResponse, error)
 }
 
 type videoServiceClient struct {
@@ -157,6 +165,16 @@ func (c *videoServiceClient) UnlikeVideo(ctx context.Context, in *UnlikeVideoReq
 	return out, nil
 }
 
+func (c *videoServiceClient) SearchVideos(ctx context.Context, in *SearchVideosRequest, opts ...grpc.CallOption) (*SearchVideosResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchVideosResponse)
+	err := c.cc.Invoke(ctx, VideoService_SearchVideos_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -191,6 +209,13 @@ type VideoServiceServer interface {
 	LikeVideo(context.Context, *LikeVideoRequest) (*LikeVideoResponse, error)
 	// UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
 	UnlikeVideo(context.Context, *UnlikeVideoRequest) (*UnlikeVideoResponse, error)
+	// SearchVideos mencari video READY yang judul atau deskripsinya berisi
+	// SEMUA kata di query. Setiap kata cocok dengan awal kata, jadi "gol"
+	// menemukan "Golang". Urutan: paling relevan (kata di judul lebih
+	// penting), lalu views terbanyak. Boleh dipanggil tanpa login.
+	// Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
+	// berisi kata dengan 2 huruf atau lebih.
+	SearchVideos(context.Context, *SearchVideosRequest) (*SearchVideosResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -224,6 +249,9 @@ func (UnimplementedVideoServiceServer) LikeVideo(context.Context, *LikeVideoRequ
 }
 func (UnimplementedVideoServiceServer) UnlikeVideo(context.Context, *UnlikeVideoRequest) (*UnlikeVideoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnlikeVideo not implemented")
+}
+func (UnimplementedVideoServiceServer) SearchVideos(context.Context, *SearchVideosRequest) (*SearchVideosResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchVideos not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -390,6 +418,24 @@ func _VideoService_UnlikeVideo_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_SearchVideos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchVideosRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).SearchVideos(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_SearchVideos_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).SearchVideos(ctx, req.(*SearchVideosRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -428,6 +474,10 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnlikeVideo",
 			Handler:    _VideoService_UnlikeVideo_Handler,
+		},
+		{
+			MethodName: "SearchVideos",
+			Handler:    _VideoService_SearchVideos_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
