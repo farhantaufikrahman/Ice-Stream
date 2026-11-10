@@ -216,6 +216,9 @@ func videoIDParam(c *gin.Context) (int64, bool) {
 var videoStatusNames = map[videov1.VideoStatus]string{
 	videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD: "PENDING_UPLOAD",
 	videov1.VideoStatus_VIDEO_STATUS_UPLOADED:       "UPLOADED",
+	videov1.VideoStatus_VIDEO_STATUS_PROCESSING:     "PROCESSING",
+	videov1.VideoStatus_VIDEO_STATUS_READY:          "READY",
+	videov1.VideoStatus_VIDEO_STATUS_FAILED:         "FAILED",
 }
 
 func toVideoResponse(v *videov1.Video) videoResponse {

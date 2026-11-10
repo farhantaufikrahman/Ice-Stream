@@ -43,7 +43,8 @@ type VideoServiceClient interface {
 	// FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
 	CompleteUpload(ctx context.Context, in *CompleteUploadRequest, opts ...grpc.CallOption) (*CompleteUploadResponse, error)
 	// GetVideo mengambil satu video beserta URL untuk memutarnya. Video yang
-	// belum selesai diunggah hanya bisa dilihat pemiliknya.
+	// belum READY (belum selesai diunggah atau di-transcode) hanya bisa
+	// dilihat pemiliknya.
 	GetVideo(ctx context.Context, in *GetVideoRequest, opts ...grpc.CallOption) (*GetVideoResponse, error)
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(ctx context.Context, in *ListMyVideosRequest, opts ...grpc.CallOption) (*ListMyVideosResponse, error)
@@ -111,7 +112,8 @@ type VideoServiceServer interface {
 	// FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
 	CompleteUpload(context.Context, *CompleteUploadRequest) (*CompleteUploadResponse, error)
 	// GetVideo mengambil satu video beserta URL untuk memutarnya. Video yang
-	// belum selesai diunggah hanya bisa dilihat pemiliknya.
+	// belum READY (belum selesai diunggah atau di-transcode) hanya bisa
+	// dilihat pemiliknya.
 	GetVideo(context.Context, *GetVideoRequest) (*GetVideoResponse, error)
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(context.Context, *ListMyVideosRequest) (*ListMyVideosResponse, error)

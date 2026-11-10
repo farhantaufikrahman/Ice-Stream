@@ -18,6 +18,8 @@ type VideoConfig struct {
 	ShutdownTimeout time.Duration
 	DB              DBConfig
 	Storage         StorageConfig
+	// NATSURL adalah alamat server NATS, misalnya "nats://nats:4222".
+	NATSURL string
 	// MaxUploadBytes adalah ukuran file video terbesar yang boleh diunggah.
 	MaxUploadBytes int64
 	// UploadURLTTL adalah umur URL presigned untuk mengunggah.
@@ -91,6 +93,7 @@ func LoadVideo() (VideoConfig, error) {
 			Bucket:             getString("STORAGE_BUCKET", "videos"),
 			CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		},
+		NATSURL:        getString("NATS_URL", "nats://localhost:4222"),
 		MaxUploadBytes: int64(maxUploadMB) << 20,
 		UploadURLTTL:   uploadTTL,
 		PlaybackURLTTL: playbackTTL,
@@ -123,7 +126,19 @@ func (c VideoConfig) validate() error {
 	if err := c.Storage.validate(); err != nil {
 		return err
 	}
+	if err := validNATSURL(c.NATSURL); err != nil {
+		return err
+	}
 	return c.DB.validate()
+}
+
+// validNATSURL memeriksa bentuk NATS_URL, misalnya nats://nats:4222.
+func validNATSURL(v string) error {
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "nats" && u.Scheme != "tls") || u.Host == "" {
+		return fmt.Errorf("NATS_URL harus berupa URL seperti nats://nats:4222, dapat %q", v)
+	}
+	return nil
 }
 
 func (s StorageConfig) validate() error {

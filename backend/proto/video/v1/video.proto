@@ -18,7 +18,8 @@ service VideoService {
   // FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
   rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
   // GetVideo mengambil satu video beserta URL untuk memutarnya. Video yang
-  // belum selesai diunggah hanya bisa dilihat pemiliknya.
+  // belum READY (belum selesai diunggah atau di-transcode) hanya bisa
+  // dilihat pemiliknya.
   rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
   // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
   rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
@@ -28,8 +29,14 @@ enum VideoStatus {
   VIDEO_STATUS_UNSPECIFIED = 0;
   // Baris sudah dibuat, file belum (selesai) diunggah.
   VIDEO_STATUS_PENDING_UPLOAD = 1;
-  // File sudah ada di storage dan ukurannya sudah dicek.
+  // File sudah ada di storage dan ukurannya sudah dicek. Menunggu transcoder.
   VIDEO_STATUS_UPLOADED = 2;
+  // Transcoder sedang membuat file HLS dan thumbnail.
+  VIDEO_STATUS_PROCESSING = 3;
+  // File HLS siap diputar. Hanya video READY yang terlihat oleh semua orang.
+  VIDEO_STATUS_READY = 4;
+  // Transcoding gagal, alasannya ada di failure_reason.
+  VIDEO_STATUS_FAILED = 5;
 }
 
 message Video {
@@ -43,6 +50,14 @@ message Video {
   google.protobuf.Timestamp created_at = 8;
   // Kosong selama status masih PENDING_UPLOAD.
   google.protobuf.Timestamp uploaded_at = 9;
+  // Durasi video dalam milidetik. 0 sampai status READY.
+  int64 duration_ms = 10;
+  // Resolusi HLS yang tersedia, misalnya ["360p", "720p"]. Kosong sampai READY.
+  repeated string renditions = 11;
+  // Alasan gagal. Hanya terisi jika status FAILED.
+  string failure_reason = 12;
+  // Waktu transcoding selesai (READY atau FAILED).
+  google.protobuf.Timestamp processed_at = 13;
 }
 
 message CreateUploadRequest {
@@ -82,7 +97,8 @@ message GetVideoRequest {
 
 message GetVideoResponse {
   Video video = 1;
-  // URL presigned untuk memutar file. Kosong selama PENDING_UPLOAD.
+  // URL presigned untuk memutar file mentah (sebelum di-transcode). Kosong
+  // selama PENDING_UPLOAD. Di langkah 6b diganti URL HLS untuk video READY.
   string playback_url = 2;
   google.protobuf.Timestamp playback_url_expires_at = 3;
 }

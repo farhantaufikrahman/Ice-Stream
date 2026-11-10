@@ -86,6 +86,10 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, ErrEventsUnavailable):
+		// UNAVAILABLE = boleh dicoba lagi. Detail error NATS cukup di log.
+		s.logger.WarnContext(ctx, "gagal mengirim event video", slog.Any("error", err))
+		return status.Error(codes.Unavailable, ErrEventsUnavailable.Error())
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "request dibatalkan")
 	case errors.Is(err, context.DeadlineExceeded):
@@ -110,6 +114,12 @@ func toProtoVideo(v Video) *videov1.Video {
 	if v.UploadedAt != nil {
 		pv.UploadedAt = timestamppb.New(*v.UploadedAt)
 	}
+	pv.DurationMs = v.DurationMs
+	pv.Renditions = v.Renditions
+	pv.FailureReason = v.FailureReason
+	if v.ProcessedAt != nil {
+		pv.ProcessedAt = timestamppb.New(*v.ProcessedAt)
+	}
 	return pv
 }
 
@@ -119,6 +129,12 @@ func toProtoStatus(s string) videov1.VideoStatus {
 		return videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD
 	case StatusUploaded:
 		return videov1.VideoStatus_VIDEO_STATUS_UPLOADED
+	case StatusProcessing:
+		return videov1.VideoStatus_VIDEO_STATUS_PROCESSING
+	case StatusReady:
+		return videov1.VideoStatus_VIDEO_STATUS_READY
+	case StatusFailed:
+		return videov1.VideoStatus_VIDEO_STATUS_FAILED
 	}
 	return videov1.VideoStatus_VIDEO_STATUS_UNSPECIFIED
 }
