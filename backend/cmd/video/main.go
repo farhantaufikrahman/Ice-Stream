@@ -110,6 +110,19 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
+	// File video yang dihapus tapi belum terhapus dari storage (misalnya
+	// storage mati saat DeleteVideo) dibersihkan di background.
+	go func() {
+		n, err := svc.PurgeDeleted(ctx)
+		if err != nil {
+			logger.Error("gagal menghapus file video yang sudah dihapus", slog.Any("error", err))
+			return
+		}
+		if n > 0 {
+			logger.Info("file video yang sudah dihapus selesai dibersihkan", slog.Int("jumlah", n))
+		}
+	}()
+
 	// Terima laporan status dari transcoder (PROCESSING, READY, FAILED).
 	consumer, err := video.ConsumeTranscodeEvents(ctx, js, svc, logger)
 	if err != nil {

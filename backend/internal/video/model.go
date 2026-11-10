@@ -36,6 +36,10 @@ var (
 	// ErrViewsUnavailable: penyimpanan anti-dobel views (NATS) tidak bisa
 	// dihubungi. View tidak dihitung; client boleh mengabaikannya.
 	ErrViewsUnavailable = errors.New("pencatatan views sedang tidak tersedia")
+	// ErrVideoBusy: video sedang menunggu atau menjalani transcoding
+	// (UPLOADED/PROCESSING), jadi belum boleh dihapus. Transcoder masih
+	// menulis file HLS-nya; kalau dihapus sekarang, file itu tertinggal.
+	ErrVideoBusy = errors.New("video sedang diproses, hapus setelah statusnya READY atau FAILED")
 )
 
 // Video adalah satu baris di tabel videos.

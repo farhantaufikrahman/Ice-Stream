@@ -75,6 +75,20 @@ type Repository interface {
 	// semua entri userID jika videoID = 0. Mengembalikan jumlah baris yang
 	// dihapus.
 	DeleteHistory(ctx context.Context, userID, videoID int64) (int64, error)
+	// UpdateDetails mengganti judul, deskripsi, dan kata pencarian video
+	// milik ownerID dalam satu transaksi. ErrNotFound jika video tidak ada,
+	// sudah dihapus, atau bukan milik ownerID.
+	UpdateDetails(ctx context.Context, id, ownerID int64, title, description string, terms []SearchTerm, now time.Time) (Video, error)
+	// SoftDelete mengisi deleted_at video milik ownerID dan menghapus kata
+	// pencarian-nya, hanya jika statusnya ada di allowed. ErrNotFound jika
+	// video tidak ada, sudah dihapus, atau bukan milik ownerID;
+	// ErrVideoBusy jika statusnya tidak ada di allowed.
+	SoftDelete(ctx context.Context, id, ownerID int64, allowed []string, now time.Time) error
+	// ListUnpurged mengambil video yang sudah dihapus tapi filenya belum
+	// dihapus dari storage, id terkecil lebih dulu.
+	ListUnpurged(ctx context.Context, limit int) ([]Video, error)
+	// MarkPurged mengisi media_purged_at video yang sudah dihapus.
+	MarkPurged(ctx context.Context, id int64, now time.Time) error
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -200,13 +214,13 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 		// Gateway selalu mengisi owner dari access token, jadi ini bug.
 		return NewVideo{}, errors.New("owner id kosong")
 	}
-	title := strings.TrimSpace(in.Title)
-	if !utf8.ValidString(title) || title == "" || utf8.RuneCountInString(title) > maxTitleRunes {
-		return NewVideo{}, &ValidationError{"title", fmt.Sprintf("wajib diisi, maksimal %d karakter", maxTitleRunes)}
+	title, err := cleanTitle(in.Title)
+	if err != nil {
+		return NewVideo{}, err
 	}
-	desc := strings.TrimSpace(in.Description)
-	if !utf8.ValidString(desc) || utf8.RuneCountInString(desc) > maxDescriptionRunes {
-		return NewVideo{}, &ValidationError{"description", fmt.Sprintf("maksimal %d karakter", maxDescriptionRunes)}
+	desc, err := cleanDescription(in.Description)
+	if err != nil {
+		return NewVideo{}, err
 	}
 	contentType := strings.ToLower(strings.TrimSpace(in.ContentType))
 	if !allowedContentTypes[contentType] {
@@ -222,6 +236,26 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 		ContentType: contentType,
 		SizeBytes:   in.SizeBytes,
 	}, nil
+}
+
+// cleanTitle merapikan judul (spasi di awal/akhir dibuang) lalu
+// memeriksanya: wajib diisi, maksimal 100 karakter. Dipakai saat membuat
+// dan mengedit video.
+func cleanTitle(raw string) (string, error) {
+	title := strings.TrimSpace(raw)
+	if !utf8.ValidString(title) || title == "" || utf8.RuneCountInString(title) > maxTitleRunes {
+		return "", &ValidationError{"title", fmt.Sprintf("wajib diisi, maksimal %d karakter", maxTitleRunes)}
+	}
+	return title, nil
+}
+
+// cleanDescription merapikan deskripsi; boleh kosong, maksimal 1000 karakter.
+func cleanDescription(raw string) (string, error) {
+	desc := strings.TrimSpace(raw)
+	if !utf8.ValidString(desc) || utf8.RuneCountInString(desc) > maxDescriptionRunes {
+		return "", &ValidationError{"description", fmt.Sprintf("maksimal %d karakter", maxDescriptionRunes)}
+	}
+	return desc, nil
 }
 
 // newObjectKey membuat nama file acak, misalnya "raw/3f9c.../source".

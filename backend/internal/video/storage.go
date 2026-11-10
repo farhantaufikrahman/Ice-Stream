@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -28,6 +29,10 @@ type ObjectStore interface {
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (PresignedRequest, error)
 	// Stat membaca ukuran dan tipe file. ErrObjectNotFound jika file tidak ada.
 	Stat(ctx context.Context, key string) (ObjectInfo, error)
+	// DeletePrefix menghapus semua file yang key-nya diawali prefix
+	// (misalnya "hls/42/") dan mengembalikan jumlah file yang dihapus.
+	// Aman dipanggil walau tidak ada file sama sekali.
+	DeletePrefix(ctx context.Context, prefix string) (int, error)
 }
 
 // PresignedRequest adalah URL presigned beserta header yang wajib dikirim.
@@ -149,6 +154,56 @@ func (s *S3Store) Stat(ctx context.Context, key string) (ObjectInfo, error) {
 		Size:        aws.ToInt64(out.ContentLength),
 		ContentType: aws.ToString(out.ContentType),
 	}, nil
+}
+
+// DeletePrefix mendaftar file per 1000 (batas ListObjectsV2), lalu
+// menghapusnya dengan satu request DeleteObjects per 1000 file (batas
+// DeleteObjects). Video 10 menit punya sekitar 200 file HLS, jadi biasanya
+// cukup satu putaran.
+//
+// Padanannya: DeleteObjectsCommand di @aws-sdk/client-s3 (Node.js),
+// deleteObjects di software.amazon.awssdk:s3 (Java).
+func (s *S3Store) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if prefix == "" || !strings.HasSuffix(prefix, "/") {
+		// Pengaman: prefix kosong berarti SELURUH bucket.
+		return 0, fmt.Errorf("prefix %q harus berakhiran /", prefix)
+	}
+	deleted := 0
+	// Pengaman: kalau storage menjawab "berhasil" tapi file tidak hilang,
+	// loop ini tidak berputar selamanya. 1000 putaran = 1 juta file.
+	for round := 0; round < 1000; round++ {
+		// Selalu ambil halaman pertama: file di halaman sebelumnya sudah
+		// terhapus, jadi tidak perlu ContinuationToken.
+		list, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: aws.String(s.bucket),
+			Prefix: aws.String(prefix),
+		})
+		if err != nil {
+			return deleted, fmt.Errorf("list objects %s: %w", prefix, err)
+		}
+		if len(list.Contents) == 0 {
+			return deleted, nil
+		}
+		ids := make([]types.ObjectIdentifier, len(list.Contents))
+		for i, obj := range list.Contents {
+			ids[i] = types.ObjectIdentifier{Key: obj.Key}
+		}
+		out, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(s.bucket),
+			// Quiet: storage hanya melaporkan file yang GAGAL dihapus.
+			Delete: &types.Delete{Objects: ids, Quiet: aws.Bool(true)},
+		})
+		if err != nil {
+			return deleted, fmt.Errorf("delete objects %s: %w", prefix, err)
+		}
+		if len(out.Errors) > 0 {
+			e := out.Errors[0]
+			return deleted, fmt.Errorf("delete objects %s: %d file gagal, contoh %s: %s",
+				prefix, len(out.Errors), aws.ToString(e.Key), aws.ToString(e.Message))
+		}
+		deleted += len(ids)
+	}
+	return deleted, fmt.Errorf("delete objects %s: file tidak habis setelah 1000 putaran", prefix)
 }
 
 // toPresigned mengambil header yang ikut ditandatangani. Host dan

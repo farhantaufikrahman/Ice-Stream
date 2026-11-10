@@ -36,6 +36,8 @@ const (
 	VideoService_ListWatchHistory_FullMethodName   = "/video.v1.VideoService/ListWatchHistory"
 	VideoService_DeleteWatchHistory_FullMethodName = "/video.v1.VideoService/DeleteWatchHistory"
 	VideoService_ClearWatchHistory_FullMethodName  = "/video.v1.VideoService/ClearWatchHistory"
+	VideoService_UpdateVideo_FullMethodName        = "/video.v1.VideoService/UpdateVideo"
+	VideoService_DeleteVideo_FullMethodName        = "/video.v1.VideoService/DeleteVideo"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -93,6 +95,18 @@ type VideoServiceClient interface {
 	DeleteWatchHistory(ctx context.Context, in *DeleteWatchHistoryRequest, opts ...grpc.CallOption) (*DeleteWatchHistoryResponse, error)
 	// ClearWatchHistory menghapus seluruh riwayat tonton requester.
 	ClearWatchHistory(ctx context.Context, in *ClearWatchHistoryRequest, opts ...grpc.CallOption) (*ClearWatchHistoryResponse, error)
+	// UpdateVideo mengganti judul dan/atau deskripsi video milik requester
+	// (status apa pun). Kata pencarian ikut diperbarui. Error
+	// INVALID_ARGUMENT jika tidak ada field yang dikirim atau isinya tidak
+	// valid, NOT_FOUND jika video tidak ada, sudah dihapus, atau bukan milik
+	// requester.
+	UpdateVideo(ctx context.Context, in *UpdateVideoRequest, opts ...grpc.CallOption) (*UpdateVideoResponse, error)
+	// DeleteVideo menghapus video milik requester dari feed, pencarian,
+	// channel, riwayat, komentar, dan danmaku, lalu menghapus file-nya di
+	// storage. Error NOT_FOUND jika video tidak ada, sudah dihapus, atau
+	// bukan milik requester; FAILED_PRECONDITION jika video sedang
+	// di-transcode (UPLOADED atau PROCESSING).
+	DeleteVideo(ctx context.Context, in *DeleteVideoRequest, opts ...grpc.CallOption) (*DeleteVideoResponse, error)
 }
 
 type videoServiceClient struct {
@@ -233,6 +247,26 @@ func (c *videoServiceClient) ClearWatchHistory(ctx context.Context, in *ClearWat
 	return out, nil
 }
 
+func (c *videoServiceClient) UpdateVideo(ctx context.Context, in *UpdateVideoRequest, opts ...grpc.CallOption) (*UpdateVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_UpdateVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) DeleteVideo(ctx context.Context, in *DeleteVideoRequest, opts ...grpc.CallOption) (*DeleteVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_DeleteVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -288,6 +322,18 @@ type VideoServiceServer interface {
 	DeleteWatchHistory(context.Context, *DeleteWatchHistoryRequest) (*DeleteWatchHistoryResponse, error)
 	// ClearWatchHistory menghapus seluruh riwayat tonton requester.
 	ClearWatchHistory(context.Context, *ClearWatchHistoryRequest) (*ClearWatchHistoryResponse, error)
+	// UpdateVideo mengganti judul dan/atau deskripsi video milik requester
+	// (status apa pun). Kata pencarian ikut diperbarui. Error
+	// INVALID_ARGUMENT jika tidak ada field yang dikirim atau isinya tidak
+	// valid, NOT_FOUND jika video tidak ada, sudah dihapus, atau bukan milik
+	// requester.
+	UpdateVideo(context.Context, *UpdateVideoRequest) (*UpdateVideoResponse, error)
+	// DeleteVideo menghapus video milik requester dari feed, pencarian,
+	// channel, riwayat, komentar, dan danmaku, lalu menghapus file-nya di
+	// storage. Error NOT_FOUND jika video tidak ada, sudah dihapus, atau
+	// bukan milik requester; FAILED_PRECONDITION jika video sedang
+	// di-transcode (UPLOADED atau PROCESSING).
+	DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -336,6 +382,12 @@ func (UnimplementedVideoServiceServer) DeleteWatchHistory(context.Context, *Dele
 }
 func (UnimplementedVideoServiceServer) ClearWatchHistory(context.Context, *ClearWatchHistoryRequest) (*ClearWatchHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ClearWatchHistory not implemented")
+}
+func (UnimplementedVideoServiceServer) UpdateVideo(context.Context, *UpdateVideoRequest) (*UpdateVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateVideo not implemented")
+}
+func (UnimplementedVideoServiceServer) DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteVideo not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -592,6 +644,42 @@ func _VideoService_ClearWatchHistory_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_UpdateVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).UpdateVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_UpdateVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).UpdateVideo(ctx, req.(*UpdateVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_DeleteVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).DeleteVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_DeleteVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).DeleteVideo(ctx, req.(*DeleteVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -650,6 +738,14 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ClearWatchHistory",
 			Handler:    _VideoService_ClearWatchHistory_Handler,
+		},
+		{
+			MethodName: "UpdateVideo",
+			Handler:    _VideoService_UpdateVideo_Handler,
+		},
+		{
+			MethodName: "DeleteVideo",
+			Handler:    _VideoService_DeleteVideo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
