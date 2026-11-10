@@ -49,3 +49,10 @@ export function safeNextPath(next: string | null): string {
   }
   return '/'
 }
+
+const dateFormat = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** "2026-10-18T..." -> "18 Okt 2026". */
+export function formatDate(iso: string): string {
+  return dateFormat.format(new Date(iso))
+}

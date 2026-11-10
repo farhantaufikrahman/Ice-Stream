@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router'
+import { AuthLayout } from './components/AuthLayout'
 import { Layout } from './components/Layout'
 import { ErrorPage } from './pages/ErrorPage'
 import { HomePage } from './pages/HomePage'
@@ -13,15 +14,26 @@ import { WatchPage } from './pages/WatchPage'
 // Dokumentasi: https://reactrouter.com/start/data/routing
 export const router = createBrowserRouter([
   {
-    element: <Layout />,
     errorElement: <ErrorPage />,
     children: [
-      { path: '/', element: <HomePage /> },
-      { path: '/search', element: <SearchPage /> },
-      { path: '/watch/:id', element: <WatchPage /> },
-      { path: '/login', element: <LoginPage /> },
-      { path: '/register', element: <RegisterPage /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        // Halaman biasa: header + footer.
+        element: <Layout />,
+        children: [
+          { path: '/', element: <HomePage /> },
+          { path: '/search', element: <SearchPage /> },
+          { path: '/watch/:id', element: <WatchPage /> },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
+      {
+        // Masuk dan Daftar: panel brand di kiri, tanpa header.
+        element: <AuthLayout />,
+        children: [
+          { path: '/login', element: <LoginPage /> },
+          { path: '/register', element: <RegisterPage /> },
+        ],
+      },
     ],
   },
 ])

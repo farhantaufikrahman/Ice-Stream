@@ -1,17 +1,22 @@
 import { useState, type FormEvent } from 'react'
-import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from './Avatar'
+import { LogoMark, Wordmark } from './Logo'
+import { ThemeToggle } from './ThemeToggle'
 
-/** Kerangka semua halaman: header di atas, isi halaman di <Outlet />. */
+/** Kerangka halaman: header, isi halaman (<Outlet />), lalu footer. */
 export function Layout() {
   return (
-    <>
+    <div className="app">
       <Header />
       <main className="page">
         <Outlet />
       </main>
-    </>
+      <footer className="footer">
+        <span>© 2026 Ice-Stream</span>
+      </footer>
+    </div>
   )
 }
 
@@ -31,31 +36,46 @@ function Header() {
   const next = encodeURIComponent(location.pathname + location.search)
   return (
     <header className="header">
-      <Link to="/" className="logo">
-        <span className="logo-mark" aria-hidden="true">▶</span> Ice-Stream
+      <Link to="/" className="brand" aria-label="Beranda Ice-Stream">
+        <LogoMark size={38} />
+        <Wordmark size={22} />
       </Link>
       {/* key: isi kotak ikut berganti saat URL ?q= berubah (misalnya tombol Back). */}
       <form className="search" role="search" onSubmit={onSearch} key={currentQuery}>
-        <input name="q" type="search" placeholder="Cari video" defaultValue={currentQuery} aria-label="Cari video" />
-        <button type="submit" className="btn">
+        <label htmlFor="q" className="sr-only">
+          Cari video
+        </label>
+        <SearchIcon />
+        <input id="q" name="q" type="search" placeholder="Cari video" defaultValue={currentQuery} />
+        <button type="submit" className="btn btn-primary btn-small">
           Cari
         </button>
       </form>
-      <nav className="header-actions">
+      <div className="header-actions">
+        <ThemeToggle />
         {status === 'authenticated' && user ? (
           <UserMenu name={user.display_name || user.username} avatarUrl={user.avatar_url} onLogout={logout} />
         ) : status === 'anonymous' ? (
           <>
-            <NavLink to={`/login?next=${next}`} className="btn btn-ghost">
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Masuk
-            </NavLink>
-            <NavLink to="/register" className="btn btn-primary">
+            </Link>
+            <Link to="/register" className="btn btn-amber">
               Daftar
-            </NavLink>
+            </Link>
           </>
         ) : null}
-      </nav>
+      </div>
     </header>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
   )
 }
 
@@ -73,7 +93,7 @@ function UserMenu({ name, avatarUrl, onLogout }: { name: string; avatarUrl: stri
   }
   return (
     <div className="user-menu">
-      <Avatar name={name} url={avatarUrl} size={32} />
+      <Avatar name={name} url={avatarUrl} size={40} />
       <span className="user-name">{name}</span>
       <button type="button" className="btn btn-ghost" onClick={handleLogout} disabled={busy}>
         Keluar

@@ -32,18 +32,19 @@ export function LoginPage() {
   }
 
   return (
-    <form className="card form" onSubmit={onSubmit}>
-      <h1>Masuk</h1>
+    <form className="auth-card" onSubmit={onSubmit}>
+      <h2>Masuk</h2>
+      <p className="muted">Selamat datang kembali.</p>
       {error && <ErrorBox message={error} />}
       <label>
-        Username atau email
+        Email atau username
         <input name="login" autoComplete="username" required />
       </label>
       <label>
-        Password
+        Kata sandi
         <input name="password" type="password" autoComplete="current-password" required />
       </label>
-      <button type="submit" className="btn btn-primary" disabled={busy}>
+      <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Memproses…' : 'Masuk'}
       </button>
       <p className="muted">

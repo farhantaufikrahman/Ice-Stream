@@ -26,10 +26,11 @@ describe('VideoCard', () => {
         <VideoCard video={video} />
       </MemoryRouter>,
     )
-    const title = screen.getByRole('link', { name: 'Belajar Go dari nol' })
-    expect(title).toHaveAttribute('href', '/watch/42')
-    expect(screen.getByText('Budi')).toBeInTheDocument()
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/watch/42')
+    expect(screen.getByText('Belajar Go dari nol')).toBeInTheDocument()
+    expect(screen.getByText(/Budi ·/)).toBeInTheDocument()
     expect(screen.getByText('1:15')).toBeInTheDocument()
-    expect(screen.getByText(/x ditonton/)).toBeInTheDocument()
+    expect(screen.getByText(/▶ 1,5/)).toBeInTheDocument()
+    expect(screen.getByText('BU')).toBeInTheDocument()
   })
 })

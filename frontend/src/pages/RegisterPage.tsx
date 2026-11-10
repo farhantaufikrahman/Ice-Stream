@@ -37,8 +37,9 @@ export function RegisterPage() {
   }
 
   return (
-    <form className="card form" onSubmit={onSubmit}>
-      <h1>Daftar</h1>
+    <form className="auth-card" onSubmit={onSubmit}>
+      <h2>Daftar</h2>
+      <p className="muted">Gratis, kurang dari satu menit.</p>
       {error && <ErrorBox message={error} />}
       <label>
         Username
@@ -53,11 +54,11 @@ export function RegisterPage() {
         <input name="email" type="email" autoComplete="email" required />
       </label>
       <label>
-        Password
+        Kata sandi
         <input name="password" type="password" autoComplete="new-password" required />
       </label>
-      <button type="submit" className="btn btn-primary" disabled={busy}>
-        {busy ? 'Memproses…' : 'Daftar'}
+      <button type="submit" className="btn btn-amber btn-block" disabled={busy}>
+        {busy ? 'Memproses…' : 'Buat akun'}
       </button>
       <p className="muted">
         Sudah punya akun? <Link to="/login">Masuk</Link>
