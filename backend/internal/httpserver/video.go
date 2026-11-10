@@ -19,6 +19,9 @@ import (
 const (
 	// Batas waktu satu panggilan ke VideoService.
 	videoCallTimeout = 5 * time.Second
+	// DELETE /videos/:id menunggu VideoService menghapus file di storage
+	// (paling lama 30 detik di sisi VideoService), jadi batasnya lebih lama.
+	videoDeleteTimeout = 35 * time.Second
 	// Body JSON video hanya berisi judul, deskripsi, tipe, dan ukuran file.
 	// File videonya sendiri TIDAK lewat gateway.
 	maxVideoBodyBytes = 16 << 10 // 16 KiB

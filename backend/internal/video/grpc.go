@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -172,6 +173,44 @@ func (s *GRPCServer) ClearWatchHistory(ctx context.Context, req *videov1.ClearWa
 	return &videov1.ClearWatchHistoryResponse{Deleted: n}, nil
 }
 
+func (s *GRPCServer) UpdateVideo(ctx context.Context, req *videov1.UpdateVideoRequest) (*videov1.UpdateVideoResponse, error) {
+	v, err := s.svc.UpdateVideo(ctx, UpdateInput{
+		RequesterID: req.GetRequesterId(),
+		VideoID:     req.GetVideoId(),
+		// Field "optional" di proto menjadi pointer di Go: nil = tidak dikirim.
+		Title:       req.Title,
+		Description: req.Description,
+	})
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.UpdateVideoResponse{Video: s.toProtoVideo(v)}, nil
+}
+
+// purgeTimeout membatasi waktu menghapus file video di storage.
+const purgeTimeout = 30 * time.Second
+
+func (s *GRPCServer) DeleteVideo(ctx context.Context, req *videov1.DeleteVideoRequest) (*videov1.DeleteVideoResponse, error) {
+	v, err := s.svc.DeleteVideo(ctx, req.GetRequesterId(), req.GetVideoId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	// Video sudah terhapus dari database. Hapus file-nya sekarang dengan
+	// context baru: walau client memutus koneksi, penghapusan file tetap
+	// selesai. Kalau gagal (misalnya storage mati), cukup dicatat di log;
+	// PurgeDeleted mencobanya lagi saat VideoService start berikutnya.
+	purgeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), purgeTimeout)
+	defer cancel()
+	n, err := s.svc.PurgeMedia(purgeCtx, v)
+	if err != nil {
+		s.logger.WarnContext(ctx, "gagal menghapus file video, dicoba lagi saat start berikutnya",
+			slog.Int64("video_id", v.ID), slog.Any("error", err))
+	} else {
+		s.logger.InfoContext(ctx, "video dihapus", slog.Int64("video_id", v.ID), slog.Int("file", n))
+	}
+	return &videov1.DeleteVideoResponse{}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError
@@ -181,6 +220,8 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	case errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, ErrVideoBusy):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrEventsUnavailable):
 		// UNAVAILABLE = boleh dicoba lagi. Detail error NATS cukup di log.

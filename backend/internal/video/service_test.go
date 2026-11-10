@@ -27,10 +27,15 @@ type fakeRepo struct {
 	terms map[int64][]SearchTerm
 	// history[userID][videoID] = entri riwayat (Video hanya berisi ID).
 	history map[int64]map[int64]HistoryEntry
+	// trash berisi video yang sudah dihapus (soft delete). purged[id] = true
+	// jika file-nya sudah dihapus dari storage.
+	trash  map[int64]Video
+	purged map[int64]bool
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}, history: map[int64]map[int64]HistoryEntry{}}
+	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}, history: map[int64]map[int64]HistoryEntry{},
+		trash: map[int64]Video{}, purged: map[int64]bool{}}
 }
 
 func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {
@@ -240,6 +245,9 @@ func (f *fakeViews) Release(_ context.Context, videoID int64, viewerKey string) 
 // mensimulasikan file yang sudah diunggah browser.
 type fakeStore struct {
 	objects map[string]ObjectInfo
+	// deleteErr diisi test untuk mensimulasikan storage yang mati saat
+	// menghapus file.
+	deleteErr error
 }
 
 func (s *fakeStore) PresignPut(_ context.Context, key, contentType string, _ int64, ttl time.Duration) (PresignedRequest, error) {

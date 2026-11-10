@@ -40,6 +40,8 @@ type fakeVideoClient struct {
 	lastHistory  *videov1.ListWatchHistoryRequest
 	lastDelete   *videov1.DeleteWatchHistoryRequest
 	lastClear    *videov1.ClearWatchHistoryRequest
+	lastUpdate   *videov1.UpdateVideoRequest
+	lastDeleteV  *videov1.DeleteVideoRequest
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
