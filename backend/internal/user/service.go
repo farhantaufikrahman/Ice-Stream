@@ -36,6 +36,9 @@ type Repository interface {
 	// (0 = dari yang terbaru).
 	ListSubscriptions(ctx context.Context, subscriberID, beforeID int64, limit int) ([]Subscription, error)
 	ListSubscribedChannelIDs(ctx context.Context, subscriberID int64, limit int) ([]int64, error)
+	// ListSubscriberIDs: id subscriber channelID yang lebih besar dari
+	// afterID, urut naik.
+	ListSubscriberIDs(ctx context.Context, channelID, afterID int64, limit int) ([]int64, error)
 }
 
 // ObjectStore adalah penyimpanan file foto profil. Implementasi S3 ada di
@@ -57,6 +60,8 @@ const (
 	maxSubscriptions        = 1000
 	defaultSubscriptionPage = 20
 	maxSubscriptionPage     = 50
+	// maxSubscriberPage membatasi satu halaman ListSubscriberIDs.
+	maxSubscriberPage = 1000
 )
 
 // Service berisi aturan bisnis UserService.
@@ -353,6 +358,25 @@ func (s *Service) ListSubscribedChannelIDs(ctx context.Context, requesterID int6
 		return nil, errors.New("requester id kosong")
 	}
 	return s.repo.ListSubscribedChannelIDs(ctx, requesterID, maxSubscriptions)
+}
+
+// ListSubscriberIDs mengambil satu halaman id subscriber channelID, urut
+// naik, hanya yang lebih besar dari afterID (0 = dari awal). pageSize 0
+// berarti maxSubscriberPage.
+func (s *Service) ListSubscriberIDs(ctx context.Context, channelID, afterID int64, pageSize int) ([]int64, error) {
+	if channelID <= 0 {
+		return nil, ErrNotFound
+	}
+	if afterID < 0 {
+		return nil, &ValidationError{"after_subscriber_id", "tidak boleh negatif"}
+	}
+	if pageSize == 0 {
+		pageSize = maxSubscriberPage
+	}
+	if pageSize < 0 || pageSize > maxSubscriberPage {
+		return nil, &ValidationError{"page_size", fmt.Sprintf("harus antara 1 dan %d", maxSubscriberPage)}
+	}
+	return s.repo.ListSubscriberIDs(ctx, channelID, afterID, pageSize)
 }
 
 // encodeCursor dan decodeCursor: token halaman berikutnya berupa base64

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
+	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/comment"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
@@ -90,7 +92,8 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	svc := video.NewService(video.NewOracleRepository(db), store, video.NewNATSPublisher(js), views, video.Options{
+	repo := video.NewOracleRepository(db)
+	svc := video.NewService(repo, store, video.NewNATSPublisher(js), views, video.Options{
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		UploadURLTTL:   cfg.UploadURLTTL,
 		PlaybackURLTTL: cfg.PlaybackURLTTL,
@@ -130,6 +133,21 @@ func run(logger *slog.Logger) error {
 	}
 	defer consumer.Stop()
 
+	// Notifikasi video baru: daftar subscriber diminta ke UserService
+	// (proses AuthService). Kalau AuthService sedang mati, VideoService tetap
+	// berjalan normal; hanya notifikasinya yang tertunda dan dicoba lagi.
+	authConn, err := grpcserver.NewClient(cfg.AuthGRPCAddr)
+	if err != nil {
+		return fmt.Errorf("menyiapkan klien auth %s: %w", cfg.AuthGRPCAddr, err)
+	}
+	defer authConn.Close()
+	notifier := video.NewNotifier(repo, video.NewGRPCSubscriberSource(userv1.NewUserServiceClient(authConn)))
+	notifyConsumer, err := video.ConsumeNewVideos(ctx, js, notifier, logger)
+	if err != nil {
+		return err
+	}
+	defer notifyConsumer.Stop()
+
 	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger)))
 	videov1.RegisterVideoServiceServer(srv, video.NewGRPCServer(svc, logger))
 	// CommentService berjalan di proses yang sama (port 50052) dan memakai
@@ -158,6 +176,7 @@ func run(logger *slog.Logger) error {
 		slog.String("bucket", cfg.Storage.Bucket),
 		slog.String("media_url", cfg.MediaPublicURL),
 		slog.String("view_dedup_window", cfg.ViewDedupWindow.String()),
+		slog.String("auth_addr", cfg.AuthGRPCAddr),
 	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }

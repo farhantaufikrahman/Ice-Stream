@@ -20,7 +20,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "DB_USER", "STORAGE_ENDPOINT",
 		"STORAGE_PUBLIC_ENDPOINT", "STORAGE_REGION", "STORAGE_BUCKET", "MAX_UPLOAD_MB",
 		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS", "NATS_URL", "MEDIA_PUBLIC_URL",
-		"VIEW_DEDUP_WINDOW",
+		"VIEW_DEDUP_WINDOW", "AUTH_GRPC_ADDR",
 	} {
 		t.Setenv(key, "")
 	}
@@ -40,6 +40,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 	assert.Equal(t, time.Hour, cfg.PlaybackURLTTL)
 	assert.Equal(t, 30*time.Minute, cfg.ViewDedupWindow)
 	assert.Equal(t, "nats://localhost:4222", cfg.NATSURL)
+	assert.Equal(t, "localhost:50051", cfg.AuthGRPCAddr)
 	// Jika tidak diisi, file HLS dibuka langsung dari storage.
 	assert.Equal(t, "http://localhost:9000/videos", cfg.MediaPublicURL)
 }
@@ -70,6 +71,8 @@ func TestLoadVideoInvalid(t *testing.T) {
 		"MEDIA_PUBLIC_URL relatif":  {"MEDIA_PUBLIC_URL", "/videos"},
 		"VIEW_DEDUP_WINDOW 10s":     {"VIEW_DEDUP_WINDOW", "10s"},
 		"VIEW_DEDUP_WINDOW 48h":     {"VIEW_DEDUP_WINDOW", "48h"},
+		"AUTH_GRPC_ADDR tanpa port": {"AUTH_GRPC_ADDR", "auth"},
+		"AUTH_GRPC_ADDR port salah": {"AUTH_GRPC_ADDR", "auth:abc"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

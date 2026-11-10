@@ -34,6 +34,7 @@ const (
 	UserService_Unsubscribe_FullMethodName              = "/user.v1.UserService/Unsubscribe"
 	UserService_ListSubscriptions_FullMethodName        = "/user.v1.UserService/ListSubscriptions"
 	UserService_ListSubscribedChannelIds_FullMethodName = "/user.v1.UserService/ListSubscribedChannelIds"
+	UserService_ListSubscriberIds_FullMethodName        = "/user.v1.UserService/ListSubscriberIds"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -75,6 +76,10 @@ type UserServiceClient interface {
 	// ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
 	// requester (maksimal 1000), untuk menyusun feed subscription.
 	ListSubscribedChannelIds(ctx context.Context, in *ListSubscribedChannelIdsRequest, opts ...grpc.CallOption) (*ListSubscribedChannelIdsResponse, error)
+	// ListSubscriberIds mengambil id subscriber channel_id, urut dari yang
+	// terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
+	// mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
+	ListSubscriberIds(ctx context.Context, in *ListSubscriberIdsRequest, opts ...grpc.CallOption) (*ListSubscriberIdsResponse, error)
 }
 
 type userServiceClient struct {
@@ -175,6 +180,16 @@ func (c *userServiceClient) ListSubscribedChannelIds(ctx context.Context, in *Li
 	return out, nil
 }
 
+func (c *userServiceClient) ListSubscriberIds(ctx context.Context, in *ListSubscriberIdsRequest, opts ...grpc.CallOption) (*ListSubscriberIdsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubscriberIdsResponse)
+	err := c.cc.Invoke(ctx, UserService_ListSubscriberIds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -214,6 +229,10 @@ type UserServiceServer interface {
 	// ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
 	// requester (maksimal 1000), untuk menyusun feed subscription.
 	ListSubscribedChannelIds(context.Context, *ListSubscribedChannelIdsRequest) (*ListSubscribedChannelIdsResponse, error)
+	// ListSubscriberIds mengambil id subscriber channel_id, urut dari yang
+	// terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
+	// mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
+	ListSubscriberIds(context.Context, *ListSubscriberIdsRequest) (*ListSubscriberIdsResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -250,6 +269,9 @@ func (UnimplementedUserServiceServer) ListSubscriptions(context.Context, *ListSu
 }
 func (UnimplementedUserServiceServer) ListSubscribedChannelIds(context.Context, *ListSubscribedChannelIdsRequest) (*ListSubscribedChannelIdsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSubscribedChannelIds not implemented")
+}
+func (UnimplementedUserServiceServer) ListSubscriberIds(context.Context, *ListSubscriberIdsRequest) (*ListSubscriberIdsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSubscriberIds not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -434,6 +456,24 @@ func _UserService_ListSubscribedChannelIds_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_ListSubscriberIds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscriberIdsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListSubscriberIds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListSubscriberIds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListSubscriberIds(ctx, req.(*ListSubscriberIdsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -476,6 +516,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSubscribedChannelIds",
 			Handler:    _UserService_ListSubscribedChannelIds_Handler,
+		},
+		{
+			MethodName: "ListSubscriberIds",
+			Handler:    _UserService_ListSubscriberIds_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

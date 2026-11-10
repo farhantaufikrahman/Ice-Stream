@@ -8,6 +8,7 @@
 //
 //	VideoService --videos.uploaded--> transcoder
 //	transcoder   --videos.transcode.started/succeeded/failed--> VideoService
+//	VideoService --videos.published--> VideoService (notifikasi subscriber)
 //
 // Transcoder sengaja tidak menyentuh database. Hanya VideoService yang
 // boleh mengubah tabel videos (setiap service memiliki datanya sendiri).
@@ -36,6 +37,9 @@ const (
 	// SubjectTranscodeAll dipakai VideoService untuk menerima ketiga event
 	// transcode sekaligus (tanda > berarti "apa saja sesudahnya").
 	SubjectTranscodeAll = "videos.transcode.>"
+	// SubjectPublished dikirim saat video menjadi READY, yaitu saat video
+	// bisa ditonton semua orang (langkah 16).
+	SubjectPublished = "videos.published"
 )
 
 // Nama consumer (pembaca) yang tahan lama (durable): posisi bacanya disimpan
@@ -43,6 +47,8 @@ const (
 const (
 	ConsumerTranscoder  = "transcoder"
 	ConsumerVideoStatus = "video-status"
+	// ConsumerNotify membuat notifikasi untuk subscriber channel.
+	ConsumerNotify = "video-notify"
 )
 
 // Uploaded dikirim VideoService setelah file mentah selesai diunggah.
@@ -75,6 +81,15 @@ type TranscodeSucceeded struct {
 type TranscodeFailed struct {
 	VideoID int64  `json:"video_id"`
 	Reason  string `json:"reason"`
+}
+
+// Published dikirim VideoService setelah video menjadi READY. Dikirim
+// terpisah dari TranscodeSucceeded supaya penerimanya hanya melihat video
+// yang benar-benar sudah bisa ditonton, dan supaya fitur lain nanti
+// (misalnya rekomendasi) cukup mendengarkan satu event ini.
+type Published struct {
+	VideoID int64 `json:"video_id"`
+	OwnerID int64 `json:"owner_id"`
 }
 
 // Connect membuka koneksi ke NATS. Koneksi otomatis tersambung lagi jika

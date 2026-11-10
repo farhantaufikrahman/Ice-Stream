@@ -1,6 +1,6 @@
 // Package grpcserver berisi bagian yang sama di semua service gRPC
 // Ice-Stream (AuthService, VideoService): log per RPC, status health, dan
-// cara mematikan server dengan rapi.
+// cara mematikan server dengan rapi, serta cara membuat klien gRPC.
 package grpcserver
 
 import (

@@ -42,6 +42,8 @@ type fakeVideoClient struct {
 	lastClear    *videov1.ClearWatchHistoryRequest
 	lastUpdate   *videov1.UpdateVideoRequest
 	lastDeleteV  *videov1.DeleteVideoRequest
+	// notif berisi request notifikasi terakhir (notification_test.go).
+	notif fakeNotifications
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)

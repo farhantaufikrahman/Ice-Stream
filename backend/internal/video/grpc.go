@@ -211,6 +211,43 @@ func (s *GRPCServer) DeleteVideo(ctx context.Context, req *videov1.DeleteVideoRe
 	return &videov1.DeleteVideoResponse{}, nil
 }
 
+func (s *GRPCServer) ListNotifications(ctx context.Context, req *videov1.ListNotificationsRequest) (*videov1.ListNotificationsResponse, error) {
+	items, next, err := s.svc.ListNotifications(ctx, req.GetRequesterId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.ListNotificationsResponse{NextPageToken: next}
+	for _, n := range items {
+		pn := &videov1.Notification{
+			Id:        n.ID,
+			Kind:      n.Kind,
+			Video:     s.toProtoVideo(n.Video),
+			CreatedAt: timestamppb.New(n.CreatedAt),
+		}
+		if n.ReadAt != nil {
+			pn.ReadAt = timestamppb.New(*n.ReadAt)
+		}
+		resp.Notifications = append(resp.Notifications, pn)
+	}
+	return resp, nil
+}
+
+func (s *GRPCServer) CountUnreadNotifications(ctx context.Context, req *videov1.CountUnreadNotificationsRequest) (*videov1.CountUnreadNotificationsResponse, error) {
+	n, err := s.svc.CountUnreadNotifications(ctx, req.GetRequesterId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.CountUnreadNotificationsResponse{UnreadCount: n}, nil
+}
+
+func (s *GRPCServer) MarkNotificationsRead(ctx context.Context, req *videov1.MarkNotificationsReadRequest) (*videov1.MarkNotificationsReadResponse, error) {
+	r, err := s.svc.MarkNotificationsRead(ctx, req.GetRequesterId(), req.GetNotificationId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.MarkNotificationsReadResponse{Updated: r.Updated, UnreadCount: r.UnreadCount}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ type VideoConfig struct {
 	Storage         StorageConfig
 	// NATSURL adalah alamat server NATS, misalnya "nats://nats:4222".
 	NATSURL string
+	// AuthGRPCAddr adalah alamat proses AuthService, misalnya "auth:50051".
+	// UserService berjalan di proses itu; VideoService memintanya daftar
+	// subscriber untuk notifikasi video baru.
+	AuthGRPCAddr string
 	// MediaPublicURL adalah alamat publik folder bucket untuk file HLS dan
 	// thumbnail, misalnya "http://media.ice-stream.localhost:4000/videos".
 	// URL file = MediaPublicURL + "/" + key, misalnya
@@ -97,6 +102,7 @@ func LoadVideo() (VideoConfig, error) {
 		DB:              db,
 		Storage:         storage,
 		NATSURL:         getString("NATS_URL", "nats://localhost:4222"),
+		AuthGRPCAddr:    getString("AUTH_GRPC_ADDR", "localhost:50051"),
 		MediaPublicURL:  loadMediaURL(storage),
 		MaxUploadBytes:  int64(maxUploadMB) << 20,
 		UploadURLTTL:    uploadTTL,
@@ -136,6 +142,9 @@ func (c VideoConfig) validate() error {
 	}
 	if err := validNATSURL(c.NATSURL); err != nil {
 		return err
+	}
+	if _, port, err := net.SplitHostPort(c.AuthGRPCAddr); err != nil || validPort("AUTH_GRPC_ADDR", port) != nil {
+		return fmt.Errorf("AUTH_GRPC_ADDR harus berbentuk host:port seperti auth:50051, dapat %q", c.AuthGRPCAddr)
 	}
 	if err := validMediaURL(c.MediaPublicURL, "/videos"); err != nil {
 		return err

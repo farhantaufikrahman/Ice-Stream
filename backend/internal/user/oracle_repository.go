@@ -315,3 +315,23 @@ func (r *OracleRepository) ListSubscribedChannelIDs(ctx context.Context, subscri
 	}
 	return ids, nil
 }
+
+// ListSubscriberIDs membaca satu halaman subscriber channelID:
+//
+//	SELECT subscriber_id FROM subscriptions
+//	 WHERE channel_id = ? AND subscriber_id > ?
+//	 ORDER BY subscriber_id FETCH NEXT ? ROWS ONLY
+//
+// Cukup dari index subscriptions_channel_ix (channel_id, subscriber_id)
+// tanpa membaca tabelnya (lihat migrasi V5).
+func (r *OracleRepository) ListSubscriberIDs(ctx context.Context, channelID, afterID int64, limit int) ([]int64, error) {
+	var ids []int64
+	err := r.db.WithContext(ctx).Model(&subscriptionRow{}).
+		Where("channel_id = ? AND subscriber_id > ?", channelID, afterID).
+		Order("subscriber_id").Limit(limit).
+		Pluck("subscriber_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("select subscriber ids: %w", err)
+	}
+	return ids, nil
+}

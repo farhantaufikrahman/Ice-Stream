@@ -112,3 +112,21 @@ type ValidationError struct {
 func (e *ValidationError) Error() string {
 	return e.Field + ": " + e.Message
 }
+
+// Jenis notifikasi, sama dengan CHECK constraint di tabel notifications.
+const (
+	// NotificationNewVideo: channel yang di-subscribe merilis video baru.
+	NotificationNewVideo = "NEW_VIDEO"
+)
+
+// Notification adalah satu notifikasi milik satu user.
+type Notification struct {
+	ID   int64
+	Kind string
+	// Video yang dibicarakan notifikasi ini. Untuk NEW_VIDEO, pemiliknya
+	// adalah channel yang di-subscribe.
+	Video     Video
+	CreatedAt time.Time
+	// ReadAt bernilai nil jika belum dibaca.
+	ReadAt *time.Time
+}

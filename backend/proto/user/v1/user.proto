@@ -45,6 +45,10 @@ service UserService {
   // ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
   // requester (maksimal 1000), untuk menyusun feed subscription.
   rpc ListSubscribedChannelIds(ListSubscribedChannelIdsRequest) returns (ListSubscribedChannelIdsResponse);
+  // ListSubscriberIds mengambil id subscriber channel_id, urut dari yang
+  // terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
+  // mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
+  rpc ListSubscriberIds(ListSubscriberIdsRequest) returns (ListSubscriberIdsResponse);
 }
 
 message Profile {
@@ -157,4 +161,18 @@ message ListSubscribedChannelIdsRequest {
 
 message ListSubscribedChannelIdsResponse {
   repeated int64 channel_ids = 1;
+}
+
+message ListSubscriberIdsRequest {
+  int64 channel_id = 1;
+  // Hanya id yang lebih besar dari ini. 0 = dari awal. Untuk halaman
+  // berikutnya, isi dengan id terakhir dari halaman sebelumnya.
+  int64 after_subscriber_id = 2;
+  // 1 sampai 1000. 0 = 1000.
+  int32 page_size = 3;
+}
+
+message ListSubscriberIdsResponse {
+  // Kurang dari page_size berarti ini halaman terakhir.
+  repeated int64 subscriber_ids = 1;
 }

@@ -110,6 +110,14 @@ func (s *GRPCServer) ListSubscribedChannelIds(ctx context.Context, req *userv1.L
 	return &userv1.ListSubscribedChannelIdsResponse{ChannelIds: ids}, nil
 }
 
+func (s *GRPCServer) ListSubscriberIds(ctx context.Context, req *userv1.ListSubscriberIdsRequest) (*userv1.ListSubscriberIdsResponse, error) {
+	ids, err := s.svc.ListSubscriberIDs(ctx, req.GetChannelId(), req.GetAfterSubscriberId(), int(req.GetPageSize()))
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.ListSubscriberIdsResponse{SubscriberIds: ids}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError

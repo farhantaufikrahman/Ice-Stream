@@ -1069,6 +1069,114 @@ func (x *ListSubscribedChannelIdsResponse) GetChannelIds() []int64 {
 	return nil
 }
 
+type ListSubscriberIdsRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ChannelId int64                  `protobuf:"varint,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	// Hanya id yang lebih besar dari ini. 0 = dari awal. Untuk halaman
+	// berikutnya, isi dengan id terakhir dari halaman sebelumnya.
+	AfterSubscriberId int64 `protobuf:"varint,2,opt,name=after_subscriber_id,json=afterSubscriberId,proto3" json:"after_subscriber_id,omitempty"`
+	// 1 sampai 1000. 0 = 1000.
+	PageSize      int32 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscriberIdsRequest) Reset() {
+	*x = ListSubscriberIdsRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscriberIdsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscriberIdsRequest) ProtoMessage() {}
+
+func (x *ListSubscriberIdsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscriberIdsRequest.ProtoReflect.Descriptor instead.
+func (*ListSubscriberIdsRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListSubscriberIdsRequest) GetChannelId() int64 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+func (x *ListSubscriberIdsRequest) GetAfterSubscriberId() int64 {
+	if x != nil {
+		return x.AfterSubscriberId
+	}
+	return 0
+}
+
+func (x *ListSubscriberIdsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type ListSubscriberIdsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kurang dari page_size berarti ini halaman terakhir.
+	SubscriberIds []int64 `protobuf:"varint,1,rep,packed,name=subscriber_ids,json=subscriberIds,proto3" json:"subscriber_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscriberIdsResponse) Reset() {
+	*x = ListSubscriberIdsResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscriberIdsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscriberIdsResponse) ProtoMessage() {}
+
+func (x *ListSubscriberIdsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscriberIdsResponse.ProtoReflect.Descriptor instead.
+func (*ListSubscriberIdsResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListSubscriberIdsResponse) GetSubscriberIds() []int64 {
+	if x != nil {
+		return x.SubscriberIds
+	}
+	return nil
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
@@ -1144,7 +1252,14 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\"C\n" +
 	" ListSubscribedChannelIdsResponse\x12\x1f\n" +
 	"\vchannel_ids\x18\x01 \x03(\x03R\n" +
-	"channelIds2\xf2\x05\n" +
+	"channelIds\"\x86\x01\n" +
+	"\x18ListSubscriberIdsRequest\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x01 \x01(\x03R\tchannelId\x12.\n" +
+	"\x13after_subscriber_id\x18\x02 \x01(\x03R\x11afterSubscriberId\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"B\n" +
+	"\x19ListSubscriberIdsResponse\x12%\n" +
+	"\x0esubscriber_ids\x18\x01 \x03(\x03R\rsubscriberIds2\xce\x06\n" +
 	"\vUserService\x12E\n" +
 	"\n" +
 	"GetProfile\x12\x1a.user.v1.GetProfileRequest\x1a\x1b.user.v1.GetProfileResponse\x12W\n" +
@@ -1155,7 +1270,8 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\tSubscribe\x12\x19.user.v1.SubscribeRequest\x1a\x1a.user.v1.SubscribeResponse\x12H\n" +
 	"\vUnsubscribe\x12\x1b.user.v1.UnsubscribeRequest\x1a\x1c.user.v1.UnsubscribeResponse\x12Z\n" +
 	"\x11ListSubscriptions\x12!.user.v1.ListSubscriptionsRequest\x1a\".user.v1.ListSubscriptionsResponse\x12o\n" +
-	"\x18ListSubscribedChannelIds\x12(.user.v1.ListSubscribedChannelIdsRequest\x1a).user.v1.ListSubscribedChannelIdsResponseB\x9a\x01\n" +
+	"\x18ListSubscribedChannelIds\x12(.user.v1.ListSubscribedChannelIdsRequest\x1a).user.v1.ListSubscribedChannelIdsResponse\x12Z\n" +
+	"\x11ListSubscriberIds\x12!.user.v1.ListSubscriberIdsRequest\x1a\".user.v1.ListSubscriberIdsResponseB\x9a\x01\n" +
 	"\vcom.user.v1B\tUserProtoP\x01ZCgithub.com/farhantaufikrahman/ice-stream/backend/gen/user/v1;userv1\xa2\x02\x03UXX\xaa\x02\aUser.V1\xca\x02\aUser\\V1\xe2\x02\x13User\\V1\\GPBMetadata\xea\x02\bUser::V1b\x06proto3"
 
 var (
@@ -1170,7 +1286,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                          // 0: user.v1.Profile
 	(*GetProfileRequest)(nil),                // 1: user.v1.GetProfileRequest
@@ -1191,10 +1307,12 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*ListSubscriptionsResponse)(nil),        // 16: user.v1.ListSubscriptionsResponse
 	(*ListSubscribedChannelIdsRequest)(nil),  // 17: user.v1.ListSubscribedChannelIdsRequest
 	(*ListSubscribedChannelIdsResponse)(nil), // 18: user.v1.ListSubscribedChannelIdsResponse
-	(*timestamppb.Timestamp)(nil),            // 19: google.protobuf.Timestamp
+	(*ListSubscriberIdsRequest)(nil),         // 19: user.v1.ListSubscriberIdsRequest
+	(*ListSubscriberIdsResponse)(nil),        // 20: user.v1.ListSubscriberIdsResponse
+	(*timestamppb.Timestamp)(nil),            // 21: google.protobuf.Timestamp
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	19, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	21, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 2: user.v1.BatchGetProfilesResponse.profiles:type_name -> user.v1.Profile
 	0,  // 3: user.v1.UpdateProfileResponse.profile:type_name -> user.v1.Profile
@@ -1210,17 +1328,19 @@ var file_user_v1_user_proto_depIdxs = []int32{
 	13, // 13: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
 	15, // 14: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
 	17, // 15: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
-	2,  // 16: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	4,  // 17: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
-	6,  // 18: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
-	8,  // 19: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
-	10, // 20: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
-	12, // 21: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
-	14, // 22: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
-	16, // 23: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
-	18, // 24: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
-	16, // [16:25] is the sub-list for method output_type
-	7,  // [7:16] is the sub-list for method input_type
+	19, // 16: user.v1.UserService.ListSubscriberIds:input_type -> user.v1.ListSubscriberIdsRequest
+	2,  // 17: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	4,  // 18: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
+	6,  // 19: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
+	8,  // 20: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
+	10, // 21: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
+	12, // 22: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
+	14, // 23: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
+	16, // 24: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
+	18, // 25: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
+	20, // 26: user.v1.UserService.ListSubscriberIds:output_type -> user.v1.ListSubscriberIdsResponse
+	17, // [17:27] is the sub-list for method output_type
+	7,  // [7:17] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -1242,7 +1362,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
