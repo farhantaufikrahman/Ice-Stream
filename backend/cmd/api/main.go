@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,11 +20,14 @@ import (
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
+	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
 
 func main() {
@@ -63,6 +67,21 @@ func run(logger *slog.Logger) error {
 	}
 	defer videoConn.Close()
 
+	// NATS dipakai untuk menerima siaran danmaku. RetryOnFailedConnect: kalau
+	// NATS belum siap saat gateway start, gateway tetap jalan dan terus
+	// mencoba menyambung di background. Selama itu hanya danmaku live yang
+	// tidak sampai; login, video, dan komentar tetap normal.
+	nc, err := events.Connect(cfg.NATSURL, "api-gateway", nats.RetryOnFailedConnect(true))
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+	hub := live.NewHub(live.NewNATSBroker(nc), live.Options{
+		Subject:    events.SubjectDanmakuLive,
+		Transform:  httpserver.EncodeLiveDanmaku,
+		MaxClients: cfg.LiveMaxClients,
+	}, logger)
+
 	// Gateway tidak terhubung ke Oracle. Yang dicek hanya AuthService, karena
 	// tanpa auth hampir semua fitur tidak bisa dipakai. VideoService sengaja
 	// tidak dicek: kalau video mati, login dan halaman lain tetap jalan, dan
@@ -79,6 +98,9 @@ func run(logger *slog.Logger) error {
 		Users: userv1.NewUserServiceClient(authConn),
 		// CommentService berjalan di proses VideoService, jadi memakai koneksi video.
 		Comments: commentv1.NewCommentServiceClient(videoConn),
+		// DanmakuService juga berjalan di proses VideoService.
+		Danmaku:  danmakuv1.NewDanmakuServiceClient(videoConn),
+		Live:     hub,
 		Verifier: accesstoken.NewVerifier(publicKey),
 	})
 	if err != nil {
@@ -93,6 +115,11 @@ func run(logger *slog.Logger) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+
+	// Shutdown menunggu semua request selesai, padahal koneksi SSE tidak
+	// pernah selesai sendiri. hub.Close memutus semuanya begitu Shutdown
+	// dimulai (browser lalu menyambung ulang ke pod lain).
+	srv.RegisterOnShutdown(hub.Close)
 
 	serverErr := make(chan error, 1)
 	go func() {

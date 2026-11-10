@@ -33,6 +33,12 @@ type Config struct {
 	VideoGRPCAddr string
 	// JWTPublicKeyFile adalah file kunci publik untuk memeriksa access token.
 	JWTPublicKeyFile string
+	// NATSURL adalah alamat server NATS, misalnya "nats://nats:4222".
+	// Gateway mendengarkan siaran danmaku dari sini.
+	NATSURL string
+	// LiveMaxClients adalah batas penonton danmaku live (koneksi SSE) yang
+	// tersambung ke satu pod gateway sekaligus.
+	LiveMaxClients int
 	// Cookie mengatur cookie refresh token.
 	Cookie CookieConfig
 }
@@ -80,6 +86,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	liveMax, err := getInt("LIVE_MAX_CLIENTS", 5000)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Env:                env,
@@ -90,6 +100,8 @@ func Load() (Config, error) {
 		AuthGRPCAddr:       getString("AUTH_GRPC_ADDR", "localhost:50051"),
 		VideoGRPCAddr:      getString("VIDEO_GRPC_ADDR", "localhost:50052"),
 		JWTPublicKeyFile:   getString("JWT_PUBLIC_KEY_FILE", ""),
+		NATSURL:            getString("NATS_URL", "nats://localhost:4222"),
+		LiveMaxClients:     liveMax,
 		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
 	}
 
@@ -111,6 +123,12 @@ func (c Config) validate() error {
 	}
 	if c.JWTPublicKeyFile == "" {
 		return fmt.Errorf("JWT_PUBLIC_KEY_FILE wajib diisi")
+	}
+	if err := validNATSURL(c.NATSURL); err != nil {
+		return err
+	}
+	if c.LiveMaxClients < 1 {
+		return fmt.Errorf("LIVE_MAX_CLIENTS minimal 1, dapat %d", c.LiveMaxClients)
 	}
 	// Browser menolak cookie SameSite=None yang tidak Secure.
 	if c.Cookie.SameSite == http.SameSiteNoneMode && !c.Cookie.Secure {

@@ -46,6 +46,11 @@ func writeGRPCError(c *gin.Context, logger *slog.Logger, err error) {
 		// Permintaannya benar, tapi keadaan data belum memungkinkan
 		// (misalnya file video belum selesai diunggah).
 		abortError(c, http.StatusConflict, "FAILED_PRECONDITION", st.Message())
+	case codes.ResourceExhausted:
+		// Batas spam, misalnya danmaku terlalu cepat. Retry-After memberi
+		// tahu client berapa detik sebaiknya menunggu.
+		c.Header("Retry-After", "10")
+		abortError(c, http.StatusTooManyRequests, "RESOURCE_EXHAUSTED", st.Message())
 	case codes.Unavailable:
 		logger.WarnContext(c.Request.Context(), "service gRPC tidak tersedia", slog.Any("error", err))
 		abortError(c, http.StatusServiceUnavailable, "UNAVAILABLE", "layanan sedang tidak tersedia, coba lagi sebentar")

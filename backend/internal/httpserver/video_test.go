@@ -24,6 +24,8 @@ import (
 // fakeVideoClient menggantikan VideoService sungguhan di test.
 type fakeVideoClient struct {
 	err error
+	// getStatus mengganti status video dari GetVideo (0 = READY).
+	getStatus videov1.VideoStatus
 
 	lastCreate   *videov1.CreateUploadRequest
 	lastComplete *videov1.CompleteUploadRequest
@@ -87,7 +89,11 @@ func (f *fakeVideoClient) GetVideo(_ context.Context, in *videov1.GetVideoReques
 	if f.err != nil {
 		return nil, f.err
 	}
-	resp := &videov1.GetVideoResponse{Video: testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)}
+	status := videov1.VideoStatus_VIDEO_STATUS_READY
+	if f.getStatus != videov1.VideoStatus_VIDEO_STATUS_UNSPECIFIED {
+		status = f.getStatus
+	}
+	resp := &videov1.GetVideoResponse{Video: testVideo(status)}
 	// Seperti VideoService: file asli hanya untuk pemilik (user 7).
 	if in.GetViewerId() == 7 {
 		resp.OriginalUrl = "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"

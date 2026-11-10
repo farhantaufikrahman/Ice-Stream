@@ -78,13 +78,15 @@ type TranscodeFailed struct {
 }
 
 // Connect membuka koneksi ke NATS. Koneksi otomatis tersambung lagi jika
-// server NATS restart, jadi service tidak perlu ikut restart.
-func Connect(url, clientName string) (*nats.Conn, error) {
-	nc, err := nats.Connect(url,
+// server NATS restart, jadi service tidak perlu ikut restart. extra berisi
+// pengaturan tambahan, misalnya nats.RetryOnFailedConnect(true).
+func Connect(url, clientName string, extra ...nats.Option) (*nats.Conn, error) {
+	opts := append([]nats.Option{
 		nats.Name(clientName),
 		nats.MaxReconnects(-1), // coba terus, jangan pernah menyerah
-		nats.ReconnectWait(2*time.Second),
-	)
+		nats.ReconnectWait(2 * time.Second),
+	}, extra...)
+	nc, err := nats.Connect(url, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("koneksi ke NATS %s: %w", url, err)
 	}
@@ -130,4 +132,35 @@ func Publish(ctx context.Context, js jetstream.JetStream, subject, msgID string,
 // MsgID membuat Msg-Id yang stabil, misalnya "videos.uploaded/42".
 func MsgID(subject string, videoID int64) string {
 	return subject + "/" + strconv.FormatInt(videoID, 10)
+}
+
+// Danmaku yang baru terkirim disiarkan lewat NATS biasa (core NATS), BUKAN
+// JetStream: pesannya tidak disimpan di NATS. Kalau tidak ada gateway yang
+// sedang mendengarkan, pesannya hilang, dan itu tidak masalah karena
+// danmaku sudah tersimpan di Oracle dan bisa diambil lewat ListDanmaku.
+//
+//	VideoService --danmaku.live.<video_id>--> semua pod API gateway yang
+//	                                         punya penonton video itu
+//
+// Subject ini sengaja tidak diawali "videos.", supaya tidak ikut tersimpan
+// di stream VIDEOS.
+const subjectDanmakuLivePrefix = "danmaku.live."
+
+// SubjectDanmakuLive mengembalikan subject siaran danmaku untuk satu video,
+// misalnya "danmaku.live.42".
+func SubjectDanmakuLive(videoID int64) string {
+	return subjectDanmakuLivePrefix + strconv.FormatInt(videoID, 10)
+}
+
+// DanmakuSent dikirim VideoService setelah satu danmaku tersimpan.
+type DanmakuSent struct {
+	ID         int64  `json:"id"`
+	VideoID    int64  `json:"video_id"`
+	PositionMs int64  `json:"position_ms"`
+	Body       string `json:"body"`
+	// Color adalah warna RGB, 0x000000 sampai 0xFFFFFF.
+	Color uint32 `json:"color"`
+	// Mode bernilai "SCROLL", "TOP", atau "BOTTOM".
+	Mode      string    `json:"mode"`
+	CreatedAt time.Time `json:"created_at"`
 }
