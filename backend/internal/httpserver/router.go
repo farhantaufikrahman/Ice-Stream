@@ -87,6 +87,8 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
 	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
+	videoGroup.PUT("/:id/like", requireAuth, videos.like)
+	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
@@ -96,7 +98,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.DELETE("/:id/comments/:commentId", requireAuth, comments.remove)
 
 	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
-	v1.GET("/users/:username", users.getByUsername)
+	v1.GET("/users/:username", OptionalAuth(deps.Verifier), users.getByUsername)
+	v1.PUT("/users/:username/subscription", requireAuth, users.subscribe)
+	v1.DELETE("/users/:username/subscription", requireAuth, users.unsubscribe)
+	v1.GET("/me/subscriptions", requireAuth, users.subscriptions)
+	v1.GET("/me/feed", requireAuth, users.feed)
 	v1.GET("/users/:username/videos", users.listVideos)
 	v1.GET("/me/profile", requireAuth, users.me)
 	v1.PATCH("/me/profile", requireAuth, limitBody(maxProfileBodyBytes), users.update)

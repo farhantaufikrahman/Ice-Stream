@@ -25,11 +25,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_GetProfile_FullMethodName       = "/user.v1.UserService/GetProfile"
-	UserService_BatchGetProfiles_FullMethodName = "/user.v1.UserService/BatchGetProfiles"
-	UserService_UpdateProfile_FullMethodName    = "/user.v1.UserService/UpdateProfile"
-	UserService_UploadAvatar_FullMethodName     = "/user.v1.UserService/UploadAvatar"
-	UserService_RemoveAvatar_FullMethodName     = "/user.v1.UserService/RemoveAvatar"
+	UserService_GetProfile_FullMethodName               = "/user.v1.UserService/GetProfile"
+	UserService_BatchGetProfiles_FullMethodName         = "/user.v1.UserService/BatchGetProfiles"
+	UserService_UpdateProfile_FullMethodName            = "/user.v1.UserService/UpdateProfile"
+	UserService_UploadAvatar_FullMethodName             = "/user.v1.UserService/UploadAvatar"
+	UserService_RemoveAvatar_FullMethodName             = "/user.v1.UserService/RemoveAvatar"
+	UserService_Subscribe_FullMethodName                = "/user.v1.UserService/Subscribe"
+	UserService_Unsubscribe_FullMethodName              = "/user.v1.UserService/Unsubscribe"
+	UserService_ListSubscriptions_FullMethodName        = "/user.v1.UserService/ListSubscriptions"
+	UserService_ListSubscribedChannelIds_FullMethodName = "/user.v1.UserService/ListSubscribedChannelIds"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -57,6 +61,20 @@ type UserServiceClient interface {
 	UploadAvatar(ctx context.Context, in *UploadAvatarRequest, opts ...grpc.CallOption) (*UploadAvatarResponse, error)
 	// RemoveAvatar menghapus foto profil requester.
 	RemoveAvatar(ctx context.Context, in *RemoveAvatarRequest, opts ...grpc.CallOption) (*RemoveAvatarResponse, error)
+	// Subscribe membuat requester mengikuti channel_id. Aman dipanggil ulang.
+	// Error INVALID_ARGUMENT untuk subscribe diri sendiri,
+	// FAILED_PRECONDITION jika sudah mengikuti 1000 channel, NOT_FOUND jika
+	// channel tidak ada atau diblokir.
+	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error)
+	// Unsubscribe berhenti mengikuti channel_id. Aman dipanggil walau belum
+	// pernah subscribe.
+	Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error)
+	// ListSubscriptions mengambil channel yang diikuti requester, yang
+	// terakhir di-subscribe lebih dulu.
+	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
+	// requester (maksimal 1000), untuk menyusun feed subscription.
+	ListSubscribedChannelIds(ctx context.Context, in *ListSubscribedChannelIdsRequest, opts ...grpc.CallOption) (*ListSubscribedChannelIdsResponse, error)
 }
 
 type userServiceClient struct {
@@ -117,6 +135,46 @@ func (c *userServiceClient) RemoveAvatar(ctx context.Context, in *RemoveAvatarRe
 	return out, nil
 }
 
+func (c *userServiceClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (*SubscribeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubscribeResponse)
+	err := c.cc.Invoke(ctx, UserService_Subscribe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) Unsubscribe(ctx context.Context, in *UnsubscribeRequest, opts ...grpc.CallOption) (*UnsubscribeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnsubscribeResponse)
+	err := c.cc.Invoke(ctx, UserService_Unsubscribe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, UserService_ListSubscriptions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListSubscribedChannelIds(ctx context.Context, in *ListSubscribedChannelIdsRequest, opts ...grpc.CallOption) (*ListSubscribedChannelIdsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubscribedChannelIdsResponse)
+	err := c.cc.Invoke(ctx, UserService_ListSubscribedChannelIds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -142,6 +200,20 @@ type UserServiceServer interface {
 	UploadAvatar(context.Context, *UploadAvatarRequest) (*UploadAvatarResponse, error)
 	// RemoveAvatar menghapus foto profil requester.
 	RemoveAvatar(context.Context, *RemoveAvatarRequest) (*RemoveAvatarResponse, error)
+	// Subscribe membuat requester mengikuti channel_id. Aman dipanggil ulang.
+	// Error INVALID_ARGUMENT untuk subscribe diri sendiri,
+	// FAILED_PRECONDITION jika sudah mengikuti 1000 channel, NOT_FOUND jika
+	// channel tidak ada atau diblokir.
+	Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error)
+	// Unsubscribe berhenti mengikuti channel_id. Aman dipanggil walau belum
+	// pernah subscribe.
+	Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error)
+	// ListSubscriptions mengambil channel yang diikuti requester, yang
+	// terakhir di-subscribe lebih dulu.
+	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	// ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
+	// requester (maksimal 1000), untuk menyusun feed subscription.
+	ListSubscribedChannelIds(context.Context, *ListSubscribedChannelIdsRequest) (*ListSubscribedChannelIdsResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -166,6 +238,18 @@ func (UnimplementedUserServiceServer) UploadAvatar(context.Context, *UploadAvata
 }
 func (UnimplementedUserServiceServer) RemoveAvatar(context.Context, *RemoveAvatarRequest) (*RemoveAvatarResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveAvatar not implemented")
+}
+func (UnimplementedUserServiceServer) Subscribe(context.Context, *SubscribeRequest) (*SubscribeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Subscribe not implemented")
+}
+func (UnimplementedUserServiceServer) Unsubscribe(context.Context, *UnsubscribeRequest) (*UnsubscribeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Unsubscribe not implemented")
+}
+func (UnimplementedUserServiceServer) ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSubscriptions not implemented")
+}
+func (UnimplementedUserServiceServer) ListSubscribedChannelIds(context.Context, *ListSubscribedChannelIdsRequest) (*ListSubscribedChannelIdsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSubscribedChannelIds not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -278,6 +362,78 @@ func _UserService_RemoveAvatar_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_Subscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).Subscribe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_Subscribe_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).Subscribe(ctx, req.(*SubscribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_Unsubscribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).Unsubscribe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_Unsubscribe_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).Unsubscribe(ctx, req.(*UnsubscribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscriptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListSubscriptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListSubscriptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListSubscriptions(ctx, req.(*ListSubscriptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ListSubscribedChannelIds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscribedChannelIdsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ListSubscribedChannelIds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ListSubscribedChannelIds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ListSubscribedChannelIds(ctx, req.(*ListSubscribedChannelIdsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +460,22 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveAvatar",
 			Handler:    _UserService_RemoveAvatar_Handler,
+		},
+		{
+			MethodName: "Subscribe",
+			Handler:    _UserService_Subscribe_Handler,
+		},
+		{
+			MethodName: "Unsubscribe",
+			Handler:    _UserService_Unsubscribe_Handler,
+		},
+		{
+			MethodName: "ListSubscriptions",
+			Handler:    _UserService_ListSubscriptions_Handler,
+		},
+		{
+			MethodName: "ListSubscribedChannelIds",
+			Handler:    _UserService_ListSubscribedChannelIds_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

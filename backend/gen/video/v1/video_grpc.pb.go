@@ -29,6 +29,8 @@ const (
 	VideoService_ListMyVideos_FullMethodName   = "/video.v1.VideoService/ListMyVideos"
 	VideoService_ListVideos_FullMethodName     = "/video.v1.VideoService/ListVideos"
 	VideoService_RecordView_FullMethodName     = "/video.v1.VideoService/RecordView"
+	VideoService_LikeVideo_FullMethodName      = "/video.v1.VideoService/LikeVideo"
+	VideoService_UnlikeVideo_FullMethodName    = "/video.v1.VideoService/UnlikeVideo"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -59,6 +61,12 @@ type VideoServiceClient interface {
 	// dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
 	// ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
 	RecordView(ctx context.Context, in *RecordViewRequest, opts ...grpc.CallOption) (*RecordViewResponse, error)
+	// LikeVideo menandai video READY disukai requester. Aman dipanggil ulang:
+	// like kedua tidak menambah like_count. Error NOT_FOUND jika video tidak
+	// ada atau belum READY.
+	LikeVideo(ctx context.Context, in *LikeVideoRequest, opts ...grpc.CallOption) (*LikeVideoResponse, error)
+	// UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
+	UnlikeVideo(ctx context.Context, in *UnlikeVideoRequest, opts ...grpc.CallOption) (*UnlikeVideoResponse, error)
 }
 
 type videoServiceClient struct {
@@ -129,6 +137,26 @@ func (c *videoServiceClient) RecordView(ctx context.Context, in *RecordViewReque
 	return out, nil
 }
 
+func (c *videoServiceClient) LikeVideo(ctx context.Context, in *LikeVideoRequest, opts ...grpc.CallOption) (*LikeVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LikeVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_LikeVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) UnlikeVideo(ctx context.Context, in *UnlikeVideoRequest, opts ...grpc.CallOption) (*UnlikeVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnlikeVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_UnlikeVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -157,6 +185,12 @@ type VideoServiceServer interface {
 	// dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
 	// ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
 	RecordView(context.Context, *RecordViewRequest) (*RecordViewResponse, error)
+	// LikeVideo menandai video READY disukai requester. Aman dipanggil ulang:
+	// like kedua tidak menambah like_count. Error NOT_FOUND jika video tidak
+	// ada atau belum READY.
+	LikeVideo(context.Context, *LikeVideoRequest) (*LikeVideoResponse, error)
+	// UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
+	UnlikeVideo(context.Context, *UnlikeVideoRequest) (*UnlikeVideoResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -184,6 +218,12 @@ func (UnimplementedVideoServiceServer) ListVideos(context.Context, *ListVideosRe
 }
 func (UnimplementedVideoServiceServer) RecordView(context.Context, *RecordViewRequest) (*RecordViewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecordView not implemented")
+}
+func (UnimplementedVideoServiceServer) LikeVideo(context.Context, *LikeVideoRequest) (*LikeVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LikeVideo not implemented")
+}
+func (UnimplementedVideoServiceServer) UnlikeVideo(context.Context, *UnlikeVideoRequest) (*UnlikeVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnlikeVideo not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -314,6 +354,42 @@ func _VideoService_RecordView_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_LikeVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LikeVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).LikeVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_LikeVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).LikeVideo(ctx, req.(*LikeVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_UnlikeVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnlikeVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).UnlikeVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_UnlikeVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).UnlikeVideo(ctx, req.(*UnlikeVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -344,6 +420,14 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecordView",
 			Handler:    _VideoService_RecordView_Handler,
+		},
+		{
+			MethodName: "LikeVideo",
+			Handler:    _VideoService_LikeVideo_Handler,
+		},
+		{
+			MethodName: "UnlikeVideo",
+			Handler:    _VideoService_UnlikeVideo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

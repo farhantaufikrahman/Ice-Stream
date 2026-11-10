@@ -18,11 +18,51 @@ type fakeRepo struct {
 	mu     sync.Mutex
 	nextID int64
 	videos map[int64]Video
+	// likes[videoID][userID] = true jika user itu sudah like.
+	likes map[int64]map[int64]bool
 	// incrementErr diisi test untuk mensimulasikan Oracle yang gagal.
 	incrementErr error
 }
 
-func newFakeRepo() *fakeRepo { return &fakeRepo{videos: map[int64]Video{}} }
+func newFakeRepo() *fakeRepo {
+	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}}
+}
+
+func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.videos[videoID]
+	if !ok || v.Status != StatusReady {
+		return 0, ErrNotFound
+	}
+	if r.likes[videoID] == nil {
+		r.likes[videoID] = map[int64]bool{}
+	}
+	if r.likes[videoID][userID] != like {
+		r.likes[videoID][userID] = like
+		if like {
+			v.LikeCount++
+		} else {
+			v.LikeCount--
+		}
+		r.videos[videoID] = v
+	}
+	return v.LikeCount, nil
+}
+
+func (r *fakeRepo) Like(_ context.Context, videoID, userID int64) (int64, error) {
+	return r.changeLike(videoID, userID, true)
+}
+
+func (r *fakeRepo) Unlike(_ context.Context, videoID, userID int64) (int64, error) {
+	return r.changeLike(videoID, userID, false)
+}
+
+func (r *fakeRepo) IsLiked(_ context.Context, videoID, userID int64) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.likes[videoID][userID], nil
+}
 
 func (r *fakeRepo) Create(_ context.Context, nv NewVideo) (Video, error) {
 	r.mu.Lock()
@@ -72,12 +112,12 @@ func (r *fakeRepo) ListByOwner(_ context.Context, ownerID, beforeID int64, limit
 	return out, nil
 }
 
-func (r *fakeRepo) ListPublic(_ context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error) {
+func (r *fakeRepo) ListPublic(_ context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var ready []Video
 	for _, v := range r.videos {
-		if v.Status == StatusReady && (ownerID == 0 || v.OwnerID == ownerID) {
+		if v.Status == StatusReady && (len(ownerIDs) == 0 || slices.Contains(ownerIDs, v.OwnerID)) {
 			ready = append(ready, v)
 		}
 	}

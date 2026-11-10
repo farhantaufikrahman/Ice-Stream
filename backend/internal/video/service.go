@@ -27,12 +27,21 @@ type Repository interface {
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
 	// ListPublic mengambil video READY, processed_at lalu id terbesar lebih
-	// dulu, hanya milik ownerID (0 = semua user) dan hanya yang posisinya
-	// setelah after (nil = dari awal).
-	ListPublic(ctx context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error)
+	// dulu, hanya milik salah satu ownerIDs (kosong = semua user) dan hanya
+	// yang posisinya setelah after (nil = dari awal).
+	ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error)
 	// IncrementViews menambah view_count video READY sebanyak 1 dan
 	// mengembalikan nilai barunya. ErrNotFound jika video tidak READY.
 	IncrementViews(ctx context.Context, id int64) (int64, error)
+	// Like mencatat like userID untuk video READY dan mengembalikan
+	// like_count terbaru. Like kedua tidak menambah apa-apa.
+	// ErrNotFound jika video tidak READY.
+	Like(ctx context.Context, videoID, userID int64) (int64, error)
+	// Unlike menghapus like userID (jika ada) dan mengembalikan like_count
+	// terbaru. ErrNotFound jika video tidak READY.
+	Unlike(ctx context.Context, videoID, userID int64) (int64, error)
+	// IsLiked mengembalikan true jika userID sudah like videoID.
+	IsLiked(ctx context.Context, videoID, userID int64) (bool, error)
 	// MarkProcessing mengubah UPLOADED menjadi PROCESSING. Mengembalikan
 	// false (tanpa error) jika statusnya sudah bukan UPLOADED.
 	MarkProcessing(ctx context.Context, id int64, now time.Time) (bool, error)
@@ -78,6 +87,9 @@ const (
 	defaultPageSize     = 20
 	maxPageSize         = 50
 	maxViewerKeyLen     = 64
+	// maxFeedOwners sama dengan batas subscription per user di UserService,
+	// dan juga batas jumlah nilai di "IN (...)" pada Oracle (1000).
+	maxFeedOwners = 1000
 	// viewClaimTimeout membatasi waktu menunggu NATS saat mencatat view.
 	// Views tidak penting sampai harus membuat penonton menunggu: kalau NATS
 	// lambat atau mati, lebih baik cepat menjawab UNAVAILABLE.
@@ -296,6 +308,8 @@ type VideoDetail struct {
 	// Original adalah URL presigned untuk mengunduh file asli. Hanya terisi
 	// untuk pemilik video, setelah file selesai diunggah.
 	Original PresignedRequest
+	// ViewerLiked bernilai true jika viewer sudah like video ini.
+	ViewerLiked bool
 }
 
 // GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
@@ -313,14 +327,19 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 	if v.Status != StatusReady && !isOwner {
 		return VideoDetail{}, ErrNotFound
 	}
-	if !isOwner || v.Status == StatusPendingUpload {
-		return VideoDetail{Video: v}, nil
+	d := VideoDetail{Video: v}
+	if viewerID != 0 && v.Status == StatusReady {
+		if d.ViewerLiked, err = s.repo.IsLiked(ctx, v.ID, viewerID); err != nil {
+			return VideoDetail{}, err
+		}
 	}
-	req, err := s.store.PresignGet(ctx, v.ObjectKey, s.opts.PlaybackURLTTL)
-	if err != nil {
+	if !isOwner || v.Status == StatusPendingUpload {
+		return d, nil
+	}
+	if d.Original, err = s.store.PresignGet(ctx, v.ObjectKey, s.opts.PlaybackURLTTL); err != nil {
 		return VideoDetail{}, err
 	}
-	return VideoDetail{Video: v, Original: req}, nil
+	return d, nil
 }
 
 // MediaURL mengubah key hasil transcoding (misalnya "hls/42/master.m3u8")
@@ -365,18 +384,23 @@ func (s *Service) ListMyVideos(ctx context.Context, ownerID int64, pageSize int,
 
 // ListVideos mengambil feed publik: video READY, yang paling baru selesai
 // diproses lebih dulu. Siapa saja boleh memanggilnya, termasuk pengunjung
-// yang belum login. ownerID > 0 membatasi ke video milik satu user
-// (halaman channel).
+// yang belum login. ownerIDs membatasi ke video milik user-user itu: satu
+// id untuk halaman channel, banyak id untuk feed subscription. Kosong =
+// semua user.
 //
 // pageToken kosong = halaman pertama. Token berikutnya kosong jika sudah
 // tidak ada data lagi. Isi token sengaja tidak perlu dipahami client
 // (opaque), supaya cara pagination bisa diubah tanpa mengubah API.
-func (s *Service) ListVideos(ctx context.Context, ownerID int64, pageSize int, pageToken string) ([]Video, string, error) {
+func (s *Service) ListVideos(ctx context.Context, ownerIDs []int64, pageSize int, pageToken string) ([]Video, string, error) {
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
 	if pageSize > maxPageSize {
 		return nil, "", &ValidationError{"page_size", fmt.Sprintf("maksimal %d", maxPageSize)}
+	}
+	ownerIDs = uniquePositive(ownerIDs)
+	if len(ownerIDs) > maxFeedOwners {
+		return nil, "", &ValidationError{"owner_ids", fmt.Sprintf("maksimal %d id", maxFeedOwners)}
 	}
 	var after *FeedCursor
 	if pageToken != "" {
@@ -386,7 +410,7 @@ func (s *Service) ListVideos(ctx context.Context, ownerID int64, pageSize int, p
 		}
 		after = &c
 	}
-	videos, err := s.repo.ListPublic(ctx, ownerID, after, pageSize+1)
+	videos, err := s.repo.ListPublic(ctx, ownerIDs, after, pageSize+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -401,6 +425,19 @@ func (s *Service) ListVideos(ctx context.Context, ownerID int64, pageSize int, p
 		next = encodeFeedCursor(FeedCursor{ProcessedAt: *last.ProcessedAt, ID: last.ID})
 	}
 	return videos, next, nil
+}
+
+// uniquePositive membuang id <= 0 dan id dobel, urutannya tetap.
+func uniquePositive(ids []int64) []int64 {
+	seen := make(map[int64]bool, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id > 0 && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // encodeFeedCursor mengubah cursor menjadi teks seperti "MTczMTIy...",
@@ -496,4 +533,43 @@ func validViewerKey(k string) bool {
 		}
 	}
 	return true
+}
+
+// LikeResult adalah hasil LikeVideo dan UnlikeVideo.
+type LikeResult struct {
+	Liked     bool
+	LikeCount int64
+}
+
+// LikeVideo menandai video READY disukai requesterID. Aman dipanggil ulang
+// (idempotent): tombol like yang diklik dua kali, atau request yang
+// dikirim ulang karena jaringan putus, tidak menambah like_count dua kali.
+func (s *Service) LikeVideo(ctx context.Context, requesterID, videoID int64) (LikeResult, error) {
+	if requesterID <= 0 {
+		// Gateway selalu mengisi requester dari access token, jadi ini bug.
+		return LikeResult{}, errors.New("requester id kosong")
+	}
+	if videoID <= 0 {
+		return LikeResult{}, ErrNotFound
+	}
+	count, err := s.repo.Like(ctx, videoID, requesterID)
+	if err != nil {
+		return LikeResult{}, err
+	}
+	return LikeResult{Liked: true, LikeCount: count}, nil
+}
+
+// UnlikeVideo membatalkan like requesterID. Aman dipanggil ulang.
+func (s *Service) UnlikeVideo(ctx context.Context, requesterID, videoID int64) (LikeResult, error) {
+	if requesterID <= 0 {
+		return LikeResult{}, errors.New("requester id kosong")
+	}
+	if videoID <= 0 {
+		return LikeResult{}, ErrNotFound
+	}
+	count, err := s.repo.Unlike(ctx, videoID, requesterID)
+	if err != nil {
+		return LikeResult{}, err
+	}
+	return LikeResult{Liked: false, LikeCount: count}, nil
 }

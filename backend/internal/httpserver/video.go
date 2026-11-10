@@ -67,6 +67,8 @@ type videoResponse struct {
 	ViewCount int64 `json:"view_count"`
 	// CommentCount adalah jumlah komentar dan balasan (selalu ada).
 	CommentCount int64 `json:"comment_count"`
+	// LikeCount adalah jumlah like (selalu ada).
+	LikeCount int64 `json:"like_count"`
 	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
 	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
 	Owner *ownerResponse `json:"owner,omitempty"`
@@ -110,6 +112,16 @@ type getVideoResponse struct {
 	// Hanya untuk pemilik video, setelah file selesai diunggah. Untuk
 	// memutar video, pakai video.hls_url.
 	Original *originalResponse `json:"original,omitempty"`
+	// ViewerLiked hanya ada jika request membawa access token: true jika
+	// user ini sudah like. Tanpa login field ini tidak dikirim, supaya
+	// frontend bisa membedakan "belum like" dan "belum login".
+	ViewerLiked *bool `json:"viewer_liked,omitempty"`
+}
+
+// likeResponse adalah jawaban PUT dan DELETE /videos/:id/like.
+type likeResponse struct {
+	Liked     bool  `json:"liked"`
+	LikeCount int64 `json:"like_count"`
 }
 
 func (h *videoHandler) create(c *gin.Context) {
@@ -171,11 +183,7 @@ func (h *videoHandler) get(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// 0 = pengunjung belum login (OptionalAuth tidak menyimpan klaim).
-	var viewerID int64
-	if claims, ok := CurrentUser(c); ok {
-		viewerID, _ = claims.UserID()
-	}
+	viewerID := optionalUserID(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
@@ -185,6 +193,10 @@ func (h *videoHandler) get(c *gin.Context) {
 		return
 	}
 	body := getVideoResponse{Video: toVideoResponse(resp.GetVideo())}
+	if viewerID != 0 {
+		liked := resp.GetViewerLiked()
+		body.ViewerLiked = &liked
+	}
 	owners := lookupOwners(c.Request.Context(), h.users, h.logger, []*videov1.Video{resp.GetVideo()})
 	body.Video.Owner = owners[resp.GetVideo().GetOwnerId()]
 	if resp.GetOriginalUrl() != "" {
@@ -264,6 +276,49 @@ func (h *videoHandler) recordView(c *gin.Context) {
 	c.JSON(http.StatusOK, recordViewResponse{Counted: resp.GetCounted(), ViewCount: resp.GetViewCount()})
 }
 
+// like: PUT /api/v1/videos/:id/like (tanpa body). Wajib login.
+// PUT dipakai (bukan POST) karena hasilnya sama walau dikirim berkali-kali:
+// "jadikan video ini disukai saya". DELETE membatalkannya.
+func (h *videoHandler) like(c *gin.Context) {
+	h.changeLike(c, true)
+}
+
+// unlike: DELETE /api/v1/videos/:id/like. Wajib login.
+func (h *videoHandler) unlike(c *gin.Context) {
+	h.changeLike(c, false)
+}
+
+func (h *videoHandler) changeLike(c *gin.Context, like bool) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	videoID, ok := videoIDParam(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	var out likeResponse
+	if like {
+		resp, err := h.client.LikeVideo(ctx, &videov1.LikeVideoRequest{RequesterId: userID, VideoId: videoID})
+		if err != nil {
+			writeGRPCError(c, h.logger, err)
+			return
+		}
+		out = likeResponse{Liked: resp.GetLiked(), LikeCount: resp.GetLikeCount()}
+	} else {
+		resp, err := h.client.UnlikeVideo(ctx, &videov1.UnlikeVideoRequest{RequesterId: userID, VideoId: videoID})
+		if err != nil {
+			writeGRPCError(c, h.logger, err)
+			return
+		}
+		out = likeResponse{Liked: resp.GetLiked(), LikeCount: resp.GetLikeCount()}
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 // viewerKey membuat penanda penonton untuk anti-dobel views:
 //   - user login: "u-<id user>", jadi dihitung sekali walau pindah perangkat;
 //   - tanpa login: "a-" + 32 huruf pertama SHA-256 dari IP dan User-Agent.
@@ -304,6 +359,17 @@ func toListResponse(videos []*videov1.Video, next string) listVideosResponse {
 		out.Videos = append(out.Videos, toVideoResponse(v))
 	}
 	return out
+}
+
+// optionalUserID mengambil id user dari access token yang diperiksa
+// OptionalAuth. 0 = pengunjung belum login.
+func optionalUserID(c *gin.Context) int64 {
+	if claims, ok := CurrentUser(c); ok {
+		if id, err := claims.UserID(); err == nil {
+			return id
+		}
+	}
+	return 0
 }
 
 // currentUserID mengambil id user dari access token yang sudah diperiksa
@@ -364,6 +430,7 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		ProcessedAt:   optionalTime(v.GetProcessedAt()),
 		ViewCount:     v.GetViewCount(),
 		CommentCount:  v.GetCommentCount(),
+		LikeCount:     v.GetLikeCount(),
 	}
 }
 

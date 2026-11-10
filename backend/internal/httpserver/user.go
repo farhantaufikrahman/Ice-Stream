@@ -48,6 +48,21 @@ type profileResponse struct {
 	AvatarURL string    `json:"avatar_url"`
 	CreatedAt time.Time `json:"created_at"`
 	Email     string    `json:"email,omitempty"`
+	// SubscriberCount adalah jumlah subscriber (selalu ada).
+	SubscriberCount int64 `json:"subscriber_count"`
+}
+
+// subscriptionResponse adalah jawaban PUT dan DELETE
+// /users/:username/subscription.
+type subscriptionResponse struct {
+	Subscribed      bool  `json:"subscribed"`
+	SubscriberCount int64 `json:"subscriber_count"`
+}
+
+// listSubscriptionsResponse adalah jawaban GET /me/subscriptions.
+type listSubscriptionsResponse struct {
+	Channels      []profileResponse `json:"channels"`
+	NextPageToken string            `json:"next_page_token"`
 }
 
 // ownerResponse adalah ringkasan pemilik video untuk kartu di feed.
@@ -66,13 +81,147 @@ type updateProfileRequest struct {
 	Bio         *string `json:"bio"`
 }
 
-// getByUsername: GET /api/v1/users/:username (halaman channel, tanpa login).
+// getByUsername: GET /api/v1/users/:username (halaman channel). Login tidak
+// wajib; jika ada access token, jawaban juga berisi viewer_subscribed.
 func (h *userHandler) getByUsername(c *gin.Context) {
-	p, ok := h.lookup(c)
+	viewerID := optionalUserID(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+	resp, err := h.users.GetProfile(ctx, &userv1.GetProfileRequest{
+		User:     &userv1.GetProfileRequest_Username{Username: c.Param("username")},
+		ViewerId: viewerID,
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	user := toProfileResponse(resp.GetProfile())
+	// UserService mengisi email jika viewer melihat profilnya sendiri.
+	// Endpoint ini publik (bisa di-cache atau dibagikan), jadi email dibuang.
+	user.Email = ""
+	body := gin.H{"user": user}
+	if viewerID != 0 {
+		body["viewer_subscribed"] = resp.GetViewerSubscribed()
+	}
+	c.JSON(http.StatusOK, body)
+}
+
+// subscribe: PUT /api/v1/users/:username/subscription (tanpa body). Wajib login.
+func (h *userHandler) subscribe(c *gin.Context) {
+	h.changeSubscription(c, true)
+}
+
+// unsubscribe: DELETE /api/v1/users/:username/subscription. Wajib login.
+func (h *userHandler) unsubscribe(c *gin.Context) {
+	h.changeSubscription(c, false)
+}
+
+func (h *userHandler) changeSubscription(c *gin.Context, subscribe bool) {
+	userID, ok := currentUserID(c)
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"user": toProfileResponse(p)})
+	channel, ok := h.lookup(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	var out subscriptionResponse
+	if subscribe {
+		resp, err := h.users.Subscribe(ctx, &userv1.SubscribeRequest{RequesterId: userID, ChannelId: channel.GetId()})
+		if err != nil {
+			writeGRPCError(c, h.logger, err)
+			return
+		}
+		out = subscriptionResponse{Subscribed: resp.GetSubscribed(), SubscriberCount: resp.GetSubscriberCount()}
+	} else {
+		resp, err := h.users.Unsubscribe(ctx, &userv1.UnsubscribeRequest{RequesterId: userID, ChannelId: channel.GetId()})
+		if err != nil {
+			writeGRPCError(c, h.logger, err)
+			return
+		}
+		out = subscriptionResponse{Subscribed: resp.GetSubscribed(), SubscriberCount: resp.GetSubscriberCount()}
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+// subscriptions: GET /api/v1/me/subscriptions?page_size=&page_token=
+// Channel yang saya ikuti, yang terakhir di-subscribe lebih dulu.
+func (h *userHandler) subscriptions(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	pageSize, ok := pageSizeQuery(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+	resp, err := h.users.ListSubscriptions(ctx, &userv1.ListSubscriptionsRequest{
+		RequesterId: userID,
+		PageSize:    pageSize,
+		PageToken:   c.Query("page_token"),
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	out := listSubscriptionsResponse{Channels: make([]profileResponse, 0, len(resp.GetChannels())), NextPageToken: resp.GetNextPageToken()}
+	for _, p := range resp.GetChannels() {
+		out.Channels = append(out.Channels, toProfileResponse(p))
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+// feed: GET /api/v1/me/feed?page_size=&page_token=
+// Video terbaru dari semua channel yang saya ikuti.
+//
+// Cara ini disebut "fan-out on read": daftar channel diambil dari
+// UserService, lalu VideoService mencari video milik channel-channel itu
+// saat feed dibuka. Untuk skala sangat besar (jutaan subscriber), aplikasi
+// seperti Twitter memakai "fan-out on write": saat video baru terbit, id-nya
+// langsung ditulis ke kotak feed setiap subscriber.
+func (h *userHandler) feed(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	pageSize, ok := pageSizeQuery(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	subs, err := h.users.ListSubscribedChannelIds(ctx, &userv1.ListSubscribedChannelIdsRequest{RequesterId: userID})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	if len(subs.GetChannelIds()) == 0 {
+		// Belum mengikuti channel apa pun. Jangan panggil ListVideos: daftar
+		// owner yang kosong di sana berarti "semua user".
+		c.JSON(http.StatusOK, toListResponse(nil, ""))
+		return
+	}
+	resp, err := h.videos.client.ListVideos(ctx, &videov1.ListVideosRequest{
+		OwnerIds:  subs.GetChannelIds(),
+		PageSize:  pageSize,
+		PageToken: c.Query("page_token"),
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	body := toListResponse(resp.GetVideos(), resp.GetNextPageToken())
+	owners := lookupOwners(c.Request.Context(), h.users, h.logger, resp.GetVideos())
+	for i, v := range resp.GetVideos() {
+		body.Videos[i].Owner = owners[v.GetOwnerId()]
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // listVideos: GET /api/v1/users/:username/videos?page_size=&page_token=
@@ -107,8 +256,8 @@ func (h *userHandler) listVideos(c *gin.Context) {
 	c.JSON(http.StatusOK, body)
 }
 
-// lookup mencari profil dari :username. Viewer selalu 0 di sini, karena
-// halaman channel sama untuk semua orang (tanpa email).
+// lookup mencari profil dari :username, misalnya untuk mendapatkan id
+// channel. Viewer selalu 0: yang dibutuhkan hanya data publik.
 func (h *userHandler) lookup(c *gin.Context) (*userv1.Profile, bool) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
@@ -261,6 +410,8 @@ func toProfileResponse(p *userv1.Profile) profileResponse {
 		AvatarURL:   p.GetAvatarUrl(),
 		CreatedAt:   p.GetCreatedAt().AsTime(),
 		Email:       p.GetEmail(),
+		// Jumlah subscriber, sama untuk semua orang.
+		SubscriberCount: p.GetSubscriberCount(),
 	}
 }
 

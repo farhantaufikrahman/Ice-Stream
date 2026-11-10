@@ -31,6 +31,20 @@ service UserService {
   rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
   // RemoveAvatar menghapus foto profil requester.
   rpc RemoveAvatar(RemoveAvatarRequest) returns (RemoveAvatarResponse);
+  // Subscribe membuat requester mengikuti channel_id. Aman dipanggil ulang.
+  // Error INVALID_ARGUMENT untuk subscribe diri sendiri,
+  // FAILED_PRECONDITION jika sudah mengikuti 1000 channel, NOT_FOUND jika
+  // channel tidak ada atau diblokir.
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+  // Unsubscribe berhenti mengikuti channel_id. Aman dipanggil walau belum
+  // pernah subscribe.
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+  // ListSubscriptions mengambil channel yang diikuti requester, yang
+  // terakhir di-subscribe lebih dulu.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+  // ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
+  // requester (maksimal 1000), untuk menyusun feed subscription.
+  rpc ListSubscribedChannelIds(ListSubscribedChannelIdsRequest) returns (ListSubscribedChannelIdsResponse);
 }
 
 message Profile {
@@ -43,6 +57,8 @@ message Profile {
   google.protobuf.Timestamp created_at = 6;
   // Hanya diisi untuk pemilik profil (lihat GetProfile).
   string email = 7;
+  // Jumlah subscriber channel ini (langkah 10).
+  int64 subscriber_count = 8;
 }
 
 message GetProfileRequest {
@@ -57,6 +73,8 @@ message GetProfileRequest {
 
 message GetProfileResponse {
   Profile profile = 1;
+  // true jika viewer_id mengikuti user ini. Selalu false tanpa login.
+  bool viewer_subscribed = 2;
 }
 
 message BatchGetProfilesRequest {
@@ -96,4 +114,47 @@ message RemoveAvatarRequest {
 
 message RemoveAvatarResponse {
   Profile profile = 1;
+}
+
+message SubscribeRequest {
+  int64 requester_id = 1;
+  int64 channel_id = 2;
+}
+
+message SubscribeResponse {
+  // Selalu true.
+  bool subscribed = 1;
+  int64 subscriber_count = 2;
+}
+
+message UnsubscribeRequest {
+  int64 requester_id = 1;
+  int64 channel_id = 2;
+}
+
+message UnsubscribeResponse {
+  // Selalu false.
+  bool subscribed = 1;
+  int64 subscriber_count = 2;
+}
+
+message ListSubscriptionsRequest {
+  int64 requester_id = 1;
+  // 0 = default (20). Maksimal 50.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSubscriptionsResponse {
+  // Channel yang diblokir dilewati. Tidak pernah berisi email.
+  repeated Profile channels = 1;
+  string next_page_token = 2;
+}
+
+message ListSubscribedChannelIdsRequest {
+  int64 requester_id = 1;
+}
+
+message ListSubscribedChannelIdsResponse {
+  repeated int64 channel_ids = 1;
 }

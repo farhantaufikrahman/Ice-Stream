@@ -128,7 +128,8 @@ func newTestService() (*Service, *fakeRepo, *fakeStore) {
 	}}
 	store := &fakeStore{files: map[string][]byte{}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewService(repo, store, logger, "http://media.test/images"), repo, store
+	// fakeSubs (subscription_test.go) menambahkan method subscription.
+	return NewService(&fakeSubs{fakeRepo: repo}, store, logger, "http://media.test/images"), repo, store
 }
 
 func TestGetProfile(t *testing.T) {
