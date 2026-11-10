@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -14,10 +15,12 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/auth"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/user"
 )
 
 func main() {
@@ -54,14 +57,27 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	// Bucket images untuk foto profil disiapkan di background. Berbeda dengan
+	// VideoService, AuthService TIDAK boleh berhenti hanya karena storage
+	// belum siap: login dan register tidak butuh storage. Selama bucket
+	// belum siap, hanya upload foto profil yang gagal.
+	store := user.NewS3Store(cfg.Storage)
+	go ensureAvatarBucket(ctx, store, logger)
+	users := user.NewService(user.NewOracleRepository(db), store, logger, cfg.MediaPublicURL)
+
 	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger)))
 	authv1.RegisterAuthServiceServer(srv, auth.NewGRPCServer(svc, logger))
+	// UserService berjalan di proses yang sama (port 50051). Satu server gRPC
+	// boleh melayani beberapa service, mirip satu aplikasi Spring Boot dengan
+	// beberapa controller.
+	userv1.RegisterUserServiceServer(srv, user.NewGRPCServer(users, logger))
 
 	// Health check standar gRPC, dipakai probe Kubernetes dan grpcurl.
 	// Statusnya NOT_SERVING selama Oracle tidak bisa dihubungi.
 	healthSrv := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthSrv)
 	go grpcserver.WatchHealth(ctx, healthSrv, authv1.AuthService_ServiceDesc.ServiceName, []grpcserver.Check{
+		// Storage sengaja tidak dicek di sini, alasannya sama seperti di atas.
 		{Name: "oracle", Run: sqlDB.PingContext},
 	}, logger)
 
@@ -71,6 +87,30 @@ func run(logger *slog.Logger) error {
 		reflection.Register(srv)
 	}
 
-	logger.Info("auth service siap", slog.String("env", cfg.Env))
+	logger.Info("auth service siap",
+		slog.String("env", cfg.Env),
+		slog.String("avatar_bucket", cfg.Storage.Bucket),
+		slog.String("media_url", cfg.MediaPublicURL),
+	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
+}
+
+// ensureAvatarBucket membuat bucket foto profil, dan mencoba lagi setiap 10
+// detik sampai berhasil (misalnya saat RustFS masih start).
+func ensureAvatarBucket(ctx context.Context, store *user.S3Store, logger *slog.Logger) {
+	for {
+		setupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := store.EnsureBucket(setupCtx)
+		cancel()
+		if err == nil {
+			logger.Info("bucket foto profil siap")
+			return
+		}
+		logger.Warn("bucket foto profil belum siap, dicoba lagi 10 detik lagi", slog.Any("error", err))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
 }

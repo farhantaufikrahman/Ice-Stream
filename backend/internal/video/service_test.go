@@ -72,12 +72,12 @@ func (r *fakeRepo) ListByOwner(_ context.Context, ownerID, beforeID int64, limit
 	return out, nil
 }
 
-func (r *fakeRepo) ListPublic(_ context.Context, after *FeedCursor, limit int) ([]Video, error) {
+func (r *fakeRepo) ListPublic(_ context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var ready []Video
 	for _, v := range r.videos {
-		if v.Status == StatusReady {
+		if v.Status == StatusReady && (ownerID == 0 || v.OwnerID == ownerID) {
 			ready = append(ready, v)
 		}
 	}

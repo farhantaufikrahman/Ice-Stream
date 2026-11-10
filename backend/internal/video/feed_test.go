@@ -39,29 +39,35 @@ func TestListVideosFeed(t *testing.T) {
 	// Video yang belum READY tidak boleh muncul di feed.
 	uploadedVideo(t, svc, store)
 
-	page1, next, err := svc.ListVideos(ctx, 2, "")
+	page1, next, err := svc.ListVideos(ctx, 0, 2, "")
 	require.NoError(t, err)
 	assert.Equal(t, []int64{1, 3}, ids(page1))
 	require.NotEmpty(t, next)
 
-	page2, next, err := svc.ListVideos(ctx, 2, next)
+	page2, next, err := svc.ListVideos(ctx, 0, 2, next)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{2}, ids(page2))
 	assert.Empty(t, next, "halaman terakhir")
 
-	all, _, err := svc.ListVideos(ctx, 0, "")
+	all, _, err := svc.ListVideos(ctx, 0, 0, "")
 	require.NoError(t, err)
 	assert.Len(t, all, 3, "page_size 0 = default 20")
+
+	// Halaman channel user 7: hanya video miliknya.
+	mine, next, err := svc.ListVideos(ctx, 7, 0, "")
+	require.NoError(t, err)
+	assert.Equal(t, []int64{1, 3}, ids(mine))
+	assert.Empty(t, next)
 }
 
 func TestListVideosValidation(t *testing.T) {
 	svc, _, _ := newTestService()
 	var verr *ValidationError
 	for _, token := range []string{"42", "!!!", encodeRaw("abc"), encodeRaw("123"), encodeRaw("123.-1")} {
-		_, _, err := svc.ListVideos(context.Background(), 10, token)
+		_, _, err := svc.ListVideos(context.Background(), 0, 10, token)
 		assert.ErrorAs(t, err, &verr, "token %q", token)
 	}
-	_, _, err := svc.ListVideos(context.Background(), 51, "")
+	_, _, err := svc.ListVideos(context.Background(), 0, 51, "")
 	assert.ErrorAs(t, err, &verr)
 }
 

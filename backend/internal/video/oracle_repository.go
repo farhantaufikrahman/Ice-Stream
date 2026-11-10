@@ -162,15 +162,19 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 }
 
 // ListPublic mengambil maksimal limit video READY untuk feed publik,
-// diurutkan processed_at lalu id dari yang terbaru. Jika after tidak nil,
-// hanya video setelah cursor itu (halaman berikutnya).
+// diurutkan processed_at lalu id dari yang terbaru. Jika ownerID > 0, hanya
+// video milik user itu (halaman channel). Jika after tidak nil, hanya video
+// setelah cursor itu (halaman berikutnya).
 //
 // Oracle tidak mendukung perbandingan (a, b) < (x, y), jadi syaratnya
 // ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
 // lebih kecil. id ikut dipakai supaya urutan tetap pasti walau dua video
 // selesai di detik yang sama.
-func (r *OracleRepository) ListPublic(ctx context.Context, after *FeedCursor, limit int) ([]Video, error) {
+func (r *OracleRepository) ListPublic(ctx context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error) {
 	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
+	if ownerID > 0 {
+		q = q.Where("owner_id = ?", ownerID)
+	}
 	if after != nil {
 		q = q.Where("(processed_at < ? OR (processed_at = ? AND id < ?))", after.ProcessedAt, after.ProcessedAt, after.ID)
 	}

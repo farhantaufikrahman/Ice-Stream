@@ -745,7 +745,9 @@ type ListVideosRequest struct {
 	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Kosong untuk halaman pertama, lalu isi dengan next_page_token.
 	// Isinya tidak perlu dipahami client.
-	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Jika diisi, hanya video milik user ini (halaman channel). 0 = semua.
+	OwnerId       int64 `protobuf:"varint,3,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -792,6 +794,13 @@ func (x *ListVideosRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListVideosRequest) GetOwnerId() int64 {
+	if x != nil {
+		return x.OwnerId
+	}
+	return 0
 }
 
 type ListVideosResponse struct {
@@ -1020,11 +1029,12 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"g\n" +
 	"\x14ListMyVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"O\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"j\n" +
 	"\x11ListVideosRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"e\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\x12\x19\n" +
+	"\bowner_id\x18\x03 \x01(\x03R\aownerId\"e\n" +
 	"\x12ListVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"M\n" +

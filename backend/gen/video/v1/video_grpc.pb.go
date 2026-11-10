@@ -51,7 +51,8 @@ type VideoServiceClient interface {
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(ctx context.Context, in *ListMyVideosRequest, opts ...grpc.CallOption) (*ListMyVideosResponse, error)
 	// ListVideos mengambil feed publik: hanya video READY, yang paling baru
-	// selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+	// selesai diproses lebih dulu. Boleh dipanggil tanpa login. Isi owner_id
+	// untuk daftar video satu channel.
 	// Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
 	ListVideos(ctx context.Context, in *ListVideosRequest, opts ...grpc.CallOption) (*ListVideosResponse, error)
 	// RecordView menambah views video READY, maksimal sekali per penonton
@@ -148,7 +149,8 @@ type VideoServiceServer interface {
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(context.Context, *ListMyVideosRequest) (*ListMyVideosResponse, error)
 	// ListVideos mengambil feed publik: hanya video READY, yang paling baru
-	// selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+	// selesai diproses lebih dulu. Boleh dipanggil tanpa login. Isi owner_id
+	// untuk daftar video satu channel.
 	// Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
 	ListVideos(context.Context, *ListVideosRequest) (*ListVideosResponse, error)
 	// RecordView menambah views video READY, maksimal sekali per penonton

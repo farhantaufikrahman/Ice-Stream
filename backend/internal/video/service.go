@@ -27,8 +27,9 @@ type Repository interface {
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
 	// ListPublic mengambil video READY, processed_at lalu id terbesar lebih
-	// dulu, hanya yang posisinya setelah after (nil = dari awal).
-	ListPublic(ctx context.Context, after *FeedCursor, limit int) ([]Video, error)
+	// dulu, hanya milik ownerID (0 = semua user) dan hanya yang posisinya
+	// setelah after (nil = dari awal).
+	ListPublic(ctx context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error)
 	// IncrementViews menambah view_count video READY sebanyak 1 dan
 	// mengembalikan nilai barunya. ErrNotFound jika video tidak READY.
 	IncrementViews(ctx context.Context, id int64) (int64, error)
@@ -364,12 +365,13 @@ func (s *Service) ListMyVideos(ctx context.Context, ownerID int64, pageSize int,
 
 // ListVideos mengambil feed publik: video READY, yang paling baru selesai
 // diproses lebih dulu. Siapa saja boleh memanggilnya, termasuk pengunjung
-// yang belum login.
+// yang belum login. ownerID > 0 membatasi ke video milik satu user
+// (halaman channel).
 //
 // pageToken kosong = halaman pertama. Token berikutnya kosong jika sudah
 // tidak ada data lagi. Isi token sengaja tidak perlu dipahami client
 // (opaque), supaya cara pagination bisa diubah tanpa mengubah API.
-func (s *Service) ListVideos(ctx context.Context, pageSize int, pageToken string) ([]Video, string, error) {
+func (s *Service) ListVideos(ctx context.Context, ownerID int64, pageSize int, pageToken string) ([]Video, string, error) {
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
@@ -384,7 +386,7 @@ func (s *Service) ListVideos(ctx context.Context, pageSize int, pageToken string
 		}
 		after = &c
 	}
-	videos, err := s.repo.ListPublic(ctx, after, pageSize+1)
+	videos, err := s.repo.ListPublic(ctx, ownerID, after, pageSize+1)
 	if err != nil {
 		return nil, "", err
 	}

@@ -24,7 +24,8 @@ service VideoService {
   // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
   rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
   // ListVideos mengambil feed publik: hanya video READY, yang paling baru
-  // selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+  // selesai diproses lebih dulu. Boleh dipanggil tanpa login. Isi owner_id
+  // untuk daftar video satu channel.
   // Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
   rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
   // RecordView menambah views video READY, maksimal sekali per penonton
@@ -140,6 +141,8 @@ message ListVideosRequest {
   // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
   // Isinya tidak perlu dipahami client.
   string page_token = 2;
+  // Jika diisi, hanya video milik user ini (halaman channel). 0 = semua.
+  int64 owner_id = 3;
 }
 
 message ListVideosResponse {

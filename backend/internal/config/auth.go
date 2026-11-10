@@ -23,6 +23,13 @@ type AuthConfig struct {
 	AccessTokenTTL time.Duration
 	// RefreshTokenTTL adalah umur refresh token.
 	RefreshTokenTTL time.Duration
+	// Storage dipakai UserService untuk menyimpan foto profil (bucket
+	// "images").
+	Storage StorageConfig
+	// MediaPublicURL adalah alamat publik bucket images, misalnya
+	// "http://media.ice-stream.localhost:4000/images". URL foto profil =
+	// MediaPublicURL + "/" + key.
+	MediaPublicURL string
 }
 
 // IsProduction mengembalikan true jika service berjalan di mode production.
@@ -49,6 +56,8 @@ func LoadAuth() (AuthConfig, error) {
 		return AuthConfig{}, err
 	}
 
+	storage := loadStorage("images")
+
 	cfg := AuthConfig{
 		Env:               getString("APP_ENV", "development"),
 		GRPCAddr:          ":" + getString("GRPC_PORT", "50051"),
@@ -57,6 +66,8 @@ func LoadAuth() (AuthConfig, error) {
 		JWTPrivateKeyFile: getString("JWT_PRIVATE_KEY_FILE", ""),
 		AccessTokenTTL:    accessTTL,
 		RefreshTokenTTL:   refreshTTL,
+		Storage:           storage,
+		MediaPublicURL:    loadMediaURL(storage),
 	}
 	if err := cfg.validate(); err != nil {
 		return AuthConfig{}, err
@@ -79,6 +90,12 @@ func (c AuthConfig) validate() error {
 	}
 	if c.RefreshTokenTTL <= c.AccessTokenTTL {
 		return fmt.Errorf("REFRESH_TOKEN_TTL harus lebih lama dari ACCESS_TOKEN_TTL")
+	}
+	if err := c.Storage.validate(); err != nil {
+		return err
+	}
+	if err := validMediaURL(c.MediaPublicURL, "/images"); err != nil {
+		return err
 	}
 	return c.DB.validate()
 }
