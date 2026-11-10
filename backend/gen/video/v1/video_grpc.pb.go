@@ -23,21 +23,24 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	VideoService_CreateUpload_FullMethodName       = "/video.v1.VideoService/CreateUpload"
-	VideoService_CompleteUpload_FullMethodName     = "/video.v1.VideoService/CompleteUpload"
-	VideoService_GetVideo_FullMethodName           = "/video.v1.VideoService/GetVideo"
-	VideoService_ListMyVideos_FullMethodName       = "/video.v1.VideoService/ListMyVideos"
-	VideoService_ListVideos_FullMethodName         = "/video.v1.VideoService/ListVideos"
-	VideoService_RecordView_FullMethodName         = "/video.v1.VideoService/RecordView"
-	VideoService_LikeVideo_FullMethodName          = "/video.v1.VideoService/LikeVideo"
-	VideoService_UnlikeVideo_FullMethodName        = "/video.v1.VideoService/UnlikeVideo"
-	VideoService_SearchVideos_FullMethodName       = "/video.v1.VideoService/SearchVideos"
-	VideoService_SaveWatchProgress_FullMethodName  = "/video.v1.VideoService/SaveWatchProgress"
-	VideoService_ListWatchHistory_FullMethodName   = "/video.v1.VideoService/ListWatchHistory"
-	VideoService_DeleteWatchHistory_FullMethodName = "/video.v1.VideoService/DeleteWatchHistory"
-	VideoService_ClearWatchHistory_FullMethodName  = "/video.v1.VideoService/ClearWatchHistory"
-	VideoService_UpdateVideo_FullMethodName        = "/video.v1.VideoService/UpdateVideo"
-	VideoService_DeleteVideo_FullMethodName        = "/video.v1.VideoService/DeleteVideo"
+	VideoService_CreateUpload_FullMethodName             = "/video.v1.VideoService/CreateUpload"
+	VideoService_CompleteUpload_FullMethodName           = "/video.v1.VideoService/CompleteUpload"
+	VideoService_GetVideo_FullMethodName                 = "/video.v1.VideoService/GetVideo"
+	VideoService_ListMyVideos_FullMethodName             = "/video.v1.VideoService/ListMyVideos"
+	VideoService_ListVideos_FullMethodName               = "/video.v1.VideoService/ListVideos"
+	VideoService_RecordView_FullMethodName               = "/video.v1.VideoService/RecordView"
+	VideoService_LikeVideo_FullMethodName                = "/video.v1.VideoService/LikeVideo"
+	VideoService_UnlikeVideo_FullMethodName              = "/video.v1.VideoService/UnlikeVideo"
+	VideoService_SearchVideos_FullMethodName             = "/video.v1.VideoService/SearchVideos"
+	VideoService_SaveWatchProgress_FullMethodName        = "/video.v1.VideoService/SaveWatchProgress"
+	VideoService_ListWatchHistory_FullMethodName         = "/video.v1.VideoService/ListWatchHistory"
+	VideoService_DeleteWatchHistory_FullMethodName       = "/video.v1.VideoService/DeleteWatchHistory"
+	VideoService_ClearWatchHistory_FullMethodName        = "/video.v1.VideoService/ClearWatchHistory"
+	VideoService_UpdateVideo_FullMethodName              = "/video.v1.VideoService/UpdateVideo"
+	VideoService_DeleteVideo_FullMethodName              = "/video.v1.VideoService/DeleteVideo"
+	VideoService_ListNotifications_FullMethodName        = "/video.v1.VideoService/ListNotifications"
+	VideoService_CountUnreadNotifications_FullMethodName = "/video.v1.VideoService/CountUnreadNotifications"
+	VideoService_MarkNotificationsRead_FullMethodName    = "/video.v1.VideoService/MarkNotificationsRead"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -107,6 +110,15 @@ type VideoServiceClient interface {
 	// bukan milik requester; FAILED_PRECONDITION jika video sedang
 	// di-transcode (UPLOADED atau PROCESSING).
 	DeleteVideo(ctx context.Context, in *DeleteVideoRequest, opts ...grpc.CallOption) (*DeleteVideoResponse, error)
+	// ListNotifications mengambil notifikasi requester, terbaru lebih dulu.
+	// Notifikasi untuk video yang sudah dihapus tidak ikut.
+	ListNotifications(ctx context.Context, in *ListNotificationsRequest, opts ...grpc.CallOption) (*ListNotificationsResponse, error)
+	// CountUnreadNotifications menghitung notifikasi requester yang belum
+	// dibaca, maksimal 100 (untuk badge "99+").
+	CountUnreadNotifications(ctx context.Context, in *CountUnreadNotificationsRequest, opts ...grpc.CallOption) (*CountUnreadNotificationsResponse, error)
+	// MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
+	// sudah dibaca. Aman dipanggil berulang.
+	MarkNotificationsRead(ctx context.Context, in *MarkNotificationsReadRequest, opts ...grpc.CallOption) (*MarkNotificationsReadResponse, error)
 }
 
 type videoServiceClient struct {
@@ -267,6 +279,36 @@ func (c *videoServiceClient) DeleteVideo(ctx context.Context, in *DeleteVideoReq
 	return out, nil
 }
 
+func (c *videoServiceClient) ListNotifications(ctx context.Context, in *ListNotificationsRequest, opts ...grpc.CallOption) (*ListNotificationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListNotificationsResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListNotifications_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) CountUnreadNotifications(ctx context.Context, in *CountUnreadNotificationsRequest, opts ...grpc.CallOption) (*CountUnreadNotificationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CountUnreadNotificationsResponse)
+	err := c.cc.Invoke(ctx, VideoService_CountUnreadNotifications_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) MarkNotificationsRead(ctx context.Context, in *MarkNotificationsReadRequest, opts ...grpc.CallOption) (*MarkNotificationsReadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkNotificationsReadResponse)
+	err := c.cc.Invoke(ctx, VideoService_MarkNotificationsRead_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -334,6 +376,15 @@ type VideoServiceServer interface {
 	// bukan milik requester; FAILED_PRECONDITION jika video sedang
 	// di-transcode (UPLOADED atau PROCESSING).
 	DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error)
+	// ListNotifications mengambil notifikasi requester, terbaru lebih dulu.
+	// Notifikasi untuk video yang sudah dihapus tidak ikut.
+	ListNotifications(context.Context, *ListNotificationsRequest) (*ListNotificationsResponse, error)
+	// CountUnreadNotifications menghitung notifikasi requester yang belum
+	// dibaca, maksimal 100 (untuk badge "99+").
+	CountUnreadNotifications(context.Context, *CountUnreadNotificationsRequest) (*CountUnreadNotificationsResponse, error)
+	// MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
+	// sudah dibaca. Aman dipanggil berulang.
+	MarkNotificationsRead(context.Context, *MarkNotificationsReadRequest) (*MarkNotificationsReadResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -388,6 +439,15 @@ func (UnimplementedVideoServiceServer) UpdateVideo(context.Context, *UpdateVideo
 }
 func (UnimplementedVideoServiceServer) DeleteVideo(context.Context, *DeleteVideoRequest) (*DeleteVideoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteVideo not implemented")
+}
+func (UnimplementedVideoServiceServer) ListNotifications(context.Context, *ListNotificationsRequest) (*ListNotificationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListNotifications not implemented")
+}
+func (UnimplementedVideoServiceServer) CountUnreadNotifications(context.Context, *CountUnreadNotificationsRequest) (*CountUnreadNotificationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountUnreadNotifications not implemented")
+}
+func (UnimplementedVideoServiceServer) MarkNotificationsRead(context.Context, *MarkNotificationsReadRequest) (*MarkNotificationsReadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkNotificationsRead not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -680,6 +740,60 @@ func _VideoService_DeleteVideo_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_ListNotifications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListNotificationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListNotifications(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListNotifications_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListNotifications(ctx, req.(*ListNotificationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_CountUnreadNotifications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountUnreadNotificationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).CountUnreadNotifications(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_CountUnreadNotifications_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).CountUnreadNotifications(ctx, req.(*CountUnreadNotificationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_MarkNotificationsRead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkNotificationsReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).MarkNotificationsRead(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_MarkNotificationsRead_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).MarkNotificationsRead(ctx, req.(*MarkNotificationsReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -746,6 +860,18 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteVideo",
 			Handler:    _VideoService_DeleteVideo_Handler,
+		},
+		{
+			MethodName: "ListNotifications",
+			Handler:    _VideoService_ListNotifications_Handler,
+		},
+		{
+			MethodName: "CountUnreadNotifications",
+			Handler:    _VideoService_CountUnreadNotifications_Handler,
+		},
+		{
+			MethodName: "MarkNotificationsRead",
+			Handler:    _VideoService_MarkNotificationsRead_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

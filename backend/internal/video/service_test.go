@@ -31,6 +31,8 @@ type fakeRepo struct {
 	// jika file-nya sudah dihapus dari storage.
 	trash  map[int64]Video
 	purged map[int64]bool
+	// notifs berisi semua notifikasi, urut id (lihat notification_test.go).
+	notifs []fakeNotif
 }
 
 func newFakeRepo() *fakeRepo {
@@ -201,7 +203,17 @@ func (r *fakeRepo) MarkFailed(_ context.Context, id int64, reason string, now ti
 // NATS yang sedang mati.
 type fakePublisher struct {
 	published []int64
-	err       error
+	// ready berisi id video yang dikirim lewat PublishPublished.
+	ready []int64
+	err   error
+}
+
+func (p *fakePublisher) PublishPublished(_ context.Context, v Video) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.ready = append(p.ready, v.ID)
+	return nil
 }
 
 func (p *fakePublisher) PublishUploaded(_ context.Context, v Video) error {

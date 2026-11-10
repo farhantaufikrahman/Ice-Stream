@@ -117,6 +117,12 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
 	videoGroup.GET("/:id/danmaku/live", danmaku.live)
 
+	notifications := &notificationHandler{videos: deps.Videos, users: deps.Users, logger: logger}
+	v1.GET("/me/notifications", requireAuth, notifications.list)
+	v1.GET("/me/notifications/unread-count", requireAuth, notifications.unreadCount)
+	v1.POST("/me/notifications/read-all", requireAuth, notifications.markAllRead)
+	v1.POST("/me/notifications/:id/read", requireAuth, notifications.markRead)
+
 	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
 	v1.GET("/users/:username", OptionalAuth(deps.Verifier), users.getByUsername)
 	v1.PUT("/users/:username/subscription", requireAuth, users.subscribe)

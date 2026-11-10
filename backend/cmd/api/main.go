@@ -13,9 +13,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
@@ -26,6 +23,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
@@ -55,13 +53,13 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	authConn, err := newGRPCClient(cfg.AuthGRPCAddr)
+	authConn, err := grpcserver.NewClient(cfg.AuthGRPCAddr)
 	if err != nil {
 		return fmt.Errorf("menyiapkan klien auth %s: %w", cfg.AuthGRPCAddr, err)
 	}
 	defer authConn.Close()
 
-	videoConn, err := newGRPCClient(cfg.VideoGRPCAddr)
+	videoConn, err := grpcserver.NewClient(cfg.VideoGRPCAddr)
 	if err != nil {
 		return fmt.Errorf("menyiapkan klien video %s: %w", cfg.VideoGRPCAddr, err)
 	}
@@ -144,22 +142,6 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("server berhenti dengan rapi")
 	return nil
-}
-
-// newGRPCClient menyiapkan klien gRPC ke service lain di dalam cluster.
-// grpc.NewClient belum membuka koneksi; koneksi dibuat saat RPC pertama dan
-// otomatis disambung ulang jika putus. Di dalam cluster lalu lintas gRPC
-// belum dienkripsi (insecure); mTLS bisa ditambahkan nanti.
-func newGRPCClient(addr string) (*grpc.ClientConn, error) {
-	return grpc.NewClient(addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Jeda sambung ulang bawaan bisa naik sampai 2 menit. Dibatasi 5 detik
-		// supaya gateway cepat pulih setelah pod service restart.
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff:           backoff.Config{BaseDelay: time.Second, Multiplier: 1.6, Jitter: 0.2, MaxDelay: 5 * time.Second},
-			MinConnectTimeout: 5 * time.Second,
-		}),
-	)
 }
 
 // grpcHealthCheck memanggil health check standar gRPC milik service lain.

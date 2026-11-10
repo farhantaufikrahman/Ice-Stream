@@ -89,6 +89,21 @@ type Repository interface {
 	ListUnpurged(ctx context.Context, limit int) ([]Video, error)
 	// MarkPurged mengisi media_purged_at video yang sudah dihapus.
 	MarkPurged(ctx context.Context, id int64, now time.Time) error
+	// InsertNotifications menyimpan notifikasi kind untuk setiap userIDs,
+	// kecuali user yang sudah punya notifikasi kind untuk videoID.
+	// Mengembalikan jumlah baris baru.
+	InsertNotifications(ctx context.Context, kind string, videoID, actorID int64, userIDs []int64, now time.Time) (int64, error)
+	// ListNotifications mengambil notifikasi userID untuk video READY, id
+	// terbesar lebih dulu, hanya yang id-nya lebih kecil dari beforeID
+	// (0 = dari yang terbaru).
+	ListNotifications(ctx context.Context, userID, beforeID int64, limit int) ([]Notification, error)
+	// CountUnreadNotifications menghitung notifikasi userID yang belum
+	// dibaca untuk video READY, maksimal limit.
+	CountUnreadNotifications(ctx context.Context, userID int64, limit int) (int64, error)
+	// MarkNotificationsRead mengisi read_at satu notifikasi userID
+	// (notificationID > 0) atau semuanya (0), hanya yang belum dibaca.
+	// Mengembalikan jumlah baris yang berubah.
+	MarkNotificationsRead(ctx context.Context, userID, notificationID int64, now time.Time) (int64, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -97,6 +112,9 @@ type Publisher interface {
 	// PublishUploaded memberi tahu transcoder bahwa file video siap diproses.
 	// Boleh dipanggil lebih dari sekali untuk video yang sama.
 	PublishUploaded(ctx context.Context, v Video) error
+	// PublishPublished memberi tahu bahwa video sudah READY (bisa ditonton).
+	// Boleh dipanggil lebih dari sekali untuk video yang sama.
+	PublishPublished(ctx context.Context, v Video) error
 }
 
 // ViewDeduper mencatat penonton yang baru saja menonton sebuah video,
@@ -332,16 +350,34 @@ func (s *Service) MarkProcessing(ctx context.Context, videoID int64) error {
 	return err
 }
 
-// MarkReady dipanggil setelah transcoder selesai membuat file HLS.
+// MarkReady dipanggil setelah transcoder selesai membuat file HLS. Setelah
+// status menjadi READY, event videos.published dikirim supaya subscriber
+// channel mendapat notifikasi.
+//
+// Event dikirim juga jika video ternyata SUDAH READY. Itu terjadi kalau
+// panggilan sebelumnya berhasil mengubah status tapi gagal mengirim event:
+// error-nya membuat event transcode dicoba lagi, dan percobaan kedua ini
+// yang mengirim event-nya. Event dobel tidak masalah (lihat Notifier).
 func (s *Service) MarkReady(ctx context.Context, videoID int64, r TranscodeResult) error {
-	if _, err := s.repo.FindByID(ctx, videoID); err != nil {
+	v, err := s.repo.FindByID(ctx, videoID)
+	if err != nil {
 		return err
 	}
 	if r.PlaylistKey == "" || r.DurationMs <= 0 || len(r.Renditions) == 0 {
 		return &ValidationError{"transcode_result", "playlist, durasi, dan resolusi wajib diisi"}
 	}
-	_, err := s.repo.MarkReady(ctx, videoID, r, s.now())
-	return err
+	changed, err := s.repo.MarkReady(ctx, videoID, r, s.now())
+	if err != nil {
+		return err
+	}
+	if !changed && v.Status != StatusReady {
+		// Misalnya sudah FAILED: video ini tidak dipublikasikan.
+		return nil
+	}
+	if err := s.events.PublishPublished(ctx, v); err != nil {
+		return fmt.Errorf("%w: %w", ErrEventsUnavailable, err)
+	}
+	return nil
 }
 
 // MarkFailed dipanggil jika transcoder menyerah memproses video.

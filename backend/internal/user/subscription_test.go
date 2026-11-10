@@ -120,6 +120,22 @@ func (f *fakeSubs) ListSubscribedChannelIDs(ctx context.Context, subscriber int6
 	return ids, err
 }
 
+func (f *fakeSubs) ListSubscriberIDs(_ context.Context, channel, afterID int64, limit int) ([]int64, error) {
+	f.subMu.Lock()
+	defer f.subMu.Unlock()
+	var ids []int64
+	for _, s := range f.subs {
+		if s.channel == channel && s.subscriber > afterID {
+			ids = append(ids, s.subscriber)
+		}
+	}
+	slices.Sort(ids)
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	return ids, nil
+}
+
 func newSubsService() (*Service, *fakeSubs) {
 	_, repo, store := newTestService()
 	repo.users[10] = Profile{ID: 10, Username: "tono", DisplayName: "Tono", Status: "ACTIVE"}
@@ -242,6 +258,49 @@ func TestSubscriptionGRPC(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 	_, err = srv.Subscribe(ctx, &userv1.SubscribeRequest{RequesterId: 7, ChannelId: 7})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestListSubscriberIDs(t *testing.T) {
+	ctx := context.Background()
+	svc, subs := newSubsService()
+	srv := NewGRPCServer(svc, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Channel 7 punya 5 subscriber; subscriber 1 mengikuti channel lain.
+	for _, sub := range []int64{105, 101, 104, 102, 103} {
+		subs.nextID++
+		subs.subs = append(subs.subs, fakeSub{subs.nextID, sub, 7})
+	}
+	subs.nextID++
+	subs.subs = append(subs.subs, fakeSub{subs.nextID, 1, 10})
+
+	// Halaman demi halaman, seperti yang dilakukan VideoService.
+	var all []int64
+	var after int64
+	for {
+		resp, err := srv.ListSubscriberIds(ctx, &userv1.ListSubscriberIdsRequest{ChannelId: 7, AfterSubscriberId: after, PageSize: 2})
+		require.NoError(t, err)
+		ids := resp.GetSubscriberIds()
+		all = append(all, ids...)
+		if len(ids) < 2 {
+			break
+		}
+		after = ids[len(ids)-1]
+	}
+	assert.Equal(t, []int64{101, 102, 103, 104, 105}, all)
+
+	ids, err := svc.ListSubscriberIDs(ctx, 7, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, ids, 5, "page_size 0 = maksimal")
+
+	for name, req := range map[string]*userv1.ListSubscriberIdsRequest{
+		"page_size terlalu besar": {ChannelId: 7, PageSize: maxSubscriberPage + 1},
+		"page_size negatif":       {ChannelId: 7, PageSize: -1},
+		"after negatif":           {ChannelId: 7, AfterSubscriberId: -1},
+	} {
+		_, err := srv.ListSubscriberIds(ctx, req)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), name)
+	}
+	_, err = srv.ListSubscriberIds(ctx, &userv1.ListSubscriberIdsRequest{})
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func usernames(ps []Profile) []string {

@@ -71,6 +71,15 @@ service VideoService {
   // bukan milik requester; FAILED_PRECONDITION jika video sedang
   // di-transcode (UPLOADED atau PROCESSING).
   rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+  // ListNotifications mengambil notifikasi requester, terbaru lebih dulu.
+  // Notifikasi untuk video yang sudah dihapus tidak ikut.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+  // CountUnreadNotifications menghitung notifikasi requester yang belum
+  // dibaca, maksimal 100 (untuk badge "99+").
+  rpc CountUnreadNotifications(CountUnreadNotificationsRequest) returns (CountUnreadNotificationsResponse);
+  // MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
+  // sudah dibaca. Aman dipanggil berulang.
+  rpc MarkNotificationsRead(MarkNotificationsReadRequest) returns (MarkNotificationsReadResponse);
 }
 
 enum VideoStatus {
@@ -331,3 +340,50 @@ message DeleteVideoRequest {
 }
 
 message DeleteVideoResponse {}
+
+message Notification {
+  int64 id = 1;
+  // Jenis notifikasi. Untuk sekarang selalu "NEW_VIDEO": channel yang
+  // di-subscribe merilis video baru.
+  string kind = 2;
+  // Video yang dibicarakan. Pemiliknya (owner_id) adalah channel-nya.
+  Video video = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // Kosong jika belum dibaca.
+  google.protobuf.Timestamp read_at = 5;
+}
+
+message ListNotificationsRequest {
+  int64 requester_id = 1;
+  // 1 sampai 50. 0 = 20.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  string next_page_token = 2;
+}
+
+message CountUnreadNotificationsRequest {
+  int64 requester_id = 1;
+}
+
+message CountUnreadNotificationsResponse {
+  // 0 sampai 100. Nilai 100 berarti "100 atau lebih".
+  int64 unread_count = 1;
+}
+
+message MarkNotificationsReadRequest {
+  int64 requester_id = 1;
+  // 0 = tandai SEMUA notifikasi requester.
+  int64 notification_id = 2;
+}
+
+message MarkNotificationsReadResponse {
+  // Jumlah notifikasi yang baru ditandai dibaca (0 jika sudah dibaca
+  // sebelumnya atau bukan milik requester).
+  int64 updated = 1;
+  // Sisa yang belum dibaca, sama seperti CountUnreadNotifications.
+  int64 unread_count = 2;
+}
