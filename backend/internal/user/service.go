@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,6 +26,16 @@ type Repository interface {
 	// SetAvatarKey mengganti avatar_key (kosong = hapus) dan mengembalikan
 	// key sebelumnya.
 	SetAvatarKey(ctx context.Context, id int64, key string, now time.Time) (string, error)
+	// Subscribe dan Unsubscribe aman dipanggil ulang dan mengembalikan
+	// subscriber_count terbaru. Subscribe: ErrNotFound jika channel tidak
+	// ada atau diblokir, ErrTooManySubscriptions jika sudah maxSubs.
+	Subscribe(ctx context.Context, subscriberID, channelID int64, maxSubs int) (int64, error)
+	Unsubscribe(ctx context.Context, subscriberID, channelID int64) (int64, error)
+	IsSubscribed(ctx context.Context, subscriberID, channelID int64) (bool, error)
+	// ListSubscriptions: terbaru lebih dulu, id lebih kecil dari beforeID
+	// (0 = dari yang terbaru).
+	ListSubscriptions(ctx context.Context, subscriberID, beforeID int64, limit int) ([]Subscription, error)
+	ListSubscribedChannelIDs(ctx context.Context, subscriberID int64, limit int) ([]int64, error)
 }
 
 // ObjectStore adalah penyimpanan file foto profil. Implementasi S3 ada di
@@ -40,6 +51,12 @@ const (
 	// maxBatchIDs membatasi BatchGetProfiles. Satu halaman feed paling
 	// banyak 50 video, jadi 100 sudah longgar.
 	maxBatchIDs = 100
+	// maxSubscriptions membatasi jumlah channel yang boleh diikuti satu
+	// user (Bilibili memakai batas serupa). Batas ini juga menjaga query
+	// feed subscription tetap di bawah batas IN (...) Oracle, 1000 nilai.
+	maxSubscriptions        = 1000
+	defaultSubscriptionPage = 20
+	maxSubscriptionPage     = 50
 )
 
 // Service berisi aturan bisnis UserService.
@@ -226,4 +243,132 @@ func newAvatarKey(userID int64) (string, error) {
 		return "", fmt.Errorf("membuat nama file avatar: %w", err)
 	}
 	return AvatarPrefix + strconv.FormatInt(userID, 10) + "/" + hex.EncodeToString(b) + ".jpg", nil
+}
+
+// ViewerSubscribed mengembalikan true jika viewerID mengikuti channelID.
+// Selalu false untuk pengunjung tanpa login dan untuk channel sendiri.
+func (s *Service) ViewerSubscribed(ctx context.Context, viewerID, channelID int64) (bool, error) {
+	if viewerID <= 0 || viewerID == channelID {
+		return false, nil
+	}
+	return s.repo.IsSubscribed(ctx, viewerID, channelID)
+}
+
+// SubscribeResult adalah hasil Subscribe dan Unsubscribe.
+type SubscribeResult struct {
+	Subscribed      bool
+	SubscriberCount int64
+}
+
+// Subscribe membuat requesterID mengikuti channelID. Aman dipanggil ulang.
+func (s *Service) Subscribe(ctx context.Context, requesterID, channelID int64) (SubscribeResult, error) {
+	if requesterID <= 0 {
+		return SubscribeResult{}, errors.New("requester id kosong")
+	}
+	if channelID <= 0 {
+		return SubscribeResult{}, ErrNotFound
+	}
+	if channelID == requesterID {
+		return SubscribeResult{}, &ValidationError{"channel_id", "tidak bisa subscribe channel sendiri"}
+	}
+	count, err := s.repo.Subscribe(ctx, requesterID, channelID, maxSubscriptions)
+	if err != nil {
+		return SubscribeResult{}, err
+	}
+	return SubscribeResult{Subscribed: true, SubscriberCount: count}, nil
+}
+
+// Unsubscribe membuat requesterID berhenti mengikuti channelID.
+func (s *Service) Unsubscribe(ctx context.Context, requesterID, channelID int64) (SubscribeResult, error) {
+	if requesterID <= 0 {
+		return SubscribeResult{}, errors.New("requester id kosong")
+	}
+	if channelID <= 0 {
+		return SubscribeResult{}, ErrNotFound
+	}
+	count, err := s.repo.Unsubscribe(ctx, requesterID, channelID)
+	if err != nil {
+		return SubscribeResult{}, err
+	}
+	return SubscribeResult{Subscribed: false, SubscriberCount: count}, nil
+}
+
+// ListSubscriptions mengambil profil channel yang diikuti requesterID, yang
+// terakhir di-subscribe lebih dulu. Channel yang diblokir dilewati, jadi
+// satu halaman bisa berisi kurang dari pageSize walau masih ada halaman
+// berikutnya.
+func (s *Service) ListSubscriptions(ctx context.Context, requesterID int64, pageSize int, pageToken string) ([]Profile, string, error) {
+	if requesterID <= 0 {
+		return nil, "", errors.New("requester id kosong")
+	}
+	if pageSize <= 0 {
+		pageSize = defaultSubscriptionPage
+	}
+	if pageSize > maxSubscriptionPage {
+		return nil, "", &ValidationError{"page_size", fmt.Sprintf("maksimal %d", maxSubscriptionPage)}
+	}
+	var beforeID int64
+	if pageToken != "" {
+		id, err := decodeCursor(pageToken)
+		if err != nil {
+			return nil, "", &ValidationError{"page_token", "tidak valid"}
+		}
+		beforeID = id
+	}
+	subs, err := s.repo.ListSubscriptions(ctx, requesterID, beforeID, pageSize+1)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(subs) > pageSize {
+		subs = subs[:pageSize]
+		next = encodeCursor(subs[pageSize-1].ID)
+	}
+	ids := make([]int64, len(subs))
+	for i, sub := range subs {
+		ids[i] = sub.ChannelID
+	}
+	profiles, err := s.BatchGetProfiles(ctx, ids)
+	if err != nil {
+		return nil, "", err
+	}
+	// FindByIDs tidak menjamin urutan; susun ulang sesuai urutan subscription.
+	byID := make(map[int64]Profile, len(profiles))
+	for _, p := range profiles {
+		byID[p.ID] = p
+	}
+	out := make([]Profile, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, next, nil
+}
+
+// ListSubscribedChannelIDs mengambil semua id channel yang diikuti
+// requesterID (maksimal maxSubscriptions), untuk feed subscription.
+func (s *Service) ListSubscribedChannelIDs(ctx context.Context, requesterID int64) ([]int64, error) {
+	if requesterID <= 0 {
+		return nil, errors.New("requester id kosong")
+	}
+	return s.repo.ListSubscribedChannelIDs(ctx, requesterID, maxSubscriptions)
+}
+
+// encodeCursor dan decodeCursor: token halaman berikutnya berupa base64
+// dari id subscription terakhir, sama seperti komentar di VideoService.
+func encodeCursor(id int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(id, 10)))
+}
+
+func decodeCursor(token string) (int64, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return 0, err
+	}
+	id, err := strconv.ParseInt(string(raw), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("id cursor salah")
+	}
+	return id, nil
 }

@@ -38,9 +38,11 @@ type Profile struct {
 	AvatarUrl string                 `protobuf:"bytes,5,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Hanya diisi untuk pemilik profil (lihat GetProfile).
-	Email         string `protobuf:"bytes,7,opt,name=email,proto3" json:"email,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Email string `protobuf:"bytes,7,opt,name=email,proto3" json:"email,omitempty"`
+	// Jumlah subscriber channel ini (langkah 10).
+	SubscriberCount int64 `protobuf:"varint,8,opt,name=subscriber_count,json=subscriberCount,proto3" json:"subscriber_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -120,6 +122,13 @@ func (x *Profile) GetEmail() string {
 		return x.Email
 	}
 	return ""
+}
+
+func (x *Profile) GetSubscriberCount() int64 {
+	if x != nil {
+		return x.SubscriberCount
+	}
+	return 0
 }
 
 type GetProfileRequest struct {
@@ -216,10 +225,12 @@ func (*GetProfileRequest_UserId) isGetProfileRequest_User() {}
 func (*GetProfileRequest_Username) isGetProfileRequest_User() {}
 
 type GetProfileResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Profile       *Profile               `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Profile *Profile               `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	// true jika viewer_id mengikuti user ini. Selalu false tanpa login.
+	ViewerSubscribed bool `protobuf:"varint,2,opt,name=viewer_subscribed,json=viewerSubscribed,proto3" json:"viewer_subscribed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetProfileResponse) Reset() {
@@ -257,6 +268,13 @@ func (x *GetProfileResponse) GetProfile() *Profile {
 		return x.Profile
 	}
 	return nil
+}
+
+func (x *GetProfileResponse) GetViewerSubscribed() bool {
+	if x != nil {
+		return x.ViewerSubscribed
+	}
+	return false
 }
 
 type BatchGetProfilesRequest struct {
@@ -639,11 +657,423 @@ func (x *RemoveAvatarResponse) GetProfile() *Profile {
 	return nil
 }
 
+type SubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	ChannelId     int64                  `protobuf:"varint,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscribeRequest) Reset() {
+	*x = SubscribeRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeRequest) ProtoMessage() {}
+
+func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SubscribeRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *SubscribeRequest) GetChannelId() int64 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+type SubscribeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Selalu true.
+	Subscribed      bool  `protobuf:"varint,1,opt,name=subscribed,proto3" json:"subscribed,omitempty"`
+	SubscriberCount int64 `protobuf:"varint,2,opt,name=subscriber_count,json=subscriberCount,proto3" json:"subscriber_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SubscribeResponse) Reset() {
+	*x = SubscribeResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeResponse) ProtoMessage() {}
+
+func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeResponse.ProtoReflect.Descriptor instead.
+func (*SubscribeResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SubscribeResponse) GetSubscribed() bool {
+	if x != nil {
+		return x.Subscribed
+	}
+	return false
+}
+
+func (x *SubscribeResponse) GetSubscriberCount() int64 {
+	if x != nil {
+		return x.SubscriberCount
+	}
+	return 0
+}
+
+type UnsubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	ChannelId     int64                  `protobuf:"varint,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnsubscribeRequest) Reset() {
+	*x = UnsubscribeRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnsubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnsubscribeRequest) ProtoMessage() {}
+
+func (x *UnsubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnsubscribeRequest.ProtoReflect.Descriptor instead.
+func (*UnsubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UnsubscribeRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *UnsubscribeRequest) GetChannelId() int64 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+type UnsubscribeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Selalu false.
+	Subscribed      bool  `protobuf:"varint,1,opt,name=subscribed,proto3" json:"subscribed,omitempty"`
+	SubscriberCount int64 `protobuf:"varint,2,opt,name=subscriber_count,json=subscriberCount,proto3" json:"subscriber_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *UnsubscribeResponse) Reset() {
+	*x = UnsubscribeResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnsubscribeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnsubscribeResponse) ProtoMessage() {}
+
+func (x *UnsubscribeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnsubscribeResponse.ProtoReflect.Descriptor instead.
+func (*UnsubscribeResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UnsubscribeResponse) GetSubscribed() bool {
+	if x != nil {
+		return x.Subscribed
+	}
+	return false
+}
+
+func (x *UnsubscribeResponse) GetSubscriberCount() int64 {
+	if x != nil {
+		return x.SubscriberCount
+	}
+	return 0
+}
+
+type ListSubscriptionsRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	// 0 = default (20). Maksimal 50.
+	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscriptionsRequest) Reset() {
+	*x = ListSubscriptionsRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscriptionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscriptionsRequest) ProtoMessage() {}
+
+func (x *ListSubscriptionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscriptionsRequest.ProtoReflect.Descriptor instead.
+func (*ListSubscriptionsRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListSubscriptionsRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *ListSubscriptionsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSubscriptionsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListSubscriptionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Channel yang diblokir dilewati. Tidak pernah berisi email.
+	Channels      []*Profile `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
+	NextPageToken string     `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscriptionsResponse) Reset() {
+	*x = ListSubscriptionsResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscriptionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscriptionsResponse) ProtoMessage() {}
+
+func (x *ListSubscriptionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscriptionsResponse.ProtoReflect.Descriptor instead.
+func (*ListSubscriptionsResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListSubscriptionsResponse) GetChannels() []*Profile {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+func (x *ListSubscriptionsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type ListSubscribedChannelIdsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscribedChannelIdsRequest) Reset() {
+	*x = ListSubscribedChannelIdsRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscribedChannelIdsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscribedChannelIdsRequest) ProtoMessage() {}
+
+func (x *ListSubscribedChannelIdsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscribedChannelIdsRequest.ProtoReflect.Descriptor instead.
+func (*ListSubscribedChannelIdsRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListSubscribedChannelIdsRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+type ListSubscribedChannelIdsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChannelIds    []int64                `protobuf:"varint,1,rep,packed,name=channel_ids,json=channelIds,proto3" json:"channel_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSubscribedChannelIdsResponse) Reset() {
+	*x = ListSubscribedChannelIdsResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSubscribedChannelIdsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSubscribedChannelIdsResponse) ProtoMessage() {}
+
+func (x *ListSubscribedChannelIdsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSubscribedChannelIdsResponse.ProtoReflect.Descriptor instead.
+func (*ListSubscribedChannelIdsResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListSubscribedChannelIdsResponse) GetChannelIds() []int64 {
+	if x != nil {
+		return x.ChannelIds
+	}
+	return nil
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
 	"\n" +
-	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xda\x01\n" +
+	"\x12user/v1/user.proto\x12\auser.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x85\x02\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
@@ -653,14 +1083,16 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"avatar_url\x18\x05 \x01(\tR\tavatarUrl\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x14\n" +
-	"\x05email\x18\a \x01(\tR\x05email\"q\n" +
+	"\x05email\x18\a \x01(\tR\x05email\x12)\n" +
+	"\x10subscriber_count\x18\b \x01(\x03R\x0fsubscriberCount\"q\n" +
 	"\x11GetProfileRequest\x12\x19\n" +
 	"\auser_id\x18\x01 \x01(\x03H\x00R\x06userId\x12\x1c\n" +
 	"\busername\x18\x02 \x01(\tH\x00R\busername\x12\x1b\n" +
 	"\tviewer_id\x18\x03 \x01(\x03R\bviewerIdB\x06\n" +
-	"\x04user\"@\n" +
+	"\x04user\"m\n" +
 	"\x12GetProfileResponse\x12*\n" +
-	"\aprofile\x18\x01 \x01(\v2\x10.user.v1.ProfileR\aprofile\"4\n" +
+	"\aprofile\x18\x01 \x01(\v2\x10.user.v1.ProfileR\aprofile\x12+\n" +
+	"\x11viewer_subscribed\x18\x02 \x01(\bR\x10viewerSubscribed\"4\n" +
 	"\x17BatchGetProfilesRequest\x12\x19\n" +
 	"\buser_ids\x18\x01 \x03(\x03R\auserIds\"H\n" +
 	"\x18BatchGetProfilesResponse\x12,\n" +
@@ -681,14 +1113,49 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x13RemoveAvatarRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\"B\n" +
 	"\x14RemoveAvatarResponse\x12*\n" +
-	"\aprofile\x18\x01 \x01(\v2\x10.user.v1.ProfileR\aprofile2\x97\x03\n" +
+	"\aprofile\x18\x01 \x01(\v2\x10.user.v1.ProfileR\aprofile\"T\n" +
+	"\x10SubscribeRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\x03R\tchannelId\"^\n" +
+	"\x11SubscribeResponse\x12\x1e\n" +
+	"\n" +
+	"subscribed\x18\x01 \x01(\bR\n" +
+	"subscribed\x12)\n" +
+	"\x10subscriber_count\x18\x02 \x01(\x03R\x0fsubscriberCount\"V\n" +
+	"\x12UnsubscribeRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\x03R\tchannelId\"`\n" +
+	"\x13UnsubscribeResponse\x12\x1e\n" +
+	"\n" +
+	"subscribed\x18\x01 \x01(\bR\n" +
+	"subscribed\x12)\n" +
+	"\x10subscriber_count\x18\x02 \x01(\x03R\x0fsubscriberCount\"y\n" +
+	"\x18ListSubscriptionsRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"q\n" +
+	"\x19ListSubscriptionsResponse\x12,\n" +
+	"\bchannels\x18\x01 \x03(\v2\x10.user.v1.ProfileR\bchannels\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"D\n" +
+	"\x1fListSubscribedChannelIdsRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\"C\n" +
+	" ListSubscribedChannelIdsResponse\x12\x1f\n" +
+	"\vchannel_ids\x18\x01 \x03(\x03R\n" +
+	"channelIds2\xf2\x05\n" +
 	"\vUserService\x12E\n" +
 	"\n" +
 	"GetProfile\x12\x1a.user.v1.GetProfileRequest\x1a\x1b.user.v1.GetProfileResponse\x12W\n" +
 	"\x10BatchGetProfiles\x12 .user.v1.BatchGetProfilesRequest\x1a!.user.v1.BatchGetProfilesResponse\x12N\n" +
 	"\rUpdateProfile\x12\x1d.user.v1.UpdateProfileRequest\x1a\x1e.user.v1.UpdateProfileResponse\x12K\n" +
 	"\fUploadAvatar\x12\x1c.user.v1.UploadAvatarRequest\x1a\x1d.user.v1.UploadAvatarResponse\x12K\n" +
-	"\fRemoveAvatar\x12\x1c.user.v1.RemoveAvatarRequest\x1a\x1d.user.v1.RemoveAvatarResponseB\x9a\x01\n" +
+	"\fRemoveAvatar\x12\x1c.user.v1.RemoveAvatarRequest\x1a\x1d.user.v1.RemoveAvatarResponse\x12B\n" +
+	"\tSubscribe\x12\x19.user.v1.SubscribeRequest\x1a\x1a.user.v1.SubscribeResponse\x12H\n" +
+	"\vUnsubscribe\x12\x1b.user.v1.UnsubscribeRequest\x1a\x1c.user.v1.UnsubscribeResponse\x12Z\n" +
+	"\x11ListSubscriptions\x12!.user.v1.ListSubscriptionsRequest\x1a\".user.v1.ListSubscriptionsResponse\x12o\n" +
+	"\x18ListSubscribedChannelIds\x12(.user.v1.ListSubscribedChannelIdsRequest\x1a).user.v1.ListSubscribedChannelIdsResponseB\x9a\x01\n" +
 	"\vcom.user.v1B\tUserProtoP\x01ZCgithub.com/farhantaufikrahman/ice-stream/backend/gen/user/v1;userv1\xa2\x02\x03UXX\xaa\x02\aUser.V1\xca\x02\aUser\\V1\xe2\x02\x13User\\V1\\GPBMetadata\xea\x02\bUser::V1b\x06proto3"
 
 var (
@@ -703,43 +1170,60 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_user_v1_user_proto_goTypes = []any{
-	(*Profile)(nil),                  // 0: user.v1.Profile
-	(*GetProfileRequest)(nil),        // 1: user.v1.GetProfileRequest
-	(*GetProfileResponse)(nil),       // 2: user.v1.GetProfileResponse
-	(*BatchGetProfilesRequest)(nil),  // 3: user.v1.BatchGetProfilesRequest
-	(*BatchGetProfilesResponse)(nil), // 4: user.v1.BatchGetProfilesResponse
-	(*UpdateProfileRequest)(nil),     // 5: user.v1.UpdateProfileRequest
-	(*UpdateProfileResponse)(nil),    // 6: user.v1.UpdateProfileResponse
-	(*UploadAvatarRequest)(nil),      // 7: user.v1.UploadAvatarRequest
-	(*UploadAvatarResponse)(nil),     // 8: user.v1.UploadAvatarResponse
-	(*RemoveAvatarRequest)(nil),      // 9: user.v1.RemoveAvatarRequest
-	(*RemoveAvatarResponse)(nil),     // 10: user.v1.RemoveAvatarResponse
-	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
+	(*Profile)(nil),                          // 0: user.v1.Profile
+	(*GetProfileRequest)(nil),                // 1: user.v1.GetProfileRequest
+	(*GetProfileResponse)(nil),               // 2: user.v1.GetProfileResponse
+	(*BatchGetProfilesRequest)(nil),          // 3: user.v1.BatchGetProfilesRequest
+	(*BatchGetProfilesResponse)(nil),         // 4: user.v1.BatchGetProfilesResponse
+	(*UpdateProfileRequest)(nil),             // 5: user.v1.UpdateProfileRequest
+	(*UpdateProfileResponse)(nil),            // 6: user.v1.UpdateProfileResponse
+	(*UploadAvatarRequest)(nil),              // 7: user.v1.UploadAvatarRequest
+	(*UploadAvatarResponse)(nil),             // 8: user.v1.UploadAvatarResponse
+	(*RemoveAvatarRequest)(nil),              // 9: user.v1.RemoveAvatarRequest
+	(*RemoveAvatarResponse)(nil),             // 10: user.v1.RemoveAvatarResponse
+	(*SubscribeRequest)(nil),                 // 11: user.v1.SubscribeRequest
+	(*SubscribeResponse)(nil),                // 12: user.v1.SubscribeResponse
+	(*UnsubscribeRequest)(nil),               // 13: user.v1.UnsubscribeRequest
+	(*UnsubscribeResponse)(nil),              // 14: user.v1.UnsubscribeResponse
+	(*ListSubscriptionsRequest)(nil),         // 15: user.v1.ListSubscriptionsRequest
+	(*ListSubscriptionsResponse)(nil),        // 16: user.v1.ListSubscriptionsResponse
+	(*ListSubscribedChannelIdsRequest)(nil),  // 17: user.v1.ListSubscribedChannelIdsRequest
+	(*ListSubscribedChannelIdsResponse)(nil), // 18: user.v1.ListSubscribedChannelIdsResponse
+	(*timestamppb.Timestamp)(nil),            // 19: google.protobuf.Timestamp
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	11, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	19, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 2: user.v1.BatchGetProfilesResponse.profiles:type_name -> user.v1.Profile
 	0,  // 3: user.v1.UpdateProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 4: user.v1.UploadAvatarResponse.profile:type_name -> user.v1.Profile
 	0,  // 5: user.v1.RemoveAvatarResponse.profile:type_name -> user.v1.Profile
-	1,  // 6: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	3,  // 7: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
-	5,  // 8: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
-	7,  // 9: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
-	9,  // 10: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
-	2,  // 11: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	4,  // 12: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
-	6,  // 13: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
-	8,  // 14: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
-	10, // 15: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0,  // 6: user.v1.ListSubscriptionsResponse.channels:type_name -> user.v1.Profile
+	1,  // 7: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	3,  // 8: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
+	5,  // 9: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
+	7,  // 10: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
+	9,  // 11: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
+	11, // 12: user.v1.UserService.Subscribe:input_type -> user.v1.SubscribeRequest
+	13, // 13: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
+	15, // 14: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
+	17, // 15: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
+	2,  // 16: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	4,  // 17: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
+	6,  // 18: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
+	8,  // 19: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
+	10, // 20: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
+	12, // 21: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
+	14, // 22: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
+	16, // 23: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
+	18, // 24: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
+	16, // [16:25] is the sub-list for method output_type
+	7,  // [7:16] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -758,7 +1242,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

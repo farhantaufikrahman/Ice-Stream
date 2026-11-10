@@ -24,6 +24,9 @@ type profileRow struct {
 	CreatedAt   time.Time      `gorm:"column:created_at"`
 	UpdatedAt   time.Time      `gorm:"column:updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at"`
+	// Migrasi V4. "<-:update" = hanya diubah lewat UPDATE di Subscribe dan
+	// Unsubscribe.
+	SubscriberCount int64 `gorm:"column:subscriber_count;<-:update"`
 }
 
 func (profileRow) TableName() string { return "users" }
@@ -37,6 +40,7 @@ func (r profileRow) toProfile() Profile {
 		Status:      r.Status,
 		CreatedAt:   r.CreatedAt.UTC(),
 	}
+	p.SubscriberCount = r.SubscriberCount
 	if r.Bio != nil {
 		p.Bio = *r.Bio
 	}
@@ -151,4 +155,163 @@ func nilIfEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// subscriptionRow memetakan tabel SUBSCRIPTIONS (migrasi V4).
+type subscriptionRow struct {
+	ID           int64     `gorm:"column:id;primaryKey;autoIncrement"`
+	SubscriberID int64     `gorm:"column:subscriber_id"`
+	ChannelID    int64     `gorm:"column:channel_id"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
+}
+
+func (subscriptionRow) TableName() string { return "subscriptions" }
+
+// Subscribe mencatat subscription dalam satu transaksi:
+//  1. kunci baris channel dengan SELECT ... FOR UPDATE (channel yang
+//     diblokir dianggap tidak ada);
+//  2. cek apakah sudah subscribe, lalu cek batas maxSubs;
+//  3. simpan subscription dan tambah subscriber_count.
+//
+// Unsubscribe mengunci baris yang sama lebih dulu, jadi subscribe dan
+// unsubscribe untuk channel yang sama berjalan bergantian dan tidak bisa
+// deadlock. Batas maxSubs sengaja tidak mengunci baris requester: dua
+// request bersamaan dari user yang sama paling buruk membuatnya mengikuti
+// 1001 channel, dan itu tidak berbahaya.
+func (r *OracleRepository) Subscribe(ctx context.Context, subscriberID, channelID int64, maxSubs int) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ch, err := lockChannel(tx, channelID, true)
+		if err != nil {
+			return err
+		}
+		count = ch.SubscriberCount
+		exists, err := isSubscribed(tx, subscriberID, channelID)
+		if err != nil || exists {
+			return err
+		}
+		var total int64
+		if err := tx.Model(&subscriptionRow{}).Where("subscriber_id = ?", subscriberID).Count(&total).Error; err != nil {
+			return fmt.Errorf("hitung subscription: %w", err)
+		}
+		if total >= int64(maxSubs) {
+			return ErrTooManySubscriptions
+		}
+		if err := tx.Create(&subscriptionRow{SubscriberID: subscriberID, ChannelID: channelID}).Error; err != nil {
+			return fmt.Errorf("insert subscription: %w", err)
+		}
+		if err := addSubscribers(tx, channelID, 1); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// Unsubscribe menghapus subscription (jika ada), dengan urutan kunci yang
+// sama dengan Subscribe. Channel yang sudah diblokir tetap bisa
+// di-unsubscribe.
+func (r *OracleRepository) Unsubscribe(ctx context.Context, subscriberID, channelID int64) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ch, err := lockChannel(tx, channelID, false)
+		if err != nil {
+			return err
+		}
+		count = ch.SubscriberCount
+		res := tx.Where("subscriber_id = ? AND channel_id = ?", subscriberID, channelID).Delete(&subscriptionRow{})
+		if res.Error != nil {
+			return fmt.Errorf("delete subscription: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return nil // memang belum subscribe
+		}
+		if err := addSubscribers(tx, channelID, -1); err != nil {
+			return err
+		}
+		count--
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// lockChannel mengunci baris user channelID sampai transaksi selesai.
+func lockChannel(tx *gorm.DB, channelID int64, activeOnly bool) (profileRow, error) {
+	q := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "status", "subscriber_count").Where("id = ?", channelID)
+	if activeOnly {
+		q = q.Where("status <> ?", statusBanned)
+	}
+	var row profileRow
+	err := q.Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return profileRow{}, ErrNotFound
+	}
+	if err != nil {
+		return profileRow{}, fmt.Errorf("select channel for update: %w", err)
+	}
+	return row, nil
+}
+
+func addSubscribers(tx *gorm.DB, channelID, delta int64) error {
+	err := tx.Model(&profileRow{}).Where("id = ?", channelID).
+		UpdateColumn("subscriber_count", gorm.Expr("subscriber_count + ?", delta)).Error
+	if err != nil {
+		return fmt.Errorf("update subscriber_count: %w", err)
+	}
+	return nil
+}
+
+func isSubscribed(db *gorm.DB, subscriberID, channelID int64) (bool, error) {
+	var n int64
+	err := db.Model(&subscriptionRow{}).
+		Where("subscriber_id = ? AND channel_id = ?", subscriberID, channelID).Count(&n).Error
+	if err != nil {
+		return false, fmt.Errorf("select subscription: %w", err)
+	}
+	return n > 0, nil
+}
+
+// IsSubscribed mengembalikan true jika subscriberID mengikuti channelID.
+func (r *OracleRepository) IsSubscribed(ctx context.Context, subscriberID, channelID int64) (bool, error) {
+	return isSubscribed(r.db.WithContext(ctx), subscriberID, channelID)
+}
+
+// ListSubscriptions mengambil subscription milik subscriberID, id terbesar
+// (terbaru) lebih dulu, hanya yang id-nya lebih kecil dari beforeID
+// (0 = dari yang terbaru).
+func (r *OracleRepository) ListSubscriptions(ctx context.Context, subscriberID, beforeID int64, limit int) ([]Subscription, error) {
+	q := r.db.WithContext(ctx).Where("subscriber_id = ?", subscriberID)
+	if beforeID > 0 {
+		q = q.Where("id < ?", beforeID)
+	}
+	var rows []subscriptionRow
+	if err := q.Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select subscriptions: %w", err)
+	}
+	out := make([]Subscription, len(rows))
+	for i, row := range rows {
+		out[i] = Subscription{ID: row.ID, ChannelID: row.ChannelID}
+	}
+	return out, nil
+}
+
+// ListSubscribedChannelIDs mengambil maksimal limit id channel yang diikuti
+// subscriberID. Hanya kolom channel_id yang dibaca.
+func (r *OracleRepository) ListSubscribedChannelIDs(ctx context.Context, subscriberID int64, limit int) ([]int64, error) {
+	var ids []int64
+	err := r.db.WithContext(ctx).Model(&subscriptionRow{}).
+		Where("subscriber_id = ?", subscriberID).
+		Order("id DESC").Limit(limit).
+		Pluck("channel_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("select channel ids: %w", err)
+	}
+	return ids, nil
 }

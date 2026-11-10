@@ -26,6 +26,13 @@ type fakeUserClient struct {
 	lastBatch  *userv1.BatchGetProfilesRequest
 	lastUpdate *userv1.UpdateProfileRequest
 	lastUpload *userv1.UploadAvatarRequest
+
+	subscribed     bool
+	channelIDs     []int64
+	lastSubscribe  *userv1.SubscribeRequest
+	lastUnsub      *userv1.UnsubscribeRequest
+	lastListSubs   *userv1.ListSubscriptionsRequest
+	lastChannelIDs *userv1.ListSubscribedChannelIdsRequest
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)
@@ -34,7 +41,7 @@ func testProfile(withEmail bool) *userv1.Profile {
 	p := &userv1.Profile{
 		Id: 7, Username: "budi", DisplayName: "Budi", Bio: "Suka kucing",
 		AvatarUrl: "http://media.ice-stream.localhost:4000/images/avatars/7/ab.jpg",
-		CreatedAt: timestamppb.New(testCreatedAt),
+		CreatedAt: timestamppb.New(testCreatedAt), SubscriberCount: 12,
 	}
 	if withEmail {
 		p.Email = "budi@example.com"
@@ -47,7 +54,7 @@ func (f *fakeUserClient) GetProfile(_ context.Context, in *userv1.GetProfileRequ
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &userv1.GetProfileResponse{Profile: testProfile(in.GetViewerId() == 7)}, nil
+	return &userv1.GetProfileResponse{Profile: testProfile(in.GetViewerId() == 7), ViewerSubscribed: f.subscribed}, nil
 }
 
 func (f *fakeUserClient) BatchGetProfiles(_ context.Context, in *userv1.BatchGetProfilesRequest, _ ...grpc.CallOption) (*userv1.BatchGetProfilesResponse, error) {
@@ -91,7 +98,7 @@ func TestGetUserByUsername(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.JSONEq(t, `{"user":{"id":"7","username":"budi","display_name":"Budi","bio":"Suka kucing",
 		"avatar_url":"http://media.ice-stream.localhost:4000/images/avatars/7/ab.jpg",
-		"created_at":"2026-10-29T04:00:00Z"}}`, rec.Body.String(), "tanpa email")
+		"created_at":"2026-10-29T04:00:00Z","subscriber_count":12}}`, rec.Body.String(), "tanpa email, tanpa viewer_subscribed")
 	assert.Equal(t, "budi", users.lastGet.GetUsername())
 
 	users.err = status.Error(codes.NotFound, "user tidak ditemukan")

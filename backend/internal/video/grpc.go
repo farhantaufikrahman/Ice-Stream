@@ -56,7 +56,7 @@ func (s *GRPCServer) GetVideo(ctx context.Context, req *videov1.GetVideoRequest)
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	resp := &videov1.GetVideoResponse{Video: s.toProtoVideo(d.Video)}
+	resp := &videov1.GetVideoResponse{Video: s.toProtoVideo(d.Video), ViewerLiked: d.ViewerLiked}
 	if d.Original.URL != "" {
 		resp.OriginalUrl = d.Original.URL
 		resp.OriginalUrlExpiresAt = timestamppb.New(d.Original.ExpiresAt)
@@ -77,7 +77,12 @@ func (s *GRPCServer) ListMyVideos(ctx context.Context, req *videov1.ListMyVideos
 }
 
 func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequest) (*videov1.ListVideosResponse, error) {
-	videos, next, err := s.svc.ListVideos(ctx, req.GetOwnerId(), int(req.GetPageSize()), req.GetPageToken())
+	// owner_id (halaman channel) dan owner_ids (feed subscription) digabung.
+	owners := req.GetOwnerIds()
+	if req.GetOwnerId() > 0 {
+		owners = append([]int64{req.GetOwnerId()}, owners...)
+	}
+	videos, next, err := s.svc.ListVideos(ctx, owners, int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -94,6 +99,22 @@ func (s *GRPCServer) RecordView(ctx context.Context, req *videov1.RecordViewRequ
 		return nil, s.toStatus(ctx, err)
 	}
 	return &videov1.RecordViewResponse{Counted: r.Counted, ViewCount: r.ViewCount}, nil
+}
+
+func (s *GRPCServer) LikeVideo(ctx context.Context, req *videov1.LikeVideoRequest) (*videov1.LikeVideoResponse, error) {
+	r, err := s.svc.LikeVideo(ctx, req.GetRequesterId(), req.GetVideoId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.LikeVideoResponse{Liked: r.Liked, LikeCount: r.LikeCount}, nil
+}
+
+func (s *GRPCServer) UnlikeVideo(ctx context.Context, req *videov1.UnlikeVideoRequest) (*videov1.UnlikeVideoResponse, error) {
+	r, err := s.svc.UnlikeVideo(ctx, req.GetRequesterId(), req.GetVideoId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.UnlikeVideoResponse{Liked: r.Liked, LikeCount: r.LikeCount}, nil
 }
 
 // toStatus memetakan error Service ke kode gRPC.
@@ -141,6 +162,7 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 		pv.UploadedAt = timestamppb.New(*v.UploadedAt)
 	}
 	pv.CommentCount = v.CommentCount
+	pv.LikeCount = v.LikeCount
 	pv.DurationMs = v.DurationMs
 	pv.Renditions = v.Renditions
 	pv.FailureReason = v.FailureReason

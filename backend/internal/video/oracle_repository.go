@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // videoRow memetakan tabel VIDEOS (schema VIDEO_SVC).
@@ -40,6 +41,9 @@ type videoRow struct {
 	// CommentService (package comment), di transaksi yang sama dengan
 	// komentarnya.
 	CommentCount int64 `gorm:"column:comment_count;<-:false"`
+	// Migrasi V6. "<-:update" = tidak ikut INSERT, hanya diubah lewat
+	// UPDATE di Like dan Unlike.
+	LikeCount int64 `gorm:"column:like_count;<-:update"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -57,6 +61,7 @@ func (r videoRow) toVideo() Video {
 		ViewCount:   r.ViewCount,
 	}
 	v.CommentCount = r.CommentCount
+	v.LikeCount = r.LikeCount
 	if r.Description != nil {
 		v.Description = *r.Description
 	}
@@ -167,18 +172,25 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 }
 
 // ListPublic mengambil maksimal limit video READY untuk feed publik,
-// diurutkan processed_at lalu id dari yang terbaru. Jika ownerID > 0, hanya
-// video milik user itu (halaman channel). Jika after tidak nil, hanya video
-// setelah cursor itu (halaman berikutnya).
+// diurutkan processed_at lalu id dari yang terbaru. Jika ownerIDs diisi,
+// hanya video milik user-user itu (halaman channel atau feed
+// subscription). Jika after tidak nil, hanya video setelah cursor itu
+// (halaman berikutnya).
 //
 // Oracle tidak mendukung perbandingan (a, b) < (x, y), jadi syaratnya
 // ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
 // lebih kecil. id ikut dipakai supaya urutan tetap pasti walau dua video
 // selesai di detik yang sama.
-func (r *OracleRepository) ListPublic(ctx context.Context, ownerID int64, after *FeedCursor, limit int) ([]Video, error) {
+func (r *OracleRepository) ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error) {
 	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
-	if ownerID > 0 {
-		q = q.Where("owner_id = ?", ownerID)
+	switch len(ownerIDs) {
+	case 0:
+	case 1:
+		q = q.Where("owner_id = ?", ownerIDs[0])
+	default:
+		// Oracle membatasi IN (...) maksimal 1000 nilai; Service sudah
+		// memastikan ownerIDs tidak lebih dari itu.
+		q = q.Where("owner_id IN ?", ownerIDs)
 	}
 	if after != nil {
 		q = q.Where("(processed_at < ? OR (processed_at = ? AND id < ?))", after.ProcessedAt, after.ProcessedAt, after.ID)
@@ -256,4 +268,92 @@ func (r *OracleRepository) transition(ctx context.Context, id int64, from []stri
 		return false, fmt.Errorf("update video %d ke %v: %w", id, updates["status"], res.Error)
 	}
 	return res.RowsAffected > 0, nil
+}
+
+// likeRow memetakan tabel VIDEO_LIKES (migrasi V6).
+type likeRow struct {
+	VideoID   int64     `gorm:"column:video_id;primaryKey"`
+	UserID    int64     `gorm:"column:user_id;primaryKey"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (likeRow) TableName() string { return "video_likes" }
+
+// Like mencatat like dalam satu transaksi:
+//  1. kunci baris video READY dengan SELECT ... FOR UPDATE;
+//  2. cek apakah user ini sudah like;
+//  3. jika belum: simpan like dan tambah like_count.
+//
+// Karena baris video dikunci lebih dulu, semua like dan unlike untuk video
+// yang sama berjalan bergantian. Jadi cek di langkah 2 tidak bisa
+// "kecolongan" oleh request lain, dan Unlike memakai urutan kunci yang
+// sama sehingga tidak bisa deadlock.
+func (r *OracleRepository) Like(ctx context.Context, videoID, userID int64) (int64, error) {
+	return r.changeLike(ctx, videoID, userID, true)
+}
+
+// Unlike menghapus like (jika ada) dalam satu transaksi, dengan urutan
+// kunci yang sama dengan Like.
+func (r *OracleRepository) Unlike(ctx context.Context, videoID, userID int64) (int64, error) {
+	return r.changeLike(ctx, videoID, userID, false)
+}
+
+func (r *OracleRepository) changeLike(ctx context.Context, videoID, userID int64, like bool) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var v videoRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id", "like_count").
+			Where("id = ? AND status = ?", videoID, StatusReady).
+			Take(&v).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("select video for update: %w", err)
+		}
+		count = v.LikeCount
+
+		var exists int64
+		err = tx.Model(&likeRow{}).Where("video_id = ? AND user_id = ?", videoID, userID).Count(&exists).Error
+		if err != nil {
+			return fmt.Errorf("select like: %w", err)
+		}
+		if (exists > 0) == like {
+			return nil // sudah sesuai keinginan, tidak ada yang diubah
+		}
+
+		delta := int64(1)
+		if like {
+			err = tx.Create(&likeRow{VideoID: videoID, UserID: userID}).Error
+		} else {
+			delta = -1
+			err = tx.Where("video_id = ? AND user_id = ?", videoID, userID).Delete(&likeRow{}).Error
+		}
+		if err != nil {
+			return fmt.Errorf("simpan like: %w", err)
+		}
+		err = tx.Model(&videoRow{}).Where("id = ?", videoID).
+			UpdateColumn("like_count", gorm.Expr("like_count + ?", delta)).Error
+		if err != nil {
+			return fmt.Errorf("update like_count: %w", err)
+		}
+		count += delta
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// IsLiked mengembalikan true jika userID sudah like videoID.
+func (r *OracleRepository) IsLiked(ctx context.Context, videoID, userID int64) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&likeRow{}).
+		Where("video_id = ? AND user_id = ?", videoID, userID).Count(&n).Error
+	if err != nil {
+		return false, fmt.Errorf("select like: %w", err)
+	}
+	return n > 0, nil
 }

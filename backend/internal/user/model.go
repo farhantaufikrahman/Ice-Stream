@@ -15,6 +15,9 @@ var (
 	// ErrNotFound juga dipakai untuk akun yang diblokir, supaya tidak
 	// terlihat bedanya dari akun yang memang tidak ada.
 	ErrNotFound = errors.New("user tidak ditemukan")
+	// ErrTooManySubscriptions: requester sudah mengikuti maxSubscriptions
+	// channel.
+	ErrTooManySubscriptions = errors.New("kamu sudah mengikuti 1000 channel, berhenti mengikuti channel lain dulu")
 )
 
 // statusBanned sama dengan nilai di CHECK constraint users_status_ck.
@@ -32,6 +35,15 @@ type Profile struct {
 	Email     string
 	Status    string
 	CreatedAt time.Time
+	// SubscriberCount adalah jumlah subscriber channel ini.
+	SubscriberCount int64
+}
+
+// Subscription adalah satu baris tabel subscriptions: requester mengikuti
+// ChannelID. ID dipakai untuk urutan dan pagination.
+type Subscription struct {
+	ID        int64
+	ChannelID int64
 }
 
 // ProfileUpdate berisi field yang ingin diubah. nil = jangan diubah.

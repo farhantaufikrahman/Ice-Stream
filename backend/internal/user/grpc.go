@@ -29,7 +29,11 @@ func (s *GRPCServer) GetProfile(ctx context.Context, req *userv1.GetProfileReque
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	return &userv1.GetProfileResponse{Profile: s.toProto(p)}, nil
+	subscribed, err := s.svc.ViewerSubscribed(ctx, req.GetViewerId(), p.ID)
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.GetProfileResponse{Profile: s.toProto(p), ViewerSubscribed: subscribed}, nil
 }
 
 func (s *GRPCServer) BatchGetProfiles(ctx context.Context, req *userv1.BatchGetProfilesRequest) (*userv1.BatchGetProfilesResponse, error) {
@@ -70,6 +74,42 @@ func (s *GRPCServer) RemoveAvatar(ctx context.Context, req *userv1.RemoveAvatarR
 	return &userv1.RemoveAvatarResponse{Profile: s.toProto(p)}, nil
 }
 
+func (s *GRPCServer) Subscribe(ctx context.Context, req *userv1.SubscribeRequest) (*userv1.SubscribeResponse, error) {
+	r, err := s.svc.Subscribe(ctx, req.GetRequesterId(), req.GetChannelId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.SubscribeResponse{Subscribed: r.Subscribed, SubscriberCount: r.SubscriberCount}, nil
+}
+
+func (s *GRPCServer) Unsubscribe(ctx context.Context, req *userv1.UnsubscribeRequest) (*userv1.UnsubscribeResponse, error) {
+	r, err := s.svc.Unsubscribe(ctx, req.GetRequesterId(), req.GetChannelId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.UnsubscribeResponse{Subscribed: r.Subscribed, SubscriberCount: r.SubscriberCount}, nil
+}
+
+func (s *GRPCServer) ListSubscriptions(ctx context.Context, req *userv1.ListSubscriptionsRequest) (*userv1.ListSubscriptionsResponse, error) {
+	channels, next, err := s.svc.ListSubscriptions(ctx, req.GetRequesterId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &userv1.ListSubscriptionsResponse{NextPageToken: next}
+	for _, p := range channels {
+		resp.Channels = append(resp.Channels, s.toProto(p))
+	}
+	return resp, nil
+}
+
+func (s *GRPCServer) ListSubscribedChannelIds(ctx context.Context, req *userv1.ListSubscribedChannelIdsRequest) (*userv1.ListSubscribedChannelIdsResponse, error) {
+	ids, err := s.svc.ListSubscribedChannelIDs(ctx, req.GetRequesterId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.ListSubscribedChannelIdsResponse{ChannelIds: ids}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError
@@ -78,6 +118,8 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.InvalidArgument, verr.Error())
 	case errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrTooManySubscriptions):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "request dibatalkan")
 	case errors.Is(err, context.DeadlineExceeded):
@@ -97,5 +139,7 @@ func (s *GRPCServer) toProto(p Profile) *userv1.Profile {
 		AvatarUrl:   s.svc.AvatarURL(p.AvatarKey),
 		CreatedAt:   timestamppb.New(p.CreatedAt),
 		Email:       p.Email,
+		// Jumlah subscriber selalu publik, seperti di YouTube dan Bilibili.
+		SubscriberCount: p.SubscriberCount,
 	}
 }

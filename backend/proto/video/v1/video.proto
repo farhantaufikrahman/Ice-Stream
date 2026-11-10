@@ -32,6 +32,12 @@ service VideoService {
   // dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
   // ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
   rpc RecordView(RecordViewRequest) returns (RecordViewResponse);
+  // LikeVideo menandai video READY disukai requester. Aman dipanggil ulang:
+  // like kedua tidak menambah like_count. Error NOT_FOUND jika video tidak
+  // ada atau belum READY.
+  rpc LikeVideo(LikeVideoRequest) returns (LikeVideoResponse);
+  // UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
+  rpc UnlikeVideo(UnlikeVideoRequest) returns (UnlikeVideoResponse);
 }
 
 enum VideoStatus {
@@ -77,6 +83,8 @@ message Video {
   int64 view_count = 16;
   // Jumlah komentar dan balasan yang belum dihapus (langkah 9).
   int64 comment_count = 17;
+  // Jumlah like (langkah 10).
+  int64 like_count = 18;
 }
 
 message CreateUploadRequest {
@@ -121,6 +129,8 @@ message GetVideoResponse {
   // video, pakai video.hls_url.
   string original_url = 2;
   google.protobuf.Timestamp original_url_expires_at = 3;
+  // true jika viewer_id sudah like video ini. Selalu false tanpa login.
+  bool viewer_liked = 4;
 }
 
 message ListMyVideosRequest {
@@ -145,6 +155,9 @@ message ListVideosRequest {
   string page_token = 2;
   // Jika diisi, hanya video milik user ini (halaman channel). 0 = semua.
   int64 owner_id = 3;
+  // Jika diisi, hanya video milik salah satu user ini (feed subscription).
+  // Maksimal 1000 id. Boleh digabung dengan owner_id.
+  repeated int64 owner_ids = 4;
 }
 
 message ListVideosResponse {
@@ -165,4 +178,26 @@ message RecordViewResponse {
   bool counted = 1;
   // Jumlah views setelah request ini.
   int64 view_count = 2;
+}
+
+message LikeVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message LikeVideoResponse {
+  // Selalu true.
+  bool liked = 1;
+  int64 like_count = 2;
+}
+
+message UnlikeVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message UnlikeVideoResponse {
+  // Selalu false.
+  bool liked = 1;
+  int64 like_count = 2;
 }

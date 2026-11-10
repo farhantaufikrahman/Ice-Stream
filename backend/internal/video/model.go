@@ -65,6 +65,8 @@ type Video struct {
 	ViewCount int64
 	// CommentCount adalah jumlah komentar dan balasan yang belum dihapus.
 	CommentCount int64
+	// LikeCount adalah jumlah like (lihat Service.LikeVideo).
+	LikeCount int64
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
