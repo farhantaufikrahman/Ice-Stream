@@ -23,6 +23,14 @@ service VideoService {
   rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
   // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
   rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
+  // ListVideos mengambil feed publik: hanya video READY, yang paling baru
+  // selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+  // Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
+  rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
+  // RecordView menambah views video READY, maksimal sekali per penonton
+  // dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
+  // ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
+  rpc RecordView(RecordViewRequest) returns (RecordViewResponse);
 }
 
 enum VideoStatus {
@@ -64,6 +72,8 @@ message Video {
   // URL publik gambar thumbnail (JPEG, tinggi 360 piksel). Hanya terisi jika
   // status READY.
   string thumbnail_url = 15;
+  // Jumlah views (lihat RecordView).
+  int64 view_count = 16;
 }
 
 message CreateUploadRequest {
@@ -122,4 +132,32 @@ message ListMyVideosResponse {
   repeated Video videos = 1;
   // Kosong jika sudah halaman terakhir.
   string next_page_token = 2;
+}
+
+message ListVideosRequest {
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 1;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  // Isinya tidak perlu dipahami client.
+  string page_token = 2;
+}
+
+message ListVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message RecordViewRequest {
+  int64 video_id = 1;
+  // Penanda penonton dari gateway, misalnya "u-7" (user login) atau
+  // "a-<hash>" (tanpa login). 1 sampai 64 karakter: huruf, angka, - dan _.
+  string viewer_key = 2;
+}
+
+message RecordViewResponse {
+  // false jika penonton ini sudah dihitung dalam window yang sama.
+  bool counted = 1;
+  // Jumlah views setelah request ini.
+  int64 view_count = 2;
 }

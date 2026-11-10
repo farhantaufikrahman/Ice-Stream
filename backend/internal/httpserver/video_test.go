@@ -29,6 +29,8 @@ type fakeVideoClient struct {
 	lastComplete *videov1.CompleteUploadRequest
 	lastGet      *videov1.GetVideoRequest
 	lastList     *videov1.ListMyVideosRequest
+	lastFeed     *videov1.ListVideosRequest
+	lastView     *videov1.RecordViewRequest
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
@@ -48,6 +50,7 @@ func testVideo(status videov1.VideoStatus) *videov1.Video {
 		v.HlsUrl = "http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8"
 		v.ThumbnailUrl = "http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg"
 		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
+		v.ViewCount = 5
 	case videov1.VideoStatus_VIDEO_STATUS_FAILED:
 		v.FailureReason = "file tidak bisa dibaca sebagai video"
 		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
@@ -104,6 +107,25 @@ func (f *fakeVideoClient) ListMyVideos(_ context.Context, in *videov1.ListMyVide
 	}, nil
 }
 
+func (f *fakeVideoClient) ListVideos(_ context.Context, in *videov1.ListVideosRequest, _ ...grpc.CallOption) (*videov1.ListVideosResponse, error) {
+	f.lastFeed = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.ListVideosResponse{
+		Videos:        []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)},
+		NextPageToken: "MTc2MjM4ODk2MDAwMDAwMC40Mg",
+	}, nil
+}
+
+func (f *fakeVideoClient) RecordView(_ context.Context, in *videov1.RecordViewRequest, _ ...grpc.CallOption) (*videov1.RecordViewResponse, error) {
+	f.lastView = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.RecordViewResponse{Counted: true, ViewCount: 6}, nil
+}
+
 // newTokenSigner membuat Verifier dan fungsi untuk menandatangani access
 // token user tertentu, supaya test bisa memanggil endpoint yang butuh login.
 func newTokenSigner(t *testing.T) (*accesstoken.Verifier, func(userID int64) func(*http.Request)) {
@@ -134,7 +156,7 @@ func TestCreateVideo(t *testing.T) {
 	require.Equal(t, http.StatusCreated, rec.Code)
 	assert.JSONEq(t, `{
 		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
-		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z"},
+		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0},
 		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
 		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
 	}`, rec.Body.String())
@@ -183,7 +205,7 @@ func TestGetVideo(t *testing.T) {
 		          "uploaded_at":"2026-10-29T04:01:00Z","duration_ms":20023,"renditions":["360p","720p"],
 		          "hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8",
 		          "thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg",
-		          "processed_at":"2026-10-29T04:02:00Z"}
+		          "processed_at":"2026-10-29T04:02:00Z","view_count":5}
 	}`, rec.Body.String())
 
 	// Dengan login, viewer_id diisi dari token. Pemilik juga mendapat URL
@@ -223,4 +245,63 @@ func TestListMyVideos(t *testing.T) {
 
 	rec = do(r, http.MethodGet, "/api/v1/me/videos", "")
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestListVideosFeed(t *testing.T) {
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake})
+
+	// Tanpa login.
+	rec := do(r, http.MethodGet, "/api/v1/videos?page_size=10&page_token=abc", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8"`)
+	assert.Contains(t, rec.Body.String(), `"view_count":5`)
+	assert.Contains(t, rec.Body.String(), `"next_page_token":"MTc2MjM4ODk2MDAwMDAwMC40Mg"`)
+	assert.Equal(t, int32(10), fake.lastFeed.GetPageSize())
+	assert.Equal(t, "abc", fake.lastFeed.GetPageToken())
+
+	rec = do(r, http.MethodGet, "/api/v1/videos?page_size=banyak", "")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	fake.err = status.Error(codes.InvalidArgument, "page_token: tidak valid")
+	rec = do(r, http.MethodGet, "/api/v1/videos?page_token=rusak", "")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRecordView(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	// User login: penanda dari id user.
+	rec := do(r, http.MethodPost, "/api/v1/videos/42/views", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"counted":true,"view_count":6}`, rec.Body.String())
+	assert.Equal(t, int64(42), fake.lastView.GetVideoId())
+	assert.Equal(t, "u-7", fake.lastView.GetViewerKey())
+
+	// Tanpa login: penanda dari hash IP + User-Agent. Browser yang sama
+	// mendapat penanda yang sama, browser lain mendapat penanda lain.
+	firefox := func(req *http.Request) { req.Header.Set("User-Agent", "Firefox") }
+	chrome := func(req *http.Request) { req.Header.Set("User-Agent", "Chrome") }
+	do(r, http.MethodPost, "/api/v1/videos/42/views", "", firefox)
+	key1 := fake.lastView.GetViewerKey()
+	do(r, http.MethodPost, "/api/v1/videos/42/views", "", firefox)
+	key2 := fake.lastView.GetViewerKey()
+	do(r, http.MethodPost, "/api/v1/videos/42/views", "", chrome)
+	key3 := fake.lastView.GetViewerKey()
+	assert.Regexp(t, `^a-[0-9a-f]{32}$`, key1)
+	assert.Equal(t, key1, key2)
+	assert.NotEqual(t, key1, key3)
+
+	rec = do(r, http.MethodPost, "/api/v1/videos/abc/views", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	fake.err = status.Error(codes.NotFound, "video tidak ditemukan")
+	rec = do(r, http.MethodPost, "/api/v1/videos/42/views", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	fake.err = status.Error(codes.Unavailable, "pencatatan views sedang tidak tersedia")
+	rec = do(r, http.MethodPost, "/api/v1/videos/42/views", "")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }

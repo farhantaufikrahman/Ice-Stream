@@ -3,6 +3,7 @@ package video
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -25,6 +26,12 @@ type Repository interface {
 	// ListByOwner mengambil video milik ownerID, id terbesar lebih dulu,
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
+	// ListPublic mengambil video READY, processed_at lalu id terbesar lebih
+	// dulu, hanya yang posisinya setelah after (nil = dari awal).
+	ListPublic(ctx context.Context, after *FeedCursor, limit int) ([]Video, error)
+	// IncrementViews menambah view_count video READY sebanyak 1 dan
+	// mengembalikan nilai barunya. ErrNotFound jika video tidak READY.
+	IncrementViews(ctx context.Context, id int64) (int64, error)
 	// MarkProcessing mengubah UPLOADED menjadi PROCESSING. Mengembalikan
 	// false (tanpa error) jika statusnya sudah bukan UPLOADED.
 	MarkProcessing(ctx context.Context, id int64, now time.Time) (bool, error)
@@ -44,6 +51,17 @@ type Publisher interface {
 	PublishUploaded(ctx context.Context, v Video) error
 }
 
+// ViewDeduper mencatat penonton yang baru saja menonton sebuah video,
+// supaya refresh berulang tidak menambah views. Implementasi NATS ada di
+// views.go; test memakai versi palsu.
+type ViewDeduper interface {
+	// Claim mengembalikan true jika ini view pertama viewerKey untuk
+	// videoID dalam window, lalu menandainya. false jika sudah ditandai.
+	Claim(ctx context.Context, videoID int64, viewerKey string) (bool, error)
+	// Release menghapus tanda dari Claim.
+	Release(ctx context.Context, videoID int64, viewerKey string) error
+}
+
 // allowedContentTypes adalah tipe file yang boleh diunggah. Nanti semua
 // format ini diubah menjadi HLS oleh proses transcoding.
 var allowedContentTypes = map[string]bool{
@@ -58,6 +76,11 @@ const (
 	maxDescriptionRunes = 1000
 	defaultPageSize     = 20
 	maxPageSize         = 50
+	maxViewerKeyLen     = 64
+	// viewClaimTimeout membatasi waktu menunggu NATS saat mencatat view.
+	// Views tidak penting sampai harus membuat penonton menunggu: kalau NATS
+	// lambat atau mati, lebih baik cepat menjawab UNAVAILABLE.
+	viewClaimTimeout = time.Second
 )
 
 // Options mengatur batas-batas Service.
@@ -76,16 +99,18 @@ type Service struct {
 	repo   Repository
 	store  ObjectStore
 	events Publisher
+	views  ViewDeduper
 	opts   Options
 	now    func() time.Time
 }
 
 // NewService membuat Service.
-func NewService(repo Repository, store ObjectStore, events Publisher, opts Options) *Service {
+func NewService(repo Repository, store ObjectStore, events Publisher, views ViewDeduper, opts Options) *Service {
 	return &Service{
 		repo:   repo,
 		store:  store,
 		events: events,
+		views:  views,
 		opts:   opts,
 		now:    func() time.Time { return time.Now().UTC() },
 	}
@@ -335,4 +360,138 @@ func (s *Service) ListMyVideos(ctx context.Context, ownerID int64, pageSize int,
 		next = strconv.FormatInt(videos[pageSize-1].ID, 10)
 	}
 	return videos, next, nil
+}
+
+// ListVideos mengambil feed publik: video READY, yang paling baru selesai
+// diproses lebih dulu. Siapa saja boleh memanggilnya, termasuk pengunjung
+// yang belum login.
+//
+// pageToken kosong = halaman pertama. Token berikutnya kosong jika sudah
+// tidak ada data lagi. Isi token sengaja tidak perlu dipahami client
+// (opaque), supaya cara pagination bisa diubah tanpa mengubah API.
+func (s *Service) ListVideos(ctx context.Context, pageSize int, pageToken string) ([]Video, string, error) {
+	if pageSize <= 0 {
+		pageSize = defaultPageSize
+	}
+	if pageSize > maxPageSize {
+		return nil, "", &ValidationError{"page_size", fmt.Sprintf("maksimal %d", maxPageSize)}
+	}
+	var after *FeedCursor
+	if pageToken != "" {
+		c, err := decodeFeedCursor(pageToken)
+		if err != nil {
+			return nil, "", &ValidationError{"page_token", "tidak valid"}
+		}
+		after = &c
+	}
+	videos, err := s.repo.ListPublic(ctx, after, pageSize+1)
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(videos) > pageSize {
+		videos = videos[:pageSize]
+		last := videos[pageSize-1]
+		if last.ProcessedAt == nil {
+			// Video READY selalu punya processed_at (lihat MarkReady).
+			return nil, "", fmt.Errorf("video %d READY tanpa processed_at", last.ID)
+		}
+		next = encodeFeedCursor(FeedCursor{ProcessedAt: *last.ProcessedAt, ID: last.ID})
+	}
+	return videos, next, nil
+}
+
+// encodeFeedCursor mengubah cursor menjadi teks seperti "MTczMTIy...",
+// yaitu base64 dari "<processed_at dalam mikrodetik>.<id>". Mikrodetik
+// adalah ketelitian TIMESTAMP bawaan Oracle.
+func encodeFeedCursor(c FeedCursor) string {
+	raw := strconv.FormatInt(c.ProcessedAt.UnixMicro(), 10) + "." + strconv.FormatInt(c.ID, 10)
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeFeedCursor(token string) (FeedCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return FeedCursor{}, err
+	}
+	micros, id, ok := strings.Cut(string(raw), ".")
+	if !ok {
+		return FeedCursor{}, errors.New("format cursor salah")
+	}
+	us, err := strconv.ParseInt(micros, 10, 64)
+	if err != nil || us <= 0 {
+		return FeedCursor{}, errors.New("waktu cursor salah")
+	}
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil || n <= 0 {
+		return FeedCursor{}, errors.New("id cursor salah")
+	}
+	return FeedCursor{ProcessedAt: time.UnixMicro(us).UTC(), ID: n}, nil
+}
+
+// ViewResult adalah hasil RecordView.
+type ViewResult struct {
+	// Counted bernilai false jika penonton ini sudah dihitung dalam window.
+	Counted bool
+	// ViewCount adalah jumlah views setelah request ini.
+	ViewCount int64
+}
+
+// RecordView menambah views video READY, maksimal sekali per penonton
+// dalam satu window (lihat ViewDeduper).
+//
+// viewerKey dibuat gateway: "u-<id user>" untuk user yang login, atau
+// "a-<hash>" untuk pengunjung tanpa login. VideoService tidak perlu tahu
+// cara membuatnya, cukup memastikan bentuknya aman dipakai sebagai key.
+//
+// Urutannya: tandai dulu di NATS, baru tambah di Oracle. Jika Oracle gagal,
+// tanda di NATS dihapus lagi supaya view bisa dicoba ulang.
+func (s *Service) RecordView(ctx context.Context, videoID int64, viewerKey string) (ViewResult, error) {
+	if !validViewerKey(viewerKey) {
+		return ViewResult{}, &ValidationError{"viewer_key", "hanya boleh huruf, angka, - dan _, maksimal 64 karakter"}
+	}
+	v, err := s.repo.FindByID(ctx, videoID)
+	if err != nil {
+		return ViewResult{}, err
+	}
+	if v.Status != StatusReady {
+		return ViewResult{}, ErrNotFound
+	}
+	claimCtx, cancel := context.WithTimeout(ctx, viewClaimTimeout)
+	first, err := s.views.Claim(claimCtx, videoID, viewerKey)
+	cancel()
+	if err != nil {
+		return ViewResult{}, fmt.Errorf("%w: %w", ErrViewsUnavailable, err)
+	}
+	if !first {
+		return ViewResult{Counted: false, ViewCount: v.ViewCount}, nil
+	}
+	count, err := s.repo.IncrementViews(ctx, videoID)
+	if err != nil {
+		// Pakai context baru: ctx mungkin sudah dibatalkan, tapi tanda di
+		// NATS tetap harus dihapus.
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if rerr := s.views.Release(releaseCtx, videoID, viewerKey); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("menghapus tanda view: %w", rerr))
+		}
+		return ViewResult{}, err
+	}
+	return ViewResult{Counted: true, ViewCount: count}, nil
+}
+
+// validViewerKey memeriksa viewerKey: 1 sampai 64 karakter, hanya huruf,
+// angka, "-", dan "_". Karakter lain (misalnya "." atau "*") punya arti
+// khusus di key NATS.
+func validViewerKey(k string) bool {
+	if k == "" || len(k) > maxViewerKeyLen {
+		return false
+	}
+	for _, r := range k {
+		ok := r == '-' || r == '_' || ('0' <= r && r <= '9') || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z')
+		if !ok {
+			return false
+		}
+	}
+	return true
 }

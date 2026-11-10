@@ -76,6 +76,26 @@ func (s *GRPCServer) ListMyVideos(ctx context.Context, req *videov1.ListMyVideos
 	return resp, nil
 }
 
+func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequest) (*videov1.ListVideosResponse, error) {
+	videos, next, err := s.svc.ListVideos(ctx, int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.ListVideosResponse{NextPageToken: next}
+	for _, v := range videos {
+		resp.Videos = append(resp.Videos, s.toProtoVideo(v))
+	}
+	return resp, nil
+}
+
+func (s *GRPCServer) RecordView(ctx context.Context, req *videov1.RecordViewRequest) (*videov1.RecordViewResponse, error) {
+	r, err := s.svc.RecordView(ctx, req.GetVideoId(), req.GetViewerKey())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.RecordViewResponse{Counted: r.Counted, ViewCount: r.ViewCount}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError
@@ -90,6 +110,9 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		// UNAVAILABLE = boleh dicoba lagi. Detail error NATS cukup di log.
 		s.logger.WarnContext(ctx, "gagal mengirim event video", slog.Any("error", err))
 		return status.Error(codes.Unavailable, ErrEventsUnavailable.Error())
+	case errors.Is(err, ErrViewsUnavailable):
+		s.logger.WarnContext(ctx, "gagal mencatat view", slog.Any("error", err))
+		return status.Error(codes.Unavailable, ErrViewsUnavailable.Error())
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "request dibatalkan")
 	case errors.Is(err, context.DeadlineExceeded):
@@ -112,6 +135,7 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 		ContentType: v.ContentType,
 		SizeBytes:   v.SizeBytes,
 		CreatedAt:   timestamppb.New(v.CreatedAt),
+		ViewCount:   v.ViewCount,
 	}
 	if v.UploadedAt != nil {
 		pv.UploadedAt = timestamppb.New(*v.UploadedAt)

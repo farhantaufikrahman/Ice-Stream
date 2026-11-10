@@ -28,8 +28,11 @@ type videoRow struct {
 	Renditions    *string    `gorm:"column:renditions"`
 	FailureReason *string    `gorm:"column:failure_reason"`
 	ProcessedAt   *time.Time `gorm:"column:processed_at"`
-	CreatedAt     time.Time  `gorm:"column:created_at"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at"`
+	// Migrasi V3. "<-:update" = tidak ikut INSERT saat Create (Oracle
+	// mengisi DEFAULT 0), hanya boleh diubah lewat UPDATE (IncrementViews).
+	ViewCount int64     `gorm:"column:view_count;<-:update"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
 	// Belum ada fitur hapus, tapi kolomnya sudah ada di tabel. Dengan field
 	// ini GORM otomatis menyaring baris yang sudah dihapus.
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at"`
@@ -47,6 +50,7 @@ func (r videoRow) toVideo() Video {
 		ContentType: r.ContentType,
 		SizeBytes:   r.SizeBytes,
 		CreatedAt:   r.CreatedAt.UTC(),
+		ViewCount:   r.ViewCount,
 	}
 	if r.Description != nil {
 		v.Description = *r.Description
@@ -155,6 +159,52 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 		videos[i] = row.toVideo()
 	}
 	return videos, nil
+}
+
+// ListPublic mengambil maksimal limit video READY untuk feed publik,
+// diurutkan processed_at lalu id dari yang terbaru. Jika after tidak nil,
+// hanya video setelah cursor itu (halaman berikutnya).
+//
+// Oracle tidak mendukung perbandingan (a, b) < (x, y), jadi syaratnya
+// ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
+// lebih kecil. id ikut dipakai supaya urutan tetap pasti walau dua video
+// selesai di detik yang sama.
+func (r *OracleRepository) ListPublic(ctx context.Context, after *FeedCursor, limit int) ([]Video, error) {
+	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
+	if after != nil {
+		q = q.Where("(processed_at < ? OR (processed_at = ? AND id < ?))", after.ProcessedAt, after.ProcessedAt, after.ID)
+	}
+	var rows []videoRow
+	if err := q.Order("processed_at DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select public videos: %w", err)
+	}
+	videos := make([]Video, len(rows))
+	for i, row := range rows {
+		videos[i] = row.toVideo()
+	}
+	return videos, nil
+}
+
+// IncrementViews menambah view_count video READY sebanyak 1 lalu
+// mengembalikan nilai barunya. "view_count = view_count + 1" dihitung oleh
+// Oracle sendiri dalam satu UPDATE, jadi tidak ada view yang hilang walau
+// banyak request datang bersamaan (berbeda dengan baca, tambah di Go, lalu
+// simpan).
+func (r *OracleRepository) IncrementViews(ctx context.Context, id int64) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&videoRow{}).
+		Where("id = ? AND status = ?", id, StatusReady).
+		UpdateColumn("view_count", gorm.Expr("view_count + 1"))
+	if res.Error != nil {
+		return 0, fmt.Errorf("update view_count: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return 0, ErrNotFound
+	}
+	var row videoRow
+	if err := r.db.WithContext(ctx).Select("view_count").Where("id = ?", id).Take(&row).Error; err != nil {
+		return 0, fmt.Errorf("select view_count: %w", err)
+	}
+	return row.ViewCount, nil
 }
 
 // MarkProcessing mengubah UPLOADED menjadi PROCESSING.

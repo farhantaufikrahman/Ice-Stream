@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -58,6 +60,24 @@ type videoResponse struct {
 	// ke pemilik video.
 	FailureReason string     `json:"failure_reason,omitempty"`
 	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
+	// ViewCount selalu ada (0 untuk video baru).
+	ViewCount int64 `json:"view_count"`
+}
+
+// listVideosResponse dipakai GET /videos (feed publik) dan GET /me/videos.
+type listVideosResponse struct {
+	Videos []videoResponse `json:"videos"`
+	// Kosong jika sudah halaman terakhir. Kirim kembali sebagai
+	// ?page_token=... untuk mengambil halaman berikutnya.
+	NextPageToken string `json:"next_page_token"`
+}
+
+// recordViewResponse adalah jawaban POST /videos/:id/views.
+type recordViewResponse struct {
+	// Counted bernilai false jika penonton ini sudah dihitung dalam 30
+	// menit terakhir (refresh tidak menambah views).
+	Counted   bool  `json:"counted"`
+	ViewCount int64 `json:"view_count"`
 }
 
 // uploadResponse memberi tahu browser cara mengunggah file:
@@ -171,32 +191,104 @@ func (h *videoHandler) listMine(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var pageSize int64
-	if v := c.Query("page_size"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 32)
-		if err != nil {
-			abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "page_size harus berupa angka")
-			return
-		}
-		pageSize = n
+	pageSize, ok := pageSizeQuery(c)
+	if !ok {
+		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
 	resp, err := h.client.ListMyVideos(ctx, &videov1.ListMyVideosRequest{
 		RequesterId: userID,
-		PageSize:    int32(pageSize),
+		PageSize:    pageSize,
 		PageToken:   c.Query("page_token"),
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	videos := make([]videoResponse, 0, len(resp.GetVideos()))
-	for _, v := range resp.GetVideos() {
-		videos = append(videos, toVideoResponse(v))
+	c.JSON(http.StatusOK, toListResponse(resp.GetVideos(), resp.GetNextPageToken()))
+}
+
+// list adalah feed publik: GET /api/v1/videos?page_size=20&page_token=...
+// Tidak butuh login.
+func (h *videoHandler) list(c *gin.Context) {
+	pageSize, ok := pageSizeQuery(c)
+	if !ok {
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"videos": videos, "next_page_token": resp.GetNextPageToken()})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.ListVideos(ctx, &videov1.ListVideosRequest{
+		PageSize:  pageSize,
+		PageToken: c.Query("page_token"),
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	c.JSON(http.StatusOK, toListResponse(resp.GetVideos(), resp.GetNextPageToken()))
+}
+
+// recordView dipanggil frontend saat video mulai diputar:
+// POST /api/v1/videos/:id/views (tanpa body). Login tidak wajib.
+func (h *videoHandler) recordView(c *gin.Context) {
+	videoID, ok := videoIDParam(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.RecordView(ctx, &videov1.RecordViewRequest{VideoId: videoID, ViewerKey: viewerKey(c)})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	c.JSON(http.StatusOK, recordViewResponse{Counted: resp.GetCounted(), ViewCount: resp.GetViewCount()})
+}
+
+// viewerKey membuat penanda penonton untuk anti-dobel views:
+//   - user login: "u-<id user>", jadi dihitung sekali walau pindah perangkat;
+//   - tanpa login: "a-" + 32 huruf pertama SHA-256 dari IP dan User-Agent.
+//     IP tidak disimpan apa adanya, dan orang di jaringan yang sama (satu
+//     IP kantor) tetap dibedakan oleh browser-nya.
+//
+// Penanda ini hanya disimpan sementara di NATS (sesuai VIEW_DEDUP_WINDOW).
+// Ini bukan perlindungan sempurna terhadap bot; tujuannya hanya supaya
+// refresh berulang tidak menambah views.
+func viewerKey(c *gin.Context) string {
+	if claims, ok := CurrentUser(c); ok {
+		if id, err := claims.UserID(); err == nil {
+			return "u-" + strconv.FormatInt(id, 10)
+		}
+	}
+	sum := sha256.Sum256([]byte(c.ClientIP() + "\n" + c.Request.UserAgent()))
+	return "a-" + hex.EncodeToString(sum[:16])
+}
+
+// pageSizeQuery membaca ?page_size=. Kosong = 0 (VideoService memakai
+// default). Jika bukan angka, langsung menjawab 400 dan mengembalikan false.
+func pageSizeQuery(c *gin.Context) (int32, bool) {
+	v := c.Query("page_size")
+	if v == "" {
+		return 0, true
+	}
+	n, err := strconv.ParseInt(v, 10, 32)
+	if err != nil {
+		abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "page_size harus berupa angka")
+		return 0, false
+	}
+	return int32(n), true
+}
+
+func toListResponse(videos []*videov1.Video, next string) listVideosResponse {
+	out := listVideosResponse{Videos: make([]videoResponse, 0, len(videos)), NextPageToken: next}
+	for _, v := range videos {
+		out.Videos = append(out.Videos, toVideoResponse(v))
+	}
+	return out
 }
 
 // currentUserID mengambil id user dari access token yang sudah diperiksa
@@ -255,6 +347,7 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		ThumbnailURL:  v.GetThumbnailUrl(),
 		FailureReason: v.GetFailureReason(),
 		ProcessedAt:   optionalTime(v.GetProcessedAt()),
+		ViewCount:     v.GetViewCount(),
 	}
 }
 

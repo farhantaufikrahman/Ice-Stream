@@ -20,6 +20,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "DB_USER", "STORAGE_ENDPOINT",
 		"STORAGE_PUBLIC_ENDPOINT", "STORAGE_REGION", "STORAGE_BUCKET", "MAX_UPLOAD_MB",
 		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS", "NATS_URL", "MEDIA_PUBLIC_URL",
+		"VIEW_DEDUP_WINDOW",
 	} {
 		t.Setenv(key, "")
 	}
@@ -37,6 +38,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 	assert.Equal(t, int64(2048)<<20, cfg.MaxUploadBytes)
 	assert.Equal(t, 15*time.Minute, cfg.UploadURLTTL)
 	assert.Equal(t, time.Hour, cfg.PlaybackURLTTL)
+	assert.Equal(t, 30*time.Minute, cfg.ViewDedupWindow)
 	assert.Equal(t, "nats://localhost:4222", cfg.NATSURL)
 	// Jika tidak diisi, file HLS dibuka langsung dari storage.
 	assert.Equal(t, "http://localhost:9000/videos", cfg.MediaPublicURL)
@@ -66,6 +68,8 @@ func TestLoadVideoInvalid(t *testing.T) {
 		"PLAYBACK_URL_TTL kelamaan": {"PLAYBACK_URL_TTL", "200h"},
 		"NATS_URL bukan nats://":    {"NATS_URL", "http://nats:4222"},
 		"MEDIA_PUBLIC_URL relatif":  {"MEDIA_PUBLIC_URL", "/videos"},
+		"VIEW_DEDUP_WINDOW 10s":     {"VIEW_DEDUP_WINDOW", "10s"},
+		"VIEW_DEDUP_WINDOW 48h":     {"VIEW_DEDUP_WINDOW", "48h"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -29,6 +29,8 @@ data:
   CORS_ALLOWED_ORIGINS: http://localhost:5173
   # Alamat publik file HLS dan thumbnail (lewat Gateway, storage/httproute.yaml).
   MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/videos
+  # Penonton yang sama baru dihitung sebagai view baru setelah 30 menit.
+  VIEW_DEDUP_WINDOW: 30m
   # Antrean event ke transcoder (NATS JetStream).
   NATS_URL: nats://nats:4222
   MAX_UPLOAD_MB: "2048"

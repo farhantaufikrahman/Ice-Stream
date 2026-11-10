@@ -18,6 +18,8 @@ type fakeRepo struct {
 	mu     sync.Mutex
 	nextID int64
 	videos map[int64]Video
+	// incrementErr diisi test untuk mensimulasikan Oracle yang gagal.
+	incrementErr error
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{videos: map[int64]Video{}} }
@@ -70,6 +72,51 @@ func (r *fakeRepo) ListByOwner(_ context.Context, ownerID, beforeID int64, limit
 	return out, nil
 }
 
+func (r *fakeRepo) ListPublic(_ context.Context, after *FeedCursor, limit int) ([]Video, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var ready []Video
+	for _, v := range r.videos {
+		if v.Status == StatusReady {
+			ready = append(ready, v)
+		}
+	}
+	// Sama dengan ORDER BY processed_at DESC, id DESC.
+	slices.SortFunc(ready, func(a, b Video) int {
+		if c := b.ProcessedAt.Compare(*a.ProcessedAt); c != 0 {
+			return c
+		}
+		return int(b.ID - a.ID)
+	})
+	var out []Video
+	for _, v := range ready {
+		if after != nil && !v.ProcessedAt.Before(after.ProcessedAt) &&
+			!(v.ProcessedAt.Equal(after.ProcessedAt) && v.ID < after.ID) {
+			continue
+		}
+		if len(out) == limit {
+			break
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) IncrementViews(_ context.Context, id int64) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.incrementErr != nil {
+		return 0, r.incrementErr
+	}
+	v, ok := r.videos[id]
+	if !ok || v.Status != StatusReady {
+		return 0, ErrNotFound
+	}
+	v.ViewCount++
+	r.videos[id] = v
+	return v.ViewCount, nil
+}
+
 func (r *fakeRepo) transition(id int64, from []string, apply func(*Video)) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -114,6 +161,35 @@ func (p *fakePublisher) PublishUploaded(_ context.Context, v Video) error {
 	return nil
 }
 
+// fakeViews menggantikan NATS Key-Value: set berisi key yang sudah ditandai.
+// Isi err untuk mensimulasikan NATS yang sedang mati.
+type fakeViews struct {
+	mu   sync.Mutex
+	seen map[string]bool
+	err  error
+}
+
+func (f *fakeViews) Claim(_ context.Context, videoID int64, viewerKey string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return false, f.err
+	}
+	k := viewKey(videoID, viewerKey)
+	if f.seen[k] {
+		return false, nil
+	}
+	f.seen[k] = true
+	return true, nil
+}
+
+func (f *fakeViews) Release(_ context.Context, videoID int64, viewerKey string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.seen, viewKey(videoID, viewerKey))
+	return nil
+}
+
 // fakeStore pura-pura menjadi object storage. objects diisi test untuk
 // mensimulasikan file yang sudah diunggah browser.
 type fakeStore struct {
@@ -143,7 +219,7 @@ func newTestService() (*Service, *fakeRepo, *fakeStore) {
 
 func newTestServiceWithEvents() (*Service, *fakeRepo, *fakeStore, *fakePublisher) {
 	repo, store, pub := newFakeRepo(), &fakeStore{objects: map[string]ObjectInfo{}}, &fakePublisher{}
-	svc := NewService(repo, store, pub, Options{
+	svc := NewService(repo, store, pub, &fakeViews{seen: map[string]bool{}}, Options{
 		MaxUploadBytes: 10 << 20,
 		UploadURLTTL:   15 * time.Minute,
 		PlaybackURLTTL: time.Hour,

@@ -27,6 +27,8 @@ const (
 	VideoService_CompleteUpload_FullMethodName = "/video.v1.VideoService/CompleteUpload"
 	VideoService_GetVideo_FullMethodName       = "/video.v1.VideoService/GetVideo"
 	VideoService_ListMyVideos_FullMethodName   = "/video.v1.VideoService/ListMyVideos"
+	VideoService_ListVideos_FullMethodName     = "/video.v1.VideoService/ListVideos"
+	VideoService_RecordView_FullMethodName     = "/video.v1.VideoService/RecordView"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -48,6 +50,14 @@ type VideoServiceClient interface {
 	GetVideo(ctx context.Context, in *GetVideoRequest, opts ...grpc.CallOption) (*GetVideoResponse, error)
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(ctx context.Context, in *ListMyVideosRequest, opts ...grpc.CallOption) (*ListMyVideosResponse, error)
+	// ListVideos mengambil feed publik: hanya video READY, yang paling baru
+	// selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+	// Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
+	ListVideos(ctx context.Context, in *ListVideosRequest, opts ...grpc.CallOption) (*ListVideosResponse, error)
+	// RecordView menambah views video READY, maksimal sekali per penonton
+	// dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
+	// ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
+	RecordView(ctx context.Context, in *RecordViewRequest, opts ...grpc.CallOption) (*RecordViewResponse, error)
 }
 
 type videoServiceClient struct {
@@ -98,6 +108,26 @@ func (c *videoServiceClient) ListMyVideos(ctx context.Context, in *ListMyVideosR
 	return out, nil
 }
 
+func (c *videoServiceClient) ListVideos(ctx context.Context, in *ListVideosRequest, opts ...grpc.CallOption) (*ListVideosResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListVideosResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListVideos_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) RecordView(ctx context.Context, in *RecordViewRequest, opts ...grpc.CallOption) (*RecordViewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordViewResponse)
+	err := c.cc.Invoke(ctx, VideoService_RecordView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -117,6 +147,14 @@ type VideoServiceServer interface {
 	GetVideo(context.Context, *GetVideoRequest) (*GetVideoResponse, error)
 	// ListMyVideos mengambil video milik requester, terbaru lebih dulu.
 	ListMyVideos(context.Context, *ListMyVideosRequest) (*ListMyVideosResponse, error)
+	// ListVideos mengambil feed publik: hanya video READY, yang paling baru
+	// selesai diproses lebih dulu. Boleh dipanggil tanpa login.
+	// Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
+	ListVideos(context.Context, *ListVideosRequest) (*ListVideosResponse, error)
+	// RecordView menambah views video READY, maksimal sekali per penonton
+	// dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
+	// ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
+	RecordView(context.Context, *RecordViewRequest) (*RecordViewResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -138,6 +176,12 @@ func (UnimplementedVideoServiceServer) GetVideo(context.Context, *GetVideoReques
 }
 func (UnimplementedVideoServiceServer) ListMyVideos(context.Context, *ListMyVideosRequest) (*ListMyVideosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMyVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) ListVideos(context.Context, *ListVideosRequest) (*ListVideosResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) RecordView(context.Context, *RecordViewRequest) (*RecordViewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordView not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -232,6 +276,42 @@ func _VideoService_ListMyVideos_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_ListVideos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListVideosRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListVideos(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListVideos_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListVideos(ctx, req.(*ListVideosRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_RecordView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).RecordView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_RecordView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).RecordView(ctx, req.(*RecordViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -254,6 +334,14 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMyVideos",
 			Handler:    _VideoService_ListMyVideos_Handler,
+		},
+		{
+			MethodName: "ListVideos",
+			Handler:    _VideoService_ListVideos_Handler,
+		},
+		{
+			MethodName: "RecordView",
+			Handler:    _VideoService_RecordView_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
