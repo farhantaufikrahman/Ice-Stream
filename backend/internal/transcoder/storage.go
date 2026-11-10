@@ -93,6 +93,8 @@ func (s *S3Storage) UploadDir(ctx context.Context, dir, prefix string) error {
 			Key:         aws.String(key),
 			Body:        f,
 			ContentType: aws.String(contentType(path)),
+			// Disimpan bersama file dan ikut dikirim saat browser mengambilnya.
+			CacheControl: aws.String(cacheControl(path)),
 		})
 		if err != nil {
 			return fmt.Errorf("upload %s: %w", key, err)
@@ -113,4 +115,16 @@ func contentType(path string) string {
 		return "image/jpeg"
 	}
 	return "application/octet-stream"
+}
+
+// cacheControl menentukan berapa lama browser (dan CDN nanti) boleh
+// menyimpan file tanpa bertanya lagi ke server. Potongan .ts dan thumbnail
+// tidak pernah berubah setelah dibuat, jadi boleh disimpan 1 tahun. Daftar
+// putar .m3u8 dibuat lebih pendek (5 menit), untuk berjaga-jaga jika video
+// di-transcode ulang.
+func cacheControl(path string) string {
+	if strings.ToLower(filepath.Ext(path)) == ".m3u8" {
+		return "public, max-age=300"
+	}
+	return "public, max-age=31536000, immutable"
 }

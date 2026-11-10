@@ -65,6 +65,9 @@ type Options struct {
 	MaxUploadBytes int64
 	UploadURLTTL   time.Duration
 	PlaybackURLTTL time.Duration
+	// MediaBaseURL adalah alamat publik folder bucket, misalnya
+	// "http://media.ice-stream.localhost:4000/videos" (tanpa "/" di akhir).
+	MediaBaseURL string
 }
 
 // Service berisi aturan bisnis VideoService, terpisah dari gRPC, Oracle,
@@ -261,36 +264,47 @@ func (s *Service) MarkFailed(ctx context.Context, videoID int64, reason string) 
 	return err
 }
 
-// Playback adalah video beserta URL untuk memutarnya.
-type Playback struct {
+// VideoDetail adalah video beserta URL file aslinya.
+type VideoDetail struct {
 	Video Video
-	// Request kosong selama video belum diunggah.
-	Request PresignedRequest
+	// Original adalah URL presigned untuk mengunduh file asli. Hanya terisi
+	// untuk pemilik video, setelah file selesai diunggah.
+	Original PresignedRequest
 }
 
 // GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
 // pemiliknya; untuk orang lain hasilnya ErrNotFound. viewerID 0 berarti
 // pengunjung yang belum login.
 //
-// Untuk sementara URL putar mengarah ke file mentah (presigned). Di langkah
-// 6b, video READY diputar lewat file HLS.
-func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (Playback, error) {
+// Video READY diputar lewat file HLS (lihat MediaURL), yang bisa dibuka
+// siapa saja. File asli (sebelum di-transcode) hanya untuk pemiliknya.
+func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoDetail, error) {
 	v, err := s.repo.FindByID(ctx, videoID)
 	if err != nil {
-		return Playback{}, err
+		return VideoDetail{}, err
 	}
 	isOwner := viewerID != 0 && viewerID == v.OwnerID
 	if v.Status != StatusReady && !isOwner {
-		return Playback{}, ErrNotFound
+		return VideoDetail{}, ErrNotFound
 	}
-	if v.Status == StatusPendingUpload {
-		return Playback{Video: v}, nil
+	if !isOwner || v.Status == StatusPendingUpload {
+		return VideoDetail{Video: v}, nil
 	}
 	req, err := s.store.PresignGet(ctx, v.ObjectKey, s.opts.PlaybackURLTTL)
 	if err != nil {
-		return Playback{}, err
+		return VideoDetail{}, err
 	}
-	return Playback{Video: v, Request: req}, nil
+	return VideoDetail{Video: v, Original: req}, nil
+}
+
+// MediaURL mengubah key hasil transcoding (misalnya "hls/42/master.m3u8")
+// menjadi URL publik yang bisa dibuka browser. Hanya key di PublicPrefix
+// yang bisa dibuka tanpa login; untuk key lain hasilnya string kosong.
+func (s *Service) MediaURL(key string) string {
+	if !strings.HasPrefix(key, PublicPrefix) {
+		return ""
+	}
+	return s.opts.MediaBaseURL + "/" + key
 }
 
 // ListMyVideos mengambil video milik ownerID. pageToken kosong = halaman

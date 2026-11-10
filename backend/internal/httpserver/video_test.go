@@ -38,8 +38,19 @@ func testVideo(status videov1.VideoStatus) *videov1.Video {
 		Id: 42, OwnerId: 7, Title: "Tes", Status: status, ContentType: "video/mp4",
 		SizeBytes: 1234, CreatedAt: timestamppb.New(testCreatedAt),
 	}
-	if status == videov1.VideoStatus_VIDEO_STATUS_UPLOADED {
+	if status != videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD {
 		v.UploadedAt = timestamppb.New(testCreatedAt.Add(time.Minute))
+	}
+	switch status {
+	case videov1.VideoStatus_VIDEO_STATUS_READY:
+		v.DurationMs = 20023
+		v.Renditions = []string{"360p", "720p"}
+		v.HlsUrl = "http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8"
+		v.ThumbnailUrl = "http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg"
+		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
+	case videov1.VideoStatus_VIDEO_STATUS_FAILED:
+		v.FailureReason = "file tidak bisa dibaca sebagai video"
+		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
 	}
 	return v
 }
@@ -70,11 +81,13 @@ func (f *fakeVideoClient) GetVideo(_ context.Context, in *videov1.GetVideoReques
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &videov1.GetVideoResponse{
-		Video:                testVideo(videov1.VideoStatus_VIDEO_STATUS_UPLOADED),
-		PlaybackUrl:          "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y",
-		PlaybackUrlExpiresAt: timestamppb.New(testCreatedAt.Add(time.Hour)),
-	}, nil
+	resp := &videov1.GetVideoResponse{Video: testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)}
+	// Seperti VideoService: file asli hanya untuk pemilik (user 7).
+	if in.GetViewerId() == 7 {
+		resp.OriginalUrl = "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"
+		resp.OriginalUrlExpiresAt = timestamppb.New(testCreatedAt.Add(time.Hour))
+	}
+	return resp, nil
 }
 
 func (f *fakeVideoClient) ListMyVideos(_ context.Context, in *videov1.ListMyVideosRequest, _ ...grpc.CallOption) (*videov1.ListMyVideosResponse, error) {
@@ -83,7 +96,10 @@ func (f *fakeVideoClient) ListMyVideos(_ context.Context, in *videov1.ListMyVide
 		return nil, f.err
 	}
 	return &videov1.ListMyVideosResponse{
-		Videos:        []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD)},
+		Videos: []*videov1.Video{
+			testVideo(videov1.VideoStatus_VIDEO_STATUS_READY),
+			testVideo(videov1.VideoStatus_VIDEO_STATUS_FAILED),
+		},
 		NextPageToken: "42",
 	}, nil
 }
@@ -156,16 +172,26 @@ func TestGetVideo(t *testing.T) {
 	fake := &fakeVideoClient{}
 	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
 
-	// Tanpa login boleh, viewer_id = 0.
+	// Tanpa login boleh, viewer_id = 0. Video READY: ada URL HLS dan
+	// thumbnail, tapi tidak ada URL file asli.
 	rec := do(r, http.MethodGet, "/api/v1/videos/42", "")
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, int64(0), fake.lastGet.GetViewerId())
-	assert.Contains(t, rec.Body.String(), `"playback":{"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"`)
+	assert.JSONEq(t, `{
+		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"READY",
+		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z",
+		          "uploaded_at":"2026-10-29T04:01:00Z","duration_ms":20023,"renditions":["360p","720p"],
+		          "hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8",
+		          "thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg",
+		          "processed_at":"2026-10-29T04:02:00Z"}
+	}`, rec.Body.String())
 
-	// Dengan login, viewer_id diisi dari token.
+	// Dengan login, viewer_id diisi dari token. Pemilik juga mendapat URL
+	// file asli.
 	rec = do(r, http.MethodGet, "/api/v1/videos/42", "", as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, int64(7), fake.lastGet.GetViewerId())
+	assert.Contains(t, rec.Body.String(), `"original":{"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"`)
 
 	// Token rusak tetap ditolak, supaya frontend tahu harus refresh.
 	rec = do(r, http.MethodGet, "/api/v1/videos/42", "", func(req *http.Request) {
@@ -186,6 +212,8 @@ func TestListMyVideos(t *testing.T) {
 	rec := do(r, http.MethodGet, "/api/v1/me/videos?page_size=10&page_token=50", "", as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"next_page_token":"42"`)
+	assert.Contains(t, rec.Body.String(), `"thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg"`)
+	assert.Contains(t, rec.Body.String(), `"failure_reason":"file tidak bisa dibaca sebagai video"`)
 	assert.Equal(t, int64(7), fake.lastList.GetRequesterId())
 	assert.Equal(t, int32(10), fake.lastList.GetPageSize())
 	assert.Equal(t, "50", fake.lastList.GetPageToken())

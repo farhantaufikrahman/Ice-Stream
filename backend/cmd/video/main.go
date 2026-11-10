@@ -82,6 +82,7 @@ func run(logger *slog.Logger) error {
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		UploadURLTTL:   cfg.UploadURLTTL,
 		PlaybackURLTTL: cfg.PlaybackURLTTL,
+		MediaBaseURL:   cfg.MediaPublicURL,
 	})
 
 	// Terima laporan status dari transcoder (PROCESSING, READY, FAILED).
@@ -106,7 +107,11 @@ func run(logger *slog.Logger) error {
 		reflection.Register(srv)
 	}
 
-	logger.Info("video service siap", slog.String("env", cfg.Env), slog.String("bucket", cfg.Storage.Bucket))
+	logger.Info("video service siap",
+		slog.String("env", cfg.Env),
+		slog.String("bucket", cfg.Storage.Bucket),
+		slog.String("media_url", cfg.MediaPublicURL),
+	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }
 
