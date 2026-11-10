@@ -108,7 +108,13 @@ type Video struct {
 	// Alasan gagal. Hanya terisi jika status FAILED.
 	FailureReason string `protobuf:"bytes,12,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
 	// Waktu transcoding selesai (READY atau FAILED).
-	ProcessedAt   *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=processed_at,json=processedAt,proto3" json:"processed_at,omitempty"`
+	ProcessedAt *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=processed_at,json=processedAt,proto3" json:"processed_at,omitempty"`
+	// URL publik daftar putar HLS (master.m3u8), untuk player seperti hls.js.
+	// Tidak kedaluwarsa. Hanya terisi jika status READY.
+	HlsUrl string `protobuf:"bytes,14,opt,name=hls_url,json=hlsUrl,proto3" json:"hls_url,omitempty"`
+	// URL publik gambar thumbnail (JPEG, tinggi 360 piksel). Hanya terisi jika
+	// status READY.
+	ThumbnailUrl  string `protobuf:"bytes,15,opt,name=thumbnail_url,json=thumbnailUrl,proto3" json:"thumbnail_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,6 +238,20 @@ func (x *Video) GetProcessedAt() *timestamppb.Timestamp {
 		return x.ProcessedAt
 	}
 	return nil
+}
+
+func (x *Video) GetHlsUrl() string {
+	if x != nil {
+		return x.HlsUrl
+	}
+	return ""
+}
+
+func (x *Video) GetThumbnailUrl() string {
+	if x != nil {
+		return x.ThumbnailUrl
+	}
+	return ""
 }
 
 type CreateUploadRequest struct {
@@ -535,10 +555,11 @@ func (x *GetVideoRequest) GetViewerId() int64 {
 type GetVideoResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Video *Video                 `protobuf:"bytes,1,opt,name=video,proto3" json:"video,omitempty"`
-	// URL presigned untuk memutar file mentah (sebelum di-transcode). Kosong
-	// selama PENDING_UPLOAD. Di langkah 6b diganti URL HLS untuk video READY.
-	PlaybackUrl          string                 `protobuf:"bytes,2,opt,name=playback_url,json=playbackUrl,proto3" json:"playback_url,omitempty"`
-	PlaybackUrlExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=playback_url_expires_at,json=playbackUrlExpiresAt,proto3" json:"playback_url_expires_at,omitempty"`
+	// URL presigned untuk mengunduh file asli (sebelum di-transcode). Hanya
+	// untuk pemilik video, dan kosong selama PENDING_UPLOAD. Untuk memutar
+	// video, pakai video.hls_url.
+	OriginalUrl          string                 `protobuf:"bytes,2,opt,name=original_url,json=originalUrl,proto3" json:"original_url,omitempty"`
+	OriginalUrlExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=original_url_expires_at,json=originalUrlExpiresAt,proto3" json:"original_url_expires_at,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -580,16 +601,16 @@ func (x *GetVideoResponse) GetVideo() *Video {
 	return nil
 }
 
-func (x *GetVideoResponse) GetPlaybackUrl() string {
+func (x *GetVideoResponse) GetOriginalUrl() string {
 	if x != nil {
-		return x.PlaybackUrl
+		return x.OriginalUrl
 	}
 	return ""
 }
 
-func (x *GetVideoResponse) GetPlaybackUrlExpiresAt() *timestamppb.Timestamp {
+func (x *GetVideoResponse) GetOriginalUrlExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.PlaybackUrlExpiresAt
+		return x.OriginalUrlExpiresAt
 	}
 	return nil
 }
@@ -713,7 +734,7 @@ var File_video_v1_video_proto protoreflect.FileDescriptor
 
 const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
-	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x03\n" +
+	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb8\x04\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\x03R\aownerId\x12\x14\n" +
@@ -734,7 +755,9 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"renditions\x18\v \x03(\tR\n" +
 	"renditions\x12%\n" +
 	"\x0efailure_reason\x18\f \x01(\tR\rfailureReason\x12=\n" +
-	"\fprocessed_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAt\"\xb2\x01\n" +
+	"\fprocessed_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAt\x12\x17\n" +
+	"\ahls_url\x18\x0e \x01(\tR\x06hlsUrl\x12#\n" +
+	"\rthumbnail_url\x18\x0f \x01(\tR\fthumbnailUrl\"\xb2\x01\n" +
 	"\x13CreateUploadRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -761,8 +784,8 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\tviewer_id\x18\x02 \x01(\x03R\bviewerId\"\xaf\x01\n" +
 	"\x10GetVideoResponse\x12%\n" +
 	"\x05video\x18\x01 \x01(\v2\x0f.video.v1.VideoR\x05video\x12!\n" +
-	"\fplayback_url\x18\x02 \x01(\tR\vplaybackUrl\x12Q\n" +
-	"\x17playback_url_expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x14playbackUrlExpiresAt\"t\n" +
+	"\foriginal_url\x18\x02 \x01(\tR\voriginalUrl\x12Q\n" +
+	"\x17original_url_expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x14originalUrlExpiresAt\"t\n" +
 	"\x13ListMyVideosRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -824,7 +847,7 @@ var file_video_v1_video_proto_depIdxs = []int32{
 	10, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
 	1,  // 7: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
 	1,  // 8: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
-	11, // 9: video.v1.GetVideoResponse.playback_url_expires_at:type_name -> google.protobuf.Timestamp
+	11, // 9: video.v1.GetVideoResponse.original_url_expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 10: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
 	2,  // 11: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
 	4,  // 12: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest

@@ -17,9 +17,9 @@ service VideoService {
   // Error NOT_FOUND jika video tidak ada atau bukan milik requester,
   // FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
   rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
-  // GetVideo mengambil satu video beserta URL untuk memutarnya. Video yang
-  // belum READY (belum selesai diunggah atau di-transcode) hanya bisa
-  // dilihat pemiliknya.
+  // GetVideo mengambil satu video. Video READY bisa dilihat siapa saja dan
+  // diputar lewat video.hls_url. Video yang belum READY (belum selesai
+  // diunggah, sedang atau gagal di-transcode) hanya bisa dilihat pemiliknya.
   rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
   // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
   rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
@@ -58,6 +58,12 @@ message Video {
   string failure_reason = 12;
   // Waktu transcoding selesai (READY atau FAILED).
   google.protobuf.Timestamp processed_at = 13;
+  // URL publik daftar putar HLS (master.m3u8), untuk player seperti hls.js.
+  // Tidak kedaluwarsa. Hanya terisi jika status READY.
+  string hls_url = 14;
+  // URL publik gambar thumbnail (JPEG, tinggi 360 piksel). Hanya terisi jika
+  // status READY.
+  string thumbnail_url = 15;
 }
 
 message CreateUploadRequest {
@@ -97,10 +103,11 @@ message GetVideoRequest {
 
 message GetVideoResponse {
   Video video = 1;
-  // URL presigned untuk memutar file mentah (sebelum di-transcode). Kosong
-  // selama PENDING_UPLOAD. Di langkah 6b diganti URL HLS untuk video READY.
-  string playback_url = 2;
-  google.protobuf.Timestamp playback_url_expires_at = 3;
+  // URL presigned untuk mengunduh file asli (sebelum di-transcode). Hanya
+  // untuk pemilik video, dan kosong selama PENDING_UPLOAD. Untuk memutar
+  // video, pakai video.hls_url.
+  string original_url = 2;
+  google.protobuf.Timestamp original_url_expires_at = 3;
 }
 
 message ListMyVideosRequest {

@@ -147,6 +147,7 @@ func newTestServiceWithEvents() (*Service, *fakeRepo, *fakeStore, *fakePublisher
 		MaxUploadBytes: 10 << 20,
 		UploadURLTTL:   15 * time.Minute,
 		PlaybackURLTTL: time.Hour,
+		MediaBaseURL:   "http://media.test/videos",
 	})
 	return svc, repo, store, pub
 }
@@ -315,10 +316,10 @@ func TestGetVideoVisibility(t *testing.T) {
 	require.NoError(t, err)
 	id := up.Video.ID
 
-	// Selama PENDING_UPLOAD: hanya pemilik yang bisa melihat, tanpa URL putar.
-	p, err := svc.GetVideo(ctx, 7, id)
+	// Selama PENDING_UPLOAD: hanya pemilik yang bisa melihat, tanpa URL file.
+	d, err := svc.GetVideo(ctx, 7, id)
 	require.NoError(t, err)
-	assert.Empty(t, p.Request.URL)
+	assert.Empty(t, d.Original.URL)
 	_, err = svc.GetVideo(ctx, 8, id)
 	assert.ErrorIs(t, err, ErrNotFound)
 	_, err = svc.GetVideo(ctx, 0, id)
@@ -328,20 +329,35 @@ func TestGetVideoVisibility(t *testing.T) {
 	_, err = svc.CompleteUpload(ctx, 7, id)
 	require.NoError(t, err)
 
-	// UPLOADED dan PROCESSING: pemilik bisa melihat (dengan URL file mentah),
+	// UPLOADED dan PROCESSING: pemilik bisa melihat (dengan URL file asli),
 	// orang lain belum.
-	p, err = svc.GetVideo(ctx, 7, id)
+	d, err = svc.GetVideo(ctx, 7, id)
 	require.NoError(t, err)
-	assert.Contains(t, p.Request.URL, "sig=get")
+	assert.Contains(t, d.Original.URL, "sig=get")
 	_, err = svc.GetVideo(ctx, 0, id)
 	assert.ErrorIs(t, err, ErrNotFound)
 
-	// READY: siapa pun bisa melihat, termasuk yang belum login.
+	// READY: siapa pun bisa melihat, termasuk yang belum login, tapi file
+	// asli tetap hanya untuk pemilik.
 	require.NoError(t, svc.MarkReady(ctx, id, TranscodeResult{PlaylistKey: "hls/1/master.m3u8", DurationMs: 1000, Renditions: []string{"360p"}}))
-	p, err = svc.GetVideo(ctx, 0, id)
+	d, err = svc.GetVideo(ctx, 0, id)
 	require.NoError(t, err)
-	assert.Equal(t, StatusReady, p.Video.Status)
-	assert.Contains(t, p.Request.URL, "sig=get")
+	assert.Equal(t, StatusReady, d.Video.Status)
+	assert.Empty(t, d.Original.URL, "file asli tidak untuk umum")
+	d, err = svc.GetVideo(ctx, 8, id)
+	require.NoError(t, err)
+	assert.Empty(t, d.Original.URL)
+	d, err = svc.GetVideo(ctx, 7, id)
+	require.NoError(t, err)
+	assert.Contains(t, d.Original.URL, "sig=get")
+}
+
+func TestMediaURL(t *testing.T) {
+	svc, _, _ := newTestService()
+
+	assert.Equal(t, "http://media.test/videos/hls/42/master.m3u8", svc.MediaURL("hls/42/master.m3u8"))
+	assert.Empty(t, svc.MediaURL(""), "video belum READY")
+	assert.Empty(t, svc.MediaURL("raw/abc/source"), "file mentah tidak pernah publik")
 }
 
 func TestListMyVideosPagination(t *testing.T) {

@@ -20,6 +20,11 @@ type VideoConfig struct {
 	Storage         StorageConfig
 	// NATSURL adalah alamat server NATS, misalnya "nats://nats:4222".
 	NATSURL string
+	// MediaPublicURL adalah alamat publik folder bucket untuk file HLS dan
+	// thumbnail, misalnya "http://media.ice-stream.localhost:4000/videos".
+	// URL file = MediaPublicURL + "/" + key, misalnya
+	// ".../videos/hls/42/master.m3u8". Nanti bisa diganti alamat CDN.
+	MediaPublicURL string
 	// MaxUploadBytes adalah ukuran file video terbesar yang boleh diunggah.
 	MaxUploadBytes int64
 	// UploadURLTTL adalah umur URL presigned untuk mengunggah.
@@ -77,6 +82,11 @@ func LoadVideo() (VideoConfig, error) {
 		return VideoConfig{}, err
 	}
 	endpoint := getString("STORAGE_ENDPOINT", "http://localhost:9000")
+	publicEndpoint := getString("STORAGE_PUBLIC_ENDPOINT", endpoint)
+	bucket := getString("STORAGE_BUCKET", "videos")
+	// Default: file HLS dibuka langsung dari storage, misalnya
+	// http://localhost:9000/videos. Garis miring di akhir dibuang.
+	mediaURL := strings.TrimSuffix(getString("MEDIA_PUBLIC_URL", strings.TrimSuffix(publicEndpoint, "/")+"/"+bucket), "/")
 
 	cfg := VideoConfig{
 		Env:             getString("APP_ENV", "development"),
@@ -85,15 +95,16 @@ func LoadVideo() (VideoConfig, error) {
 		DB:              db,
 		Storage: StorageConfig{
 			Endpoint:       endpoint,
-			PublicEndpoint: getString("STORAGE_PUBLIC_ENDPOINT", endpoint),
+			PublicEndpoint: publicEndpoint,
 			Region:         getString("STORAGE_REGION", "us-east-1"),
 			// Sengaja tanpa default, sama seperti DB_PASSWORD.
 			AccessKey:          getString("STORAGE_ACCESS_KEY", ""),
 			SecretKey:          getString("STORAGE_SECRET_KEY", ""),
-			Bucket:             getString("STORAGE_BUCKET", "videos"),
+			Bucket:             bucket,
 			CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		},
 		NATSURL:        getString("NATS_URL", "nats://localhost:4222"),
+		MediaPublicURL: mediaURL,
 		MaxUploadBytes: int64(maxUploadMB) << 20,
 		UploadURLTTL:   uploadTTL,
 		PlaybackURLTTL: playbackTTL,
@@ -128,6 +139,9 @@ func (c VideoConfig) validate() error {
 	}
 	if err := validNATSURL(c.NATSURL); err != nil {
 		return err
+	}
+	if u, err := url.Parse(c.MediaPublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
+		return fmt.Errorf("MEDIA_PUBLIC_URL harus berupa URL seperti http://media.ice-stream.localhost:4000/videos, dapat %q", c.MediaPublicURL)
 	}
 	return c.DB.validate()
 }

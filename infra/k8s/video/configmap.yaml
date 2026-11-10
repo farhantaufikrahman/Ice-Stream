@@ -27,6 +27,8 @@ data:
   STORAGE_BUCKET: videos
   # Origin frontend yang boleh mengunggah langsung ke bucket.
   CORS_ALLOWED_ORIGINS: http://localhost:5173
+  # Alamat publik file HLS dan thumbnail (lewat Gateway, storage/httproute.yaml).
+  MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/videos
   # Antrean event ke transcoder (NATS JetStream).
   NATS_URL: nats://nats:4222
   MAX_UPLOAD_MB: "2048"

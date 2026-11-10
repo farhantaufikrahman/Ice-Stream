@@ -24,6 +24,7 @@ resources:
   # Penyimpanan file video (RustFS, S3-compatible)
   - storage/service.yaml
   - storage/statefulset.yaml
+  - storage/httproute.yaml
   # Antrean event antar service (NATS JetStream)
   - nats/configmap.yaml
   - nats/service.yaml

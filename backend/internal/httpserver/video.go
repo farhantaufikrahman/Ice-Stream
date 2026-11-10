@@ -47,6 +47,17 @@ type videoResponse struct {
 	SizeBytes   int64      `json:"size_bytes"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UploadedAt  *time.Time `json:"uploaded_at,omitempty"`
+	// Field di bawah hanya ada setelah transcoding (READY atau FAILED).
+	DurationMs int64    `json:"duration_ms,omitempty"`
+	Renditions []string `json:"renditions,omitempty"`
+	// HLSURL dibuka player HLS, misalnya hls.js: hls.loadSource(video.hls_url).
+	// Tidak kedaluwarsa. Hanya ada jika status READY.
+	HLSURL       string `json:"hls_url,omitempty"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	// FailureReason hanya ada jika status FAILED, kalimat untuk ditampilkan
+	// ke pemilik video.
+	FailureReason string     `json:"failure_reason,omitempty"`
+	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
 }
 
 // uploadResponse memberi tahu browser cara mengunggah file:
@@ -58,18 +69,19 @@ type uploadResponse struct {
 	ExpiresAt time.Time         `json:"expires_at"`
 }
 
-// playbackResponse berisi URL untuk memutar video, misalnya
-// <video src={playback.url} controls />. URL ini kedaluwarsa, jadi frontend
-// mengambil ulang GET /videos/:id jika sudah lewat expires_at.
-type playbackResponse struct {
+// originalResponse berisi URL untuk mengunduh file asli (sebelum
+// di-transcode). URL ini kedaluwarsa, jadi frontend mengambil ulang
+// GET /videos/:id jika sudah lewat expires_at.
+type originalResponse struct {
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type getVideoResponse struct {
 	Video videoResponse `json:"video"`
-	// Tidak ikut dikirim selama video belum selesai diunggah.
-	Playback *playbackResponse `json:"playback,omitempty"`
+	// Hanya untuk pemilik video, setelah file selesai diunggah. Untuk
+	// memutar video, pakai video.hls_url.
+	Original *originalResponse `json:"original,omitempty"`
 }
 
 func (h *videoHandler) create(c *gin.Context) {
@@ -145,10 +157,10 @@ func (h *videoHandler) get(c *gin.Context) {
 		return
 	}
 	body := getVideoResponse{Video: toVideoResponse(resp.GetVideo())}
-	if resp.GetPlaybackUrl() != "" {
-		body.Playback = &playbackResponse{
-			URL:       resp.GetPlaybackUrl(),
-			ExpiresAt: resp.GetPlaybackUrlExpiresAt().AsTime(),
+	if resp.GetOriginalUrl() != "" {
+		body.Original = &originalResponse{
+			URL:       resp.GetOriginalUrl(),
+			ExpiresAt: resp.GetOriginalUrlExpiresAt().AsTime(),
 		}
 	}
 	c.JSON(http.StatusOK, body)
@@ -236,6 +248,13 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		SizeBytes:   v.GetSizeBytes(),
 		CreatedAt:   v.GetCreatedAt().AsTime(),
 		UploadedAt:  optionalTime(v.GetUploadedAt()),
+
+		DurationMs:    v.GetDurationMs(),
+		Renditions:    v.GetRenditions(),
+		HLSURL:        v.GetHlsUrl(),
+		ThumbnailURL:  v.GetThumbnailUrl(),
+		FailureReason: v.GetFailureReason(),
+		ProcessedAt:   optionalTime(v.GetProcessedAt()),
 	}
 }
 

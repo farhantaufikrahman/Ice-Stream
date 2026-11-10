@@ -2,6 +2,7 @@ package video
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -67,8 +68,19 @@ func NewS3Store(cfg config.StorageConfig) *S3Store {
 
 var _ ObjectStore = (*S3Store)(nil)
 
-// EnsureBucket membuat bucket jika belum ada, lalu memasang aturan CORS
-// supaya browser dari origin yang diizinkan boleh mengunggah langsung.
+// PublicPrefix adalah folder di bucket yang boleh dibaca siapa saja tanpa
+// login: hasil transcoding (HLS dan thumbnail) yang ditulis transcoder ke
+// hls/<id>/. File mentah di raw/ tetap privat (hanya lewat URL presigned).
+const PublicPrefix = "hls/"
+
+// EnsureBucket membuat bucket jika belum ada, lalu memasang:
+//   - aturan CORS, supaya browser dari origin yang diizinkan boleh mengunggah
+//     langsung dan memutar HLS;
+//   - bucket policy, supaya file di PublicPrefix bisa dibaca tanpa tanda
+//     tangan. Player HLS mengambil puluhan file kecil (.m3u8 dan .ts), jadi
+//     URL presigned per file tidak praktis. Cara ini sama dengan bucket S3
+//     publik di belakang CDN (YouTube, Netflix, dan lainnya).
+//
 // Aman dipanggil setiap kali service start.
 func (s *S3Store) EnsureBucket(ctx context.Context, allowedOrigins []string) error {
 	_, err := s.client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(s.bucket)})
@@ -91,7 +103,50 @@ func (s *S3Store) EnsureBucket(ctx context.Context, allowedOrigins []string) err
 	if err != nil {
 		return fmt.Errorf("memasang CORS bucket %q: %w", s.bucket, err)
 	}
+	policy, err := publicReadPolicy(s.bucket, PublicPrefix)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.PutBucketPolicy(ctx, &s3.PutBucketPolicyInput{
+		Bucket: aws.String(s.bucket),
+		Policy: aws.String(policy),
+	})
+	if err != nil {
+		return fmt.Errorf("memasang bucket policy %q: %w", s.bucket, err)
+	}
 	return nil
+}
+
+// publicReadPolicy membuat bucket policy (format IAM, sama dengan AWS S3)
+// yang mengizinkan siapa saja (Principal "*") membaca file di bawah prefix.
+// Hanya s3:GetObject: daftar isi bucket, mengunggah, dan menghapus tetap
+// butuh kunci.
+func publicReadPolicy(bucket, prefix string) (string, error) {
+	type statement struct {
+		Sid       string              `json:"Sid"`
+		Effect    string              `json:"Effect"`
+		Principal map[string][]string `json:"Principal"`
+		Action    []string            `json:"Action"`
+		Resource  []string            `json:"Resource"`
+	}
+	doc := struct {
+		Version   string      `json:"Version"`
+		Statement []statement `json:"Statement"`
+	}{
+		Version: "2012-10-17",
+		Statement: []statement{{
+			Sid:       "PublicReadHLS",
+			Effect:    "Allow",
+			Principal: map[string][]string{"AWS": {"*"}},
+			Action:    []string{"s3:GetObject"},
+			Resource:  []string{"arn:aws:s3:::" + bucket + "/" + prefix + "*"},
+		}},
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("membuat bucket policy: %w", err)
+	}
+	return string(b), nil
 }
 
 // Ping memeriksa apakah storage bisa dihubungi dan bucket-nya ada.

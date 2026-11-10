@@ -1,0 +1,32 @@
+# Pintu publik untuk file hasil transcoding (HLS dan thumbnail), lewat
+# Gateway ice-stream-gateway di port 4000:
+#   http://media.ice-stream.localhost:4000/videos/hls/<id>/master.m3u8
+#
+# Hanya folder /videos/hls/ yang diteruskan ke RustFS; alamat lain dijawab
+# 404 oleh Gateway. Di RustFS sendiri, bucket policy (dipasang VideoService)
+# juga hanya mengizinkan baca tanpa login untuk hls/*. Jadi file mentah di
+# raw/ tetap tidak bisa dibuka dari sini.
+#
+# Di production, peran ini biasanya diambil CDN (misalnya CloudFront atau
+# Cloudflare) di depan bucket.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: media
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  parentRefs:
+    - name: ice-stream-gateway
+  hostnames:
+    - media.ice-stream.localhost
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /videos/hls/
+      backendRefs:
+        - name: storage
+          port: 9000

@@ -36,7 +36,7 @@ func (s *GRPCServer) CreateUpload(ctx context.Context, req *videov1.CreateUpload
 		return nil, s.toStatus(ctx, err)
 	}
 	return &videov1.CreateUploadResponse{
-		Video:              toProtoVideo(up.Video),
+		Video:              s.toProtoVideo(up.Video),
 		UploadUrl:          up.Request.URL,
 		UploadUrlExpiresAt: timestamppb.New(up.Request.ExpiresAt),
 		UploadHeaders:      up.Request.Headers,
@@ -48,18 +48,18 @@ func (s *GRPCServer) CompleteUpload(ctx context.Context, req *videov1.CompleteUp
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	return &videov1.CompleteUploadResponse{Video: toProtoVideo(v)}, nil
+	return &videov1.CompleteUploadResponse{Video: s.toProtoVideo(v)}, nil
 }
 
 func (s *GRPCServer) GetVideo(ctx context.Context, req *videov1.GetVideoRequest) (*videov1.GetVideoResponse, error) {
-	p, err := s.svc.GetVideo(ctx, req.GetViewerId(), req.GetVideoId())
+	d, err := s.svc.GetVideo(ctx, req.GetViewerId(), req.GetVideoId())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	resp := &videov1.GetVideoResponse{Video: toProtoVideo(p.Video)}
-	if p.Request.URL != "" {
-		resp.PlaybackUrl = p.Request.URL
-		resp.PlaybackUrlExpiresAt = timestamppb.New(p.Request.ExpiresAt)
+	resp := &videov1.GetVideoResponse{Video: s.toProtoVideo(d.Video)}
+	if d.Original.URL != "" {
+		resp.OriginalUrl = d.Original.URL
+		resp.OriginalUrlExpiresAt = timestamppb.New(d.Original.ExpiresAt)
 	}
 	return resp, nil
 }
@@ -71,7 +71,7 @@ func (s *GRPCServer) ListMyVideos(ctx context.Context, req *videov1.ListMyVideos
 	}
 	resp := &videov1.ListMyVideosResponse{NextPageToken: next}
 	for _, v := range videos {
-		resp.Videos = append(resp.Videos, toProtoVideo(v))
+		resp.Videos = append(resp.Videos, s.toProtoVideo(v))
 	}
 	return resp, nil
 }
@@ -100,7 +100,9 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	}
 }
 
-func toProtoVideo(v Video) *videov1.Video {
+// toProtoVideo mengubah Video menjadi pesan gRPC. URL HLS dan thumbnail
+// hanya diisi untuk video READY.
+func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 	pv := &videov1.Video{
 		Id:          v.ID,
 		OwnerId:     v.OwnerID,
@@ -119,6 +121,10 @@ func toProtoVideo(v Video) *videov1.Video {
 	pv.FailureReason = v.FailureReason
 	if v.ProcessedAt != nil {
 		pv.ProcessedAt = timestamppb.New(*v.ProcessedAt)
+	}
+	if v.Status == StatusReady {
+		pv.HlsUrl = s.svc.MediaURL(v.PlaylistKey)
+		pv.ThumbnailUrl = s.svc.MediaURL(v.ThumbnailKey)
 	}
 	return pv
 }
