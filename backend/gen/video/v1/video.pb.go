@@ -588,9 +588,14 @@ type GetVideoResponse struct {
 	OriginalUrl          string                 `protobuf:"bytes,2,opt,name=original_url,json=originalUrl,proto3" json:"original_url,omitempty"`
 	OriginalUrlExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=original_url_expires_at,json=originalUrlExpiresAt,proto3" json:"original_url_expires_at,omitempty"`
 	// true jika viewer_id sudah like video ini. Selalu false tanpa login.
-	ViewerLiked   bool `protobuf:"varint,4,opt,name=viewer_liked,json=viewerLiked,proto3" json:"viewer_liked,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ViewerLiked bool `protobuf:"varint,4,opt,name=viewer_liked,json=viewerLiked,proto3" json:"viewer_liked,omitempty"`
+	// Detik (milidetik) tempat viewer berhenti menonton terakhir kali, untuk
+	// "lanjut menonton". 0 = putar dari awal: belum pernah ditonton, baru
+	// ditonton kurang dari 5 detik, atau sisa videonya kurang dari 10 detik.
+	// Selalu 0 tanpa login.
+	ResumePositionMs int64 `protobuf:"varint,5,opt,name=resume_position_ms,json=resumePositionMs,proto3" json:"resume_position_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetVideoResponse) Reset() {
@@ -649,6 +654,13 @@ func (x *GetVideoResponse) GetViewerLiked() bool {
 		return x.ViewerLiked
 	}
 	return false
+}
+
+func (x *GetVideoResponse) GetResumePositionMs() int64 {
+	if x != nil {
+		return x.ResumePositionMs
+	}
+	return 0
 }
 
 type ListMyVideosRequest struct {
@@ -1328,6 +1340,477 @@ func (x *UnlikeVideoResponse) GetLikeCount() int64 {
 	return 0
 }
 
+type SaveWatchProgressRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	VideoId     int64                  `protobuf:"varint,2,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	// Posisi player, milidetik dari awal video. Nilai yang melewati durasi
+	// video dipotong menjadi durasi.
+	PositionMs    int64 `protobuf:"varint,3,opt,name=position_ms,json=positionMs,proto3" json:"position_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveWatchProgressRequest) Reset() {
+	*x = SaveWatchProgressRequest{}
+	mi := &file_video_v1_video_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveWatchProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveWatchProgressRequest) ProtoMessage() {}
+
+func (x *SaveWatchProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveWatchProgressRequest.ProtoReflect.Descriptor instead.
+func (*SaveWatchProgressRequest) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SaveWatchProgressRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *SaveWatchProgressRequest) GetVideoId() int64 {
+	if x != nil {
+		return x.VideoId
+	}
+	return 0
+}
+
+func (x *SaveWatchProgressRequest) GetPositionMs() int64 {
+	if x != nil {
+		return x.PositionMs
+	}
+	return 0
+}
+
+type SaveWatchProgressResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Posisi yang benar-benar disimpan.
+	PositionMs    int64                  `protobuf:"varint,1,opt,name=position_ms,json=positionMs,proto3" json:"position_ms,omitempty"`
+	WatchedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=watched_at,json=watchedAt,proto3" json:"watched_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveWatchProgressResponse) Reset() {
+	*x = SaveWatchProgressResponse{}
+	mi := &file_video_v1_video_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveWatchProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveWatchProgressResponse) ProtoMessage() {}
+
+func (x *SaveWatchProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveWatchProgressResponse.ProtoReflect.Descriptor instead.
+func (*SaveWatchProgressResponse) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SaveWatchProgressResponse) GetPositionMs() int64 {
+	if x != nil {
+		return x.PositionMs
+	}
+	return 0
+}
+
+func (x *SaveWatchProgressResponse) GetWatchedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.WatchedAt
+	}
+	return nil
+}
+
+// WatchHistoryEntry adalah satu video di riwayat tonton.
+type WatchHistoryEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Video *Video                 `protobuf:"bytes,1,opt,name=video,proto3" json:"video,omitempty"`
+	// Detik terakhir yang ditonton (milidetik). Untuk garis progres:
+	// position_ms / video.duration_ms.
+	PositionMs int64 `protobuf:"varint,2,opt,name=position_ms,json=positionMs,proto3" json:"position_ms,omitempty"`
+	// Waktu terakhir video ini ditonton.
+	WatchedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=watched_at,json=watchedAt,proto3" json:"watched_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchHistoryEntry) Reset() {
+	*x = WatchHistoryEntry{}
+	mi := &file_video_v1_video_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchHistoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchHistoryEntry) ProtoMessage() {}
+
+func (x *WatchHistoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchHistoryEntry.ProtoReflect.Descriptor instead.
+func (*WatchHistoryEntry) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *WatchHistoryEntry) GetVideo() *Video {
+	if x != nil {
+		return x.Video
+	}
+	return nil
+}
+
+func (x *WatchHistoryEntry) GetPositionMs() int64 {
+	if x != nil {
+		return x.PositionMs
+	}
+	return 0
+}
+
+func (x *WatchHistoryEntry) GetWatchedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.WatchedAt
+	}
+	return nil
+}
+
+type ListWatchHistoryRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	// Jumlah maksimal per halaman (1 sampai 50, default 20).
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWatchHistoryRequest) Reset() {
+	*x = ListWatchHistoryRequest{}
+	mi := &file_video_v1_video_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWatchHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWatchHistoryRequest) ProtoMessage() {}
+
+func (x *ListWatchHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWatchHistoryRequest.ProtoReflect.Descriptor instead.
+func (*ListWatchHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListWatchHistoryRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *ListWatchHistoryRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListWatchHistoryRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListWatchHistoryResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Entries []*WatchHistoryEntry   `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// Kosong jika sudah halaman terakhir.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWatchHistoryResponse) Reset() {
+	*x = ListWatchHistoryResponse{}
+	mi := &file_video_v1_video_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWatchHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWatchHistoryResponse) ProtoMessage() {}
+
+func (x *ListWatchHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWatchHistoryResponse.ProtoReflect.Descriptor instead.
+func (*ListWatchHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListWatchHistoryResponse) GetEntries() []*WatchHistoryEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ListWatchHistoryResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type DeleteWatchHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	VideoId       int64                  `protobuf:"varint,2,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWatchHistoryRequest) Reset() {
+	*x = DeleteWatchHistoryRequest{}
+	mi := &file_video_v1_video_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWatchHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWatchHistoryRequest) ProtoMessage() {}
+
+func (x *DeleteWatchHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWatchHistoryRequest.ProtoReflect.Descriptor instead.
+func (*DeleteWatchHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *DeleteWatchHistoryRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *DeleteWatchHistoryRequest) GetVideoId() int64 {
+	if x != nil {
+		return x.VideoId
+	}
+	return 0
+}
+
+type DeleteWatchHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWatchHistoryResponse) Reset() {
+	*x = DeleteWatchHistoryResponse{}
+	mi := &file_video_v1_video_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWatchHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWatchHistoryResponse) ProtoMessage() {}
+
+func (x *DeleteWatchHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWatchHistoryResponse.ProtoReflect.Descriptor instead.
+func (*DeleteWatchHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{25}
+}
+
+type ClearWatchHistoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearWatchHistoryRequest) Reset() {
+	*x = ClearWatchHistoryRequest{}
+	mi := &file_video_v1_video_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearWatchHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearWatchHistoryRequest) ProtoMessage() {}
+
+func (x *ClearWatchHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearWatchHistoryRequest.ProtoReflect.Descriptor instead.
+func (*ClearWatchHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ClearWatchHistoryRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+type ClearWatchHistoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Jumlah video yang dihapus dari riwayat.
+	Deleted       int64 `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearWatchHistoryResponse) Reset() {
+	*x = ClearWatchHistoryResponse{}
+	mi := &file_video_v1_video_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearWatchHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearWatchHistoryResponse) ProtoMessage() {}
+
+func (x *ClearWatchHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearWatchHistoryResponse.ProtoReflect.Descriptor instead.
+func (*ClearWatchHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ClearWatchHistoryResponse) GetDeleted() int64 {
+	if x != nil {
+		return x.Deleted
+	}
+	return 0
+}
+
 var File_video_v1_video_proto protoreflect.FileDescriptor
 
 const file_video_v1_video_proto_rawDesc = "" +
@@ -1384,12 +1867,13 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\x05video\x18\x01 \x01(\v2\x0f.video.v1.VideoR\x05video\"I\n" +
 	"\x0fGetVideoRequest\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\x03R\avideoId\x12\x1b\n" +
-	"\tviewer_id\x18\x02 \x01(\x03R\bviewerId\"\xd2\x01\n" +
+	"\tviewer_id\x18\x02 \x01(\x03R\bviewerId\"\x80\x02\n" +
 	"\x10GetVideoResponse\x12%\n" +
 	"\x05video\x18\x01 \x01(\v2\x0f.video.v1.VideoR\x05video\x12!\n" +
 	"\foriginal_url\x18\x02 \x01(\tR\voriginalUrl\x12Q\n" +
 	"\x17original_url_expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x14originalUrlExpiresAt\x12!\n" +
-	"\fviewer_liked\x18\x04 \x01(\bR\vviewerLiked\"t\n" +
+	"\fviewer_liked\x18\x04 \x01(\bR\vviewerLiked\x12,\n" +
+	"\x12resume_position_ms\x18\x05 \x01(\x03R\x10resumePositionMs\"t\n" +
 	"\x13ListMyVideosRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -1436,14 +1920,46 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\x13UnlikeVideoResponse\x12\x14\n" +
 	"\x05liked\x18\x01 \x01(\bR\x05liked\x12\x1d\n" +
 	"\n" +
-	"like_count\x18\x02 \x01(\x03R\tlikeCount*\xb5\x01\n" +
+	"like_count\x18\x02 \x01(\x03R\tlikeCount\"y\n" +
+	"\x18SaveWatchProgressRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x19\n" +
+	"\bvideo_id\x18\x02 \x01(\x03R\avideoId\x12\x1f\n" +
+	"\vposition_ms\x18\x03 \x01(\x03R\n" +
+	"positionMs\"w\n" +
+	"\x19SaveWatchProgressResponse\x12\x1f\n" +
+	"\vposition_ms\x18\x01 \x01(\x03R\n" +
+	"positionMs\x129\n" +
+	"\n" +
+	"watched_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\twatchedAt\"\x96\x01\n" +
+	"\x11WatchHistoryEntry\x12%\n" +
+	"\x05video\x18\x01 \x01(\v2\x0f.video.v1.VideoR\x05video\x12\x1f\n" +
+	"\vposition_ms\x18\x02 \x01(\x03R\n" +
+	"positionMs\x129\n" +
+	"\n" +
+	"watched_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\twatchedAt\"x\n" +
+	"\x17ListWatchHistoryRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"y\n" +
+	"\x18ListWatchHistoryResponse\x125\n" +
+	"\aentries\x18\x01 \x03(\v2\x1b.video.v1.WatchHistoryEntryR\aentries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"Y\n" +
+	"\x19DeleteWatchHistoryRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x19\n" +
+	"\bvideo_id\x18\x02 \x01(\x03R\avideoId\"\x1c\n" +
+	"\x1aDeleteWatchHistoryResponse\"=\n" +
+	"\x18ClearWatchHistoryRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\"5\n" +
+	"\x19ClearWatchHistoryResponse\x12\x18\n" +
+	"\adeleted\x18\x01 \x01(\x03R\adeleted*\xb5\x01\n" +
 	"\vVideoStatus\x12\x1c\n" +
 	"\x18VIDEO_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bVIDEO_STATUS_PENDING_UPLOAD\x10\x01\x12\x19\n" +
 	"\x15VIDEO_STATUS_UPLOADED\x10\x02\x12\x1b\n" +
 	"\x17VIDEO_STATUS_PROCESSING\x10\x03\x12\x16\n" +
 	"\x12VIDEO_STATUS_READY\x10\x04\x12\x17\n" +
-	"\x13VIDEO_STATUS_FAILED\x10\x052\xb7\x05\n" +
+	"\x13VIDEO_STATUS_FAILED\x10\x052\xaf\b\n" +
 	"\fVideoService\x12M\n" +
 	"\fCreateUpload\x12\x1d.video.v1.CreateUploadRequest\x1a\x1e.video.v1.CreateUploadResponse\x12S\n" +
 	"\x0eCompleteUpload\x12\x1f.video.v1.CompleteUploadRequest\x1a .video.v1.CompleteUploadResponse\x12A\n" +
@@ -1455,7 +1971,11 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"RecordView\x12\x1b.video.v1.RecordViewRequest\x1a\x1c.video.v1.RecordViewResponse\x12D\n" +
 	"\tLikeVideo\x12\x1a.video.v1.LikeVideoRequest\x1a\x1b.video.v1.LikeVideoResponse\x12J\n" +
 	"\vUnlikeVideo\x12\x1c.video.v1.UnlikeVideoRequest\x1a\x1d.video.v1.UnlikeVideoResponse\x12M\n" +
-	"\fSearchVideos\x12\x1d.video.v1.SearchVideosRequest\x1a\x1e.video.v1.SearchVideosResponseB\xa2\x01\n" +
+	"\fSearchVideos\x12\x1d.video.v1.SearchVideosRequest\x1a\x1e.video.v1.SearchVideosResponse\x12\\\n" +
+	"\x11SaveWatchProgress\x12\".video.v1.SaveWatchProgressRequest\x1a#.video.v1.SaveWatchProgressResponse\x12Y\n" +
+	"\x10ListWatchHistory\x12!.video.v1.ListWatchHistoryRequest\x1a\".video.v1.ListWatchHistoryResponse\x12_\n" +
+	"\x12DeleteWatchHistory\x12#.video.v1.DeleteWatchHistoryRequest\x1a$.video.v1.DeleteWatchHistoryResponse\x12\\\n" +
+	"\x11ClearWatchHistory\x12\".video.v1.ClearWatchHistoryRequest\x1a#.video.v1.ClearWatchHistoryResponseB\xa2\x01\n" +
 	"\fcom.video.v1B\n" +
 	"VideoProtoP\x01ZEgithub.com/farhantaufikrahman/ice-stream/backend/gen/video/v1;videov1\xa2\x02\x03VXX\xaa\x02\bVideo.V1\xca\x02\bVideo\\V1\xe2\x02\x14Video\\V1\\GPBMetadata\xea\x02\tVideo::V1b\x06proto3"
 
@@ -1472,68 +1992,89 @@ func file_video_v1_video_proto_rawDescGZIP() []byte {
 }
 
 var file_video_v1_video_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_video_v1_video_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_video_v1_video_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_video_v1_video_proto_goTypes = []any{
-	(VideoStatus)(0),               // 0: video.v1.VideoStatus
-	(*Video)(nil),                  // 1: video.v1.Video
-	(*CreateUploadRequest)(nil),    // 2: video.v1.CreateUploadRequest
-	(*CreateUploadResponse)(nil),   // 3: video.v1.CreateUploadResponse
-	(*CompleteUploadRequest)(nil),  // 4: video.v1.CompleteUploadRequest
-	(*CompleteUploadResponse)(nil), // 5: video.v1.CompleteUploadResponse
-	(*GetVideoRequest)(nil),        // 6: video.v1.GetVideoRequest
-	(*GetVideoResponse)(nil),       // 7: video.v1.GetVideoResponse
-	(*ListMyVideosRequest)(nil),    // 8: video.v1.ListMyVideosRequest
-	(*ListMyVideosResponse)(nil),   // 9: video.v1.ListMyVideosResponse
-	(*ListVideosRequest)(nil),      // 10: video.v1.ListVideosRequest
-	(*ListVideosResponse)(nil),     // 11: video.v1.ListVideosResponse
-	(*SearchVideosRequest)(nil),    // 12: video.v1.SearchVideosRequest
-	(*SearchVideosResponse)(nil),   // 13: video.v1.SearchVideosResponse
-	(*RecordViewRequest)(nil),      // 14: video.v1.RecordViewRequest
-	(*RecordViewResponse)(nil),     // 15: video.v1.RecordViewResponse
-	(*LikeVideoRequest)(nil),       // 16: video.v1.LikeVideoRequest
-	(*LikeVideoResponse)(nil),      // 17: video.v1.LikeVideoResponse
-	(*UnlikeVideoRequest)(nil),     // 18: video.v1.UnlikeVideoRequest
-	(*UnlikeVideoResponse)(nil),    // 19: video.v1.UnlikeVideoResponse
-	nil,                            // 20: video.v1.CreateUploadResponse.UploadHeadersEntry
-	(*timestamppb.Timestamp)(nil),  // 21: google.protobuf.Timestamp
+	(VideoStatus)(0),                   // 0: video.v1.VideoStatus
+	(*Video)(nil),                      // 1: video.v1.Video
+	(*CreateUploadRequest)(nil),        // 2: video.v1.CreateUploadRequest
+	(*CreateUploadResponse)(nil),       // 3: video.v1.CreateUploadResponse
+	(*CompleteUploadRequest)(nil),      // 4: video.v1.CompleteUploadRequest
+	(*CompleteUploadResponse)(nil),     // 5: video.v1.CompleteUploadResponse
+	(*GetVideoRequest)(nil),            // 6: video.v1.GetVideoRequest
+	(*GetVideoResponse)(nil),           // 7: video.v1.GetVideoResponse
+	(*ListMyVideosRequest)(nil),        // 8: video.v1.ListMyVideosRequest
+	(*ListMyVideosResponse)(nil),       // 9: video.v1.ListMyVideosResponse
+	(*ListVideosRequest)(nil),          // 10: video.v1.ListVideosRequest
+	(*ListVideosResponse)(nil),         // 11: video.v1.ListVideosResponse
+	(*SearchVideosRequest)(nil),        // 12: video.v1.SearchVideosRequest
+	(*SearchVideosResponse)(nil),       // 13: video.v1.SearchVideosResponse
+	(*RecordViewRequest)(nil),          // 14: video.v1.RecordViewRequest
+	(*RecordViewResponse)(nil),         // 15: video.v1.RecordViewResponse
+	(*LikeVideoRequest)(nil),           // 16: video.v1.LikeVideoRequest
+	(*LikeVideoResponse)(nil),          // 17: video.v1.LikeVideoResponse
+	(*UnlikeVideoRequest)(nil),         // 18: video.v1.UnlikeVideoRequest
+	(*UnlikeVideoResponse)(nil),        // 19: video.v1.UnlikeVideoResponse
+	(*SaveWatchProgressRequest)(nil),   // 20: video.v1.SaveWatchProgressRequest
+	(*SaveWatchProgressResponse)(nil),  // 21: video.v1.SaveWatchProgressResponse
+	(*WatchHistoryEntry)(nil),          // 22: video.v1.WatchHistoryEntry
+	(*ListWatchHistoryRequest)(nil),    // 23: video.v1.ListWatchHistoryRequest
+	(*ListWatchHistoryResponse)(nil),   // 24: video.v1.ListWatchHistoryResponse
+	(*DeleteWatchHistoryRequest)(nil),  // 25: video.v1.DeleteWatchHistoryRequest
+	(*DeleteWatchHistoryResponse)(nil), // 26: video.v1.DeleteWatchHistoryResponse
+	(*ClearWatchHistoryRequest)(nil),   // 27: video.v1.ClearWatchHistoryRequest
+	(*ClearWatchHistoryResponse)(nil),  // 28: video.v1.ClearWatchHistoryResponse
+	nil,                                // 29: video.v1.CreateUploadResponse.UploadHeadersEntry
+	(*timestamppb.Timestamp)(nil),      // 30: google.protobuf.Timestamp
 }
 var file_video_v1_video_proto_depIdxs = []int32{
 	0,  // 0: video.v1.Video.status:type_name -> video.v1.VideoStatus
-	21, // 1: video.v1.Video.created_at:type_name -> google.protobuf.Timestamp
-	21, // 2: video.v1.Video.uploaded_at:type_name -> google.protobuf.Timestamp
-	21, // 3: video.v1.Video.processed_at:type_name -> google.protobuf.Timestamp
+	30, // 1: video.v1.Video.created_at:type_name -> google.protobuf.Timestamp
+	30, // 2: video.v1.Video.uploaded_at:type_name -> google.protobuf.Timestamp
+	30, // 3: video.v1.Video.processed_at:type_name -> google.protobuf.Timestamp
 	1,  // 4: video.v1.CreateUploadResponse.video:type_name -> video.v1.Video
-	21, // 5: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
-	20, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
+	30, // 5: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
+	29, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
 	1,  // 7: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
 	1,  // 8: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
-	21, // 9: video.v1.GetVideoResponse.original_url_expires_at:type_name -> google.protobuf.Timestamp
+	30, // 9: video.v1.GetVideoResponse.original_url_expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 10: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
 	1,  // 11: video.v1.ListVideosResponse.videos:type_name -> video.v1.Video
 	1,  // 12: video.v1.SearchVideosResponse.videos:type_name -> video.v1.Video
-	2,  // 13: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
-	4,  // 14: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
-	6,  // 15: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
-	8,  // 16: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
-	10, // 17: video.v1.VideoService.ListVideos:input_type -> video.v1.ListVideosRequest
-	14, // 18: video.v1.VideoService.RecordView:input_type -> video.v1.RecordViewRequest
-	16, // 19: video.v1.VideoService.LikeVideo:input_type -> video.v1.LikeVideoRequest
-	18, // 20: video.v1.VideoService.UnlikeVideo:input_type -> video.v1.UnlikeVideoRequest
-	12, // 21: video.v1.VideoService.SearchVideos:input_type -> video.v1.SearchVideosRequest
-	3,  // 22: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
-	5,  // 23: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
-	7,  // 24: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
-	9,  // 25: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
-	11, // 26: video.v1.VideoService.ListVideos:output_type -> video.v1.ListVideosResponse
-	15, // 27: video.v1.VideoService.RecordView:output_type -> video.v1.RecordViewResponse
-	17, // 28: video.v1.VideoService.LikeVideo:output_type -> video.v1.LikeVideoResponse
-	19, // 29: video.v1.VideoService.UnlikeVideo:output_type -> video.v1.UnlikeVideoResponse
-	13, // 30: video.v1.VideoService.SearchVideos:output_type -> video.v1.SearchVideosResponse
-	22, // [22:31] is the sub-list for method output_type
-	13, // [13:22] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	30, // 13: video.v1.SaveWatchProgressResponse.watched_at:type_name -> google.protobuf.Timestamp
+	1,  // 14: video.v1.WatchHistoryEntry.video:type_name -> video.v1.Video
+	30, // 15: video.v1.WatchHistoryEntry.watched_at:type_name -> google.protobuf.Timestamp
+	22, // 16: video.v1.ListWatchHistoryResponse.entries:type_name -> video.v1.WatchHistoryEntry
+	2,  // 17: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
+	4,  // 18: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
+	6,  // 19: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
+	8,  // 20: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
+	10, // 21: video.v1.VideoService.ListVideos:input_type -> video.v1.ListVideosRequest
+	14, // 22: video.v1.VideoService.RecordView:input_type -> video.v1.RecordViewRequest
+	16, // 23: video.v1.VideoService.LikeVideo:input_type -> video.v1.LikeVideoRequest
+	18, // 24: video.v1.VideoService.UnlikeVideo:input_type -> video.v1.UnlikeVideoRequest
+	12, // 25: video.v1.VideoService.SearchVideos:input_type -> video.v1.SearchVideosRequest
+	20, // 26: video.v1.VideoService.SaveWatchProgress:input_type -> video.v1.SaveWatchProgressRequest
+	23, // 27: video.v1.VideoService.ListWatchHistory:input_type -> video.v1.ListWatchHistoryRequest
+	25, // 28: video.v1.VideoService.DeleteWatchHistory:input_type -> video.v1.DeleteWatchHistoryRequest
+	27, // 29: video.v1.VideoService.ClearWatchHistory:input_type -> video.v1.ClearWatchHistoryRequest
+	3,  // 30: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
+	5,  // 31: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
+	7,  // 32: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
+	9,  // 33: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
+	11, // 34: video.v1.VideoService.ListVideos:output_type -> video.v1.ListVideosResponse
+	15, // 35: video.v1.VideoService.RecordView:output_type -> video.v1.RecordViewResponse
+	17, // 36: video.v1.VideoService.LikeVideo:output_type -> video.v1.LikeVideoResponse
+	19, // 37: video.v1.VideoService.UnlikeVideo:output_type -> video.v1.UnlikeVideoResponse
+	13, // 38: video.v1.VideoService.SearchVideos:output_type -> video.v1.SearchVideosResponse
+	21, // 39: video.v1.VideoService.SaveWatchProgress:output_type -> video.v1.SaveWatchProgressResponse
+	24, // 40: video.v1.VideoService.ListWatchHistory:output_type -> video.v1.ListWatchHistoryResponse
+	26, // 41: video.v1.VideoService.DeleteWatchHistory:output_type -> video.v1.DeleteWatchHistoryResponse
+	28, // 42: video.v1.VideoService.ClearWatchHistory:output_type -> video.v1.ClearWatchHistoryResponse
+	30, // [30:43] is the sub-list for method output_type
+	17, // [17:30] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_video_v1_video_proto_init() }
@@ -1547,7 +2088,7 @@ func file_video_v1_video_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_video_v1_video_proto_rawDesc), len(file_video_v1_video_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   20,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -61,6 +61,20 @@ type Repository interface {
 	// Mengembalikan false (tanpa error) jika video itu ternyata sudah
 	// diindeks, misalnya oleh pod VideoService lain.
 	SaveSearchTerms(ctx context.Context, videoID int64, terms []SearchTerm, now time.Time) (bool, error)
+	// SaveProgress menyimpan posisi tonton userID untuk videoID: membuat
+	// entri riwayat baru, atau memperbarui yang sudah ada.
+	SaveProgress(ctx context.Context, userID, videoID, positionMs int64, now time.Time) error
+	// GetProgress mengembalikan posisi tonton terakhir userID untuk
+	// videoID. found = false jika video itu belum pernah ditonton.
+	GetProgress(ctx context.Context, userID, videoID int64) (positionMs int64, found bool, err error)
+	// ListHistory mengambil riwayat userID untuk video READY, watched_at
+	// lalu video_id terbesar lebih dulu, hanya yang posisinya setelah after
+	// (nil = dari awal).
+	ListHistory(ctx context.Context, userID int64, after *HistoryCursor, limit int) ([]HistoryEntry, error)
+	// DeleteHistory menghapus entri riwayat userID untuk videoID, atau
+	// semua entri userID jika videoID = 0. Mengembalikan jumlah baris yang
+	// dihapus.
+	DeleteHistory(ctx context.Context, userID, videoID int64) (int64, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -321,6 +335,9 @@ type VideoDetail struct {
 	Original PresignedRequest
 	// ViewerLiked bernilai true jika viewer sudah like video ini.
 	ViewerLiked bool
+	// ResumePositionMs adalah detik (milidetik) tempat viewer berhenti
+	// menonton terakhir kali (lihat ResumePosition). 0 = mulai dari awal.
+	ResumePositionMs int64
 }
 
 // GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
@@ -342,6 +359,13 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 	if viewerID != 0 && v.Status == StatusReady {
 		if d.ViewerLiked, err = s.repo.IsLiked(ctx, v.ID, viewerID); err != nil {
 			return VideoDetail{}, err
+		}
+		pos, found, err := s.repo.GetProgress(ctx, viewerID, v.ID)
+		if err != nil {
+			return VideoDetail{}, err
+		}
+		if found {
+			d.ResumePositionMs = ResumePosition(pos, v.DurationMs)
 		}
 	}
 	if !isOwner || v.Status == StatusPendingUpload {

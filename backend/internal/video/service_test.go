@@ -25,10 +25,12 @@ type fakeRepo struct {
 	// terms[videoID] = kata pencarian; video yang tidak ada di map ini
 	// belum diindeks.
 	terms map[int64][]SearchTerm
+	// history[userID][videoID] = entri riwayat (Video hanya berisi ID).
+	history map[int64]map[int64]HistoryEntry
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}}
+	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}, history: map[int64]map[int64]HistoryEntry{}}
 }
 
 func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {

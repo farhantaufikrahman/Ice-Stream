@@ -116,6 +116,10 @@ type getVideoResponse struct {
 	// user ini sudah like. Tanpa login field ini tidak dikirim, supaya
 	// frontend bisa membedakan "belum like" dan "belum login".
 	ViewerLiked *bool `json:"viewer_liked,omitempty"`
+	// ResumePositionMs hanya ada jika request membawa access token: detik
+	// (milidetik) untuk melanjutkan video, 0 = putar dari awal. Di browser:
+	// video.currentTime = resume_position_ms / 1000.
+	ResumePositionMs *int64 `json:"resume_position_ms,omitempty"`
 }
 
 // likeResponse adalah jawaban PUT dan DELETE /videos/:id/like.
@@ -196,6 +200,8 @@ func (h *videoHandler) get(c *gin.Context) {
 	if viewerID != 0 {
 		liked := resp.GetViewerLiked()
 		body.ViewerLiked = &liked
+		resume := resp.GetResumePositionMs()
+		body.ResumePositionMs = &resume
 	}
 	owners := lookupOwners(c.Request.Context(), h.users, h.logger, []*videov1.Video{resp.GetVideo()})
 	body.Video.Owner = owners[resp.GetVideo().GetOwnerId()]

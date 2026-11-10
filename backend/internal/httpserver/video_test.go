@@ -36,6 +36,10 @@ type fakeVideoClient struct {
 	lastLike     *videov1.LikeVideoRequest
 	lastUnlike   *videov1.UnlikeVideoRequest
 	lastSearch   *videov1.SearchVideosRequest
+	lastProgress *videov1.SaveWatchProgressRequest
+	lastHistory  *videov1.ListWatchHistoryRequest
+	lastDelete   *videov1.DeleteWatchHistoryRequest
+	lastClear    *videov1.ClearWatchHistoryRequest
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
@@ -95,6 +99,10 @@ func (f *fakeVideoClient) GetVideo(_ context.Context, in *videov1.GetVideoReques
 		status = f.getStatus
 	}
 	resp := &videov1.GetVideoResponse{Video: testVideo(status)}
+	// User 8 pernah menonton video ini sampai detik 93,5.
+	if in.GetViewerId() == 8 {
+		resp.ResumePositionMs = 93500
+	}
 	// Seperti VideoService: file asli hanya untuk pemilik (user 7).
 	if in.GetViewerId() == 7 {
 		resp.OriginalUrl = "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"
