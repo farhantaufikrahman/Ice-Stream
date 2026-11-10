@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
@@ -33,6 +34,9 @@ type Deps struct {
 	Videos videov1.VideoServiceClient
 	// Users adalah klien gRPC ke UserService (berjalan di proses AuthService).
 	Users userv1.UserServiceClient
+	// Comments adalah klien gRPC ke CommentService (berjalan di proses
+	// VideoService).
+	Comments commentv1.CommentServiceClient
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
 }
@@ -84,6 +88,12 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
 	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
+
+	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
+	videoGroup.GET("/:id/comments", comments.list)
+	videoGroup.POST("/:id/comments", requireAuth, comments.create)
+	videoGroup.GET("/:id/comments/:commentId/replies", comments.listReplies)
+	videoGroup.DELETE("/:id/comments/:commentId", requireAuth, comments.remove)
 
 	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
 	v1.GET("/users/:username", users.getByUsername)

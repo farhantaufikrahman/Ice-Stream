@@ -18,6 +18,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
@@ -75,7 +76,9 @@ func run(logger *slog.Logger) error {
 		Auth:   authv1.NewAuthServiceClient(authConn),
 		Videos: videov1.NewVideoServiceClient(videoConn),
 		// UserService berjalan di proses AuthService, jadi memakai koneksi yang sama.
-		Users:    userv1.NewUserServiceClient(authConn),
+		Users: userv1.NewUserServiceClient(authConn),
+		// CommentService berjalan di proses VideoService, jadi memakai koneksi video.
+		Comments: commentv1.NewCommentServiceClient(videoConn),
 		Verifier: accesstoken.NewVerifier(publicKey),
 	})
 	if err != nil {

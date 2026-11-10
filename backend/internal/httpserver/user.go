@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -220,18 +221,28 @@ func (h *userHandler) removeAvatar(c *gin.Context) {
 // Info pemilik hanya pelengkap: kalau UserService lambat atau mati, hasilnya
 // kosong dan feed tetap tampil (frontend menampilkan nama default).
 func lookupOwners(ctx context.Context, users userv1.UserServiceClient, logger *slog.Logger, videos []*videov1.Video) map[int64]*ownerResponse {
-	if users == nil || len(videos) == 0 {
-		return nil
-	}
 	ids := make([]int64, 0, len(videos))
 	for _, v := range videos {
 		ids = append(ids, v.GetOwnerId())
 	}
+	return lookupProfiles(ctx, users, logger, ids)
+}
+
+// lookupProfiles mengambil ringkasan profil untuk sekumpulan id user
+// (pemilik video, penulis komentar) dengan satu panggilan BatchGetProfiles.
+// Id yang sama cukup dikirim sekali; UserService juga membuang duplikat,
+// tapi request yang lebih kecil lebih hemat. Hasilnya nil jika UserService
+// gagal menjawab.
+func lookupProfiles(ctx context.Context, users userv1.UserServiceClient, logger *slog.Logger, ids []int64) map[int64]*ownerResponse {
+	if users == nil || len(ids) == 0 {
+		return nil
+	}
+	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
 	ctx, cancel := context.WithTimeout(ctx, ownerLookupTimeout)
 	defer cancel()
 	resp, err := users.BatchGetProfiles(ctx, &userv1.BatchGetProfilesRequest{UserIds: ids})
 	if err != nil {
-		logger.WarnContext(ctx, "gagal mengambil info pemilik video", slog.Any("error", err))
+		logger.WarnContext(ctx, "gagal mengambil info profil", slog.Any("error", err))
 		return nil
 	}
 	owners := make(map[int64]*ownerResponse, len(resp.GetProfiles()))

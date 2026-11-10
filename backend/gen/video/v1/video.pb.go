@@ -116,7 +116,9 @@ type Video struct {
 	// status READY.
 	ThumbnailUrl string `protobuf:"bytes,15,opt,name=thumbnail_url,json=thumbnailUrl,proto3" json:"thumbnail_url,omitempty"`
 	// Jumlah views (lihat RecordView).
-	ViewCount     int64 `protobuf:"varint,16,opt,name=view_count,json=viewCount,proto3" json:"view_count,omitempty"`
+	ViewCount int64 `protobuf:"varint,16,opt,name=view_count,json=viewCount,proto3" json:"view_count,omitempty"`
+	// Jumlah komentar dan balasan yang belum dihapus (langkah 9).
+	CommentCount  int64 `protobuf:"varint,17,opt,name=comment_count,json=commentCount,proto3" json:"comment_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -259,6 +261,13 @@ func (x *Video) GetThumbnailUrl() string {
 func (x *Video) GetViewCount() int64 {
 	if x != nil {
 		return x.ViewCount
+	}
+	return 0
+}
+
+func (x *Video) GetCommentCount() int64 {
+	if x != nil {
+		return x.CommentCount
 	}
 	return 0
 }
@@ -968,7 +977,7 @@ var File_video_v1_video_proto protoreflect.FileDescriptor
 
 const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
-	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\x04\n" +
+	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfc\x04\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\x03R\aownerId\x12\x14\n" +
@@ -993,7 +1002,8 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\ahls_url\x18\x0e \x01(\tR\x06hlsUrl\x12#\n" +
 	"\rthumbnail_url\x18\x0f \x01(\tR\fthumbnailUrl\x12\x1d\n" +
 	"\n" +
-	"view_count\x18\x10 \x01(\x03R\tviewCount\"\xb2\x01\n" +
+	"view_count\x18\x10 \x01(\x03R\tviewCount\x12#\n" +
+	"\rcomment_count\x18\x11 \x01(\x03R\fcommentCount\"\xb2\x01\n" +
 	"\x13CreateUploadRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +

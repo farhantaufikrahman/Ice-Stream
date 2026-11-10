@@ -17,7 +17,9 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
+	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/comment"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
@@ -102,6 +104,10 @@ func run(logger *slog.Logger) error {
 
 	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger)))
 	videov1.RegisterVideoServiceServer(srv, video.NewGRPCServer(svc, logger))
+	// CommentService berjalan di proses yang sama (port 50052) dan memakai
+	// koneksi Oracle yang sama, karena tabel comments ada di schema VIDEO_SVC.
+	comments := comment.NewService(comment.NewOracleRepository(db))
+	commentv1.RegisterCommentServiceServer(srv, comment.NewGRPCServer(comments, logger))
 
 	healthSrv := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthSrv)

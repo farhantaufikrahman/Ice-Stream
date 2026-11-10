@@ -75,6 +75,8 @@ message Video {
   string thumbnail_url = 15;
   // Jumlah views (lihat RecordView).
   int64 view_count = 16;
+  // Jumlah komentar dan balasan yang belum dihapus (langkah 9).
+  int64 comment_count = 17;
 }
 
 message CreateUploadRequest {
