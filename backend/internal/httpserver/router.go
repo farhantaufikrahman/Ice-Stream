@@ -75,9 +75,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videos := &videoHandler{client: deps.Videos, logger: logger}
 	requireAuth := RequireAuth(deps.Verifier)
 	videoGroup := v1.Group("/videos", limitBody(maxVideoBodyBytes))
+	videoGroup.GET("", videos.list)
 	videoGroup.POST("", requireAuth, videos.create)
 	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
+	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 
 	return r, nil

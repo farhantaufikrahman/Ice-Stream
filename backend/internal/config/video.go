@@ -31,6 +31,9 @@ type VideoConfig struct {
 	UploadURLTTL time.Duration
 	// PlaybackURLTTL adalah umur URL presigned untuk memutar video.
 	PlaybackURLTTL time.Duration
+	// ViewDedupWindow adalah jarak waktu minimal agar penonton yang sama
+	// dihitung sebagai view baru untuk video yang sama.
+	ViewDedupWindow time.Duration
 }
 
 // StorageConfig berisi pengaturan object storage yang kompatibel S3
@@ -73,6 +76,10 @@ func LoadVideo() (VideoConfig, error) {
 	if err != nil {
 		return VideoConfig{}, err
 	}
+	viewWindow, err := getDuration("VIEW_DEDUP_WINDOW", 30*time.Minute)
+	if err != nil {
+		return VideoConfig{}, err
+	}
 	maxUploadMB, err := getInt("MAX_UPLOAD_MB", 2048)
 	if err != nil {
 		return VideoConfig{}, err
@@ -103,11 +110,12 @@ func LoadVideo() (VideoConfig, error) {
 			Bucket:             bucket,
 			CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		},
-		NATSURL:        getString("NATS_URL", "nats://localhost:4222"),
-		MediaPublicURL: mediaURL,
-		MaxUploadBytes: int64(maxUploadMB) << 20,
-		UploadURLTTL:   uploadTTL,
-		PlaybackURLTTL: playbackTTL,
+		NATSURL:         getString("NATS_URL", "nats://localhost:4222"),
+		MediaPublicURL:  mediaURL,
+		MaxUploadBytes:  int64(maxUploadMB) << 20,
+		UploadURLTTL:    uploadTTL,
+		PlaybackURLTTL:  playbackTTL,
+		ViewDedupWindow: viewWindow,
 	}
 	if err := cfg.validate(); err != nil {
 		return VideoConfig{}, err
@@ -133,6 +141,9 @@ func (c VideoConfig) validate() error {
 	}
 	if c.PlaybackURLTTL < time.Minute || c.PlaybackURLTTL > 7*24*time.Hour {
 		return fmt.Errorf("PLAYBACK_URL_TTL harus antara 1m dan 168h, dapat %s", c.PlaybackURLTTL)
+	}
+	if c.ViewDedupWindow < time.Minute || c.ViewDedupWindow > 24*time.Hour {
+		return fmt.Errorf("VIEW_DEDUP_WINDOW harus antara 1m dan 24h, dapat %s", c.ViewDedupWindow)
 	}
 	if err := c.Storage.validate(); err != nil {
 		return err

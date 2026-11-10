@@ -33,6 +33,9 @@ var (
 	// ErrEventsUnavailable: event ke transcoder gagal dikirim (NATS tidak
 	// bisa dihubungi). Client boleh mencoba CompleteUpload lagi.
 	ErrEventsUnavailable = errors.New("antrean transcoding sedang tidak tersedia, coba lagi")
+	// ErrViewsUnavailable: penyimpanan anti-dobel views (NATS) tidak bisa
+	// dihubungi. View tidak dihitung; client boleh mengabaikannya.
+	ErrViewsUnavailable = errors.New("pencatatan views sedang tidak tersedia")
 )
 
 // Video adalah satu baris di tabel videos.
@@ -55,8 +58,11 @@ type Video struct {
 	Renditions   []string
 	// FailureReason terisi jika status FAILED.
 	FailureReason string
-	// ProcessedAt adalah waktu status menjadi READY atau FAILED.
+	// ProcessedAt adalah waktu status menjadi READY atau FAILED. Untuk
+	// video READY, ini juga waktu video tampil di feed publik.
 	ProcessedAt *time.Time
+	// ViewCount adalah jumlah views (lihat Service.RecordView).
+	ViewCount int64
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
@@ -65,6 +71,14 @@ type TranscodeResult struct {
 	ThumbnailKey string
 	DurationMs   int64
 	Renditions   []string
+}
+
+// FeedCursor menandai posisi terakhir di feed publik (keyset pagination).
+// Feed diurutkan processed_at lalu id, keduanya dari besar ke kecil, jadi
+// halaman berikutnya dimulai dari video yang "lebih kecil" dari cursor ini.
+type FeedCursor struct {
+	ProcessedAt time.Time
+	ID          int64
 }
 
 // NewVideo adalah data untuk mencatat video baru.

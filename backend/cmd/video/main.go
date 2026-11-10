@@ -78,7 +78,15 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	svc := video.NewService(video.NewOracleRepository(db), store, video.NewNATSPublisher(js), video.Options{
+	// Bucket Key-Value untuk anti-dobel views, juga dibuat di sini.
+	setupCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	views, err := video.NewNATSViewDeduper(setupCtx, js, cfg.ViewDedupWindow)
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	svc := video.NewService(video.NewOracleRepository(db), store, video.NewNATSPublisher(js), views, video.Options{
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		UploadURLTTL:   cfg.UploadURLTTL,
 		PlaybackURLTTL: cfg.PlaybackURLTTL,
@@ -111,6 +119,7 @@ func run(logger *slog.Logger) error {
 		slog.String("env", cfg.Env),
 		slog.String("bucket", cfg.Storage.Bucket),
 		slog.String("media_url", cfg.MediaPublicURL),
+		slog.String("view_dedup_window", cfg.ViewDedupWindow.String()),
 	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }
