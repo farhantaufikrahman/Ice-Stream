@@ -1,4 +1,4 @@
-package video
+package s3client
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestPublicReadPolicy(t *testing.T) {
-	policy, err := publicReadPolicy("videos", PublicPrefix)
+	policy, err := PublicReadPolicy("videos", "hls/")
 	require.NoError(t, err)
 
 	var doc struct {
@@ -26,5 +26,5 @@ func TestPublicReadPolicy(t *testing.T) {
 	assert.Equal(t, "Allow", st.Effect)
 	assert.Equal(t, []string{"*"}, st.Principal["AWS"])
 	assert.Equal(t, []string{"s3:GetObject"}, st.Action, "hanya membaca, tidak bisa daftar isi/unggah/hapus")
-	assert.Equal(t, []string{"arn:aws:s3:::videos/hls/*"}, st.Resource, "folder raw/ tetap privat")
+	assert.Equal(t, []string{"arn:aws:s3:::videos/hls/*"}, st.Resource, "folder lain di bucket tetap privat")
 }

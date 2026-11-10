@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+// Kontrak gRPC UserService: profil dan channel user. Berjalan di proses yang
+// sama dengan AuthService (cmd/auth) dan memakai tabel users yang sama,
+// tapi kontraknya terpisah supaya nanti bisa dipindah ke service sendiri
+// tanpa mengubah gateway. Hanya dipanggil oleh API gateway; id user di
+// requester_id/viewer_id sudah diverifikasi gateway dari access token.
+package user.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service UserService {
+  // GetProfile mengambil profil satu user berdasarkan user_id atau
+  // username. Email hanya diisi jika viewer_id sama dengan user tersebut.
+  // Error NOT_FOUND jika user tidak ada atau diblokir (kecuali dirinya
+  // sendiri yang melihat).
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  // BatchGetProfiles mengambil banyak profil sekaligus, misalnya pemilik
+  // video di satu halaman feed. Id yang tidak ada dilewati (bukan error).
+  // Maksimal 100 id per panggilan.
+  rpc BatchGetProfiles(BatchGetProfilesRequest) returns (BatchGetProfilesResponse);
+  // UpdateProfile mengubah nama tampilan dan/atau bio milik requester.
+  // Field yang tidak dikirim tidak diubah.
+  // Error INVALID_ARGUMENT jika nilainya tidak valid.
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+  // UploadAvatar menyimpan foto profil baru. Gambar dipotong menjadi
+  // persegi di tengah, diperkecil ke 256x256, dan disimpan ulang sebagai
+  // JPEG (metadata seperti lokasi GPS ikut terbuang).
+  // Error INVALID_ARGUMENT jika bukan gambar JPEG/PNG/WebP, lebih dari 2 MiB,
+  // atau ukurannya di luar batas.
+  rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+  // RemoveAvatar menghapus foto profil requester.
+  rpc RemoveAvatar(RemoveAvatarRequest) returns (RemoveAvatarResponse);
+}
+
+message Profile {
+  int64 id = 1;
+  string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  // URL publik foto profil (JPEG 256x256). Kosong jika belum ada.
+  string avatar_url = 5;
+  google.protobuf.Timestamp created_at = 6;
+  // Hanya diisi untuk pemilik profil (lihat GetProfile).
+  string email = 7;
+}
+
+message GetProfileRequest {
+  // Isi salah satu.
+  oneof user {
+    int64 user_id = 1;
+    string username = 2;
+  }
+  // 0 berarti pengunjung belum login.
+  int64 viewer_id = 3;
+}
+
+message GetProfileResponse {
+  Profile profile = 1;
+}
+
+message BatchGetProfilesRequest {
+  repeated int64 user_ids = 1;
+}
+
+message BatchGetProfilesResponse {
+  // Urutan tidak dijamin sama dengan user_ids. Tidak pernah berisi email.
+  repeated Profile profiles = 1;
+}
+
+message UpdateProfileRequest {
+  int64 requester_id = 1;
+  // "optional" membuat kita bisa membedakan "tidak dikirim" (jangan ubah)
+  // dari "dikirim kosong" (misalnya menghapus bio).
+  optional string display_name = 2;
+  optional string bio = 3;
+}
+
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+
+message UploadAvatarRequest {
+  int64 requester_id = 1;
+  // Isi file gambar apa adanya (maksimal 2 MiB).
+  bytes image = 2;
+}
+
+message UploadAvatarResponse {
+  Profile profile = 1;
+}
+
+message RemoveAvatarRequest {
+  int64 requester_id = 1;
+}
+
+message RemoveAvatarResponse {
+  Profile profile = 1;
+}

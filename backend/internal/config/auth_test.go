@@ -12,11 +12,11 @@ func TestLoadAuthDefaults(t *testing.T) {
 	for _, key := range []string{
 		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
 		"DB_HOST", "DB_PORT", "DB_SERVICE", "DB_USER", "DB_MAX_OPEN_CONNS",
+		"STORAGE_ENDPOINT", "STORAGE_PUBLIC_ENDPOINT", "STORAGE_BUCKET", "MEDIA_PUBLIC_URL",
 	} {
 		t.Setenv(key, "")
 	}
-	t.Setenv("DB_PASSWORD", "rahasia")
-	t.Setenv("JWT_PRIVATE_KEY_FILE", "/secrets/jwt-private.pem")
+	setAuthRequired(t)
 
 	cfg, err := LoadAuth()
 	require.NoError(t, err)
@@ -26,6 +26,18 @@ func TestLoadAuthDefaults(t *testing.T) {
 	assert.Equal(t, 30*24*time.Hour, cfg.RefreshTokenTTL)
 	assert.Equal(t, "/secrets/jwt-private.pem", cfg.JWTPrivateKeyFile)
 	assert.Equal(t, "auth_svc", cfg.DB.User)
+	// Foto profil disimpan di bucket images, terpisah dari bucket videos.
+	assert.Equal(t, "images", cfg.Storage.Bucket)
+	assert.Equal(t, "http://localhost:9000/images", cfg.MediaPublicURL)
+}
+
+// setAuthRequired mengisi env yang wajib ada.
+func setAuthRequired(t *testing.T) {
+	t.Helper()
+	t.Setenv("DB_PASSWORD", "rahasia")
+	t.Setenv("JWT_PRIVATE_KEY_FILE", "/secrets/jwt-private.pem")
+	t.Setenv("STORAGE_ACCESS_KEY", "kunci-storage")
+	t.Setenv("STORAGE_SECRET_KEY", "rahasia-storage")
 }
 
 func TestLoadAuthInvalid(t *testing.T) {
@@ -38,11 +50,12 @@ func TestLoadAuthInvalid(t *testing.T) {
 		"DB_PORT bukan angka":           {"DB_PORT", "abc"},
 		"DB_PORT di luar batas":         {"DB_PORT", "0"},
 		"DB_MAX_OPEN_CONNS nol":         {"DB_MAX_OPEN_CONNS", "0"},
+		"STORAGE_ACCESS_KEY kosong":     {"STORAGE_ACCESS_KEY", ""},
+		"MEDIA_PUBLIC_URL relatif":      {"MEDIA_PUBLIC_URL", "/images"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("DB_PASSWORD", "rahasia")
-			t.Setenv("JWT_PRIVATE_KEY_FILE", "/secrets/jwt-private.pem")
+			setAuthRequired(t)
 			t.Setenv(tt.key, tt.value)
 			_, err := LoadAuth()
 			assert.Error(t, err)

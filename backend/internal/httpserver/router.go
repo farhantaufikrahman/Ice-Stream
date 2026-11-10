@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
@@ -30,6 +31,8 @@ type Deps struct {
 	Auth authv1.AuthServiceClient
 	// Videos adalah klien gRPC ke VideoService.
 	Videos videov1.VideoServiceClient
+	// Users adalah klien gRPC ke UserService (berjalan di proses AuthService).
+	Users userv1.UserServiceClient
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
 }
@@ -72,7 +75,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	authGroup.POST("/logout", auth.logout)
 	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
 
-	videos := &videoHandler{client: deps.Videos, logger: logger}
+	videos := &videoHandler{client: deps.Videos, users: deps.Users, logger: logger}
 	requireAuth := RequireAuth(deps.Verifier)
 	videoGroup := v1.Group("/videos", limitBody(maxVideoBodyBytes))
 	videoGroup.GET("", videos.list)
@@ -81,6 +84,15 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
 	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
+
+	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
+	v1.GET("/users/:username", users.getByUsername)
+	v1.GET("/users/:username/videos", users.listVideos)
+	v1.GET("/me/profile", requireAuth, users.me)
+	v1.PATCH("/me/profile", requireAuth, limitBody(maxProfileBodyBytes), users.update)
+	// Batas 2 MiB dicek di handler, supaya pesan errornya jelas.
+	v1.PUT("/me/avatar", requireAuth, users.uploadAvatar)
+	v1.DELETE("/me/avatar", requireAuth, users.removeAvatar)
 
 	return r, nil
 }

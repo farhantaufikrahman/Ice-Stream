@@ -45,6 +45,17 @@ spec:
                 secretKeyRef:
                   name: oracle-credentials
                   key: AUTH_SVC_PASSWORD
+            # Untuk menyimpan foto profil (UserService) di RustFS.
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_ACCESS_KEY
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_SECRET_KEY
           volumeMounts:
             - name: jwt
               mountPath: /etc/ice-stream/jwt

@@ -1,6 +1,7 @@
-# Konfigurasi non-rahasia untuk AuthService.
-# Password Oracle diambil dari Secret oracle-credentials, kunci JWT dari
-# Secret auth-jwt (keduanya dibuat oleh kustomization.yaml).
+# Konfigurasi non-rahasia untuk AuthService (dan UserService yang berjalan
+# di proses yang sama). Password Oracle diambil dari Secret
+# oracle-credentials, kunci JWT dari Secret auth-jwt, kunci storage dari
+# Secret storage-credentials.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,3 +23,8 @@ data:
   JWT_PRIVATE_KEY_FILE: /etc/ice-stream/jwt/jwt-private.pem
   ACCESS_TOKEN_TTL: 15m
   REFRESH_TOKEN_TTL: 720h
+  # Foto profil (UserService) disimpan di bucket images di RustFS.
+  STORAGE_ENDPOINT: http://storage:9000
+  STORAGE_BUCKET: images
+  # Alamat publik foto profil (lewat Gateway, storage/httproute.yaml).
+  MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/images

@@ -88,30 +88,16 @@ func LoadVideo() (VideoConfig, error) {
 	if err != nil {
 		return VideoConfig{}, err
 	}
-	endpoint := getString("STORAGE_ENDPOINT", "http://localhost:9000")
-	publicEndpoint := getString("STORAGE_PUBLIC_ENDPOINT", endpoint)
-	bucket := getString("STORAGE_BUCKET", "videos")
-	// Default: file HLS dibuka langsung dari storage, misalnya
-	// http://localhost:9000/videos. Garis miring di akhir dibuang.
-	mediaURL := strings.TrimSuffix(getString("MEDIA_PUBLIC_URL", strings.TrimSuffix(publicEndpoint, "/")+"/"+bucket), "/")
+	storage := loadStorage("videos")
 
 	cfg := VideoConfig{
 		Env:             getString("APP_ENV", "development"),
 		GRPCAddr:        ":" + getString("GRPC_PORT", "50052"),
 		ShutdownTimeout: shutdownTimeout,
 		DB:              db,
-		Storage: StorageConfig{
-			Endpoint:       endpoint,
-			PublicEndpoint: publicEndpoint,
-			Region:         getString("STORAGE_REGION", "us-east-1"),
-			// Sengaja tanpa default, sama seperti DB_PASSWORD.
-			AccessKey:          getString("STORAGE_ACCESS_KEY", ""),
-			SecretKey:          getString("STORAGE_SECRET_KEY", ""),
-			Bucket:             bucket,
-			CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
-		},
+		Storage:         storage,
 		NATSURL:         getString("NATS_URL", "nats://localhost:4222"),
-		MediaPublicURL:  mediaURL,
+		MediaPublicURL:  loadMediaURL(storage),
 		MaxUploadBytes:  int64(maxUploadMB) << 20,
 		UploadURLTTL:    uploadTTL,
 		PlaybackURLTTL:  playbackTTL,
@@ -151,10 +137,43 @@ func (c VideoConfig) validate() error {
 	if err := validNATSURL(c.NATSURL); err != nil {
 		return err
 	}
-	if u, err := url.Parse(c.MediaPublicURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
-		return fmt.Errorf("MEDIA_PUBLIC_URL harus berupa URL seperti http://media.ice-stream.localhost:4000/videos, dapat %q", c.MediaPublicURL)
+	if err := validMediaURL(c.MediaPublicURL, "/videos"); err != nil {
+		return err
 	}
 	return c.DB.validate()
+}
+
+// loadStorage membaca pengaturan object storage (STORAGE_*). defaultBucket
+// berbeda per service: "videos" untuk VideoService, "images" untuk
+// UserService.
+func loadStorage(defaultBucket string) StorageConfig {
+	endpoint := getString("STORAGE_ENDPOINT", "http://localhost:9000")
+	return StorageConfig{
+		Endpoint:       endpoint,
+		PublicEndpoint: getString("STORAGE_PUBLIC_ENDPOINT", endpoint),
+		Region:         getString("STORAGE_REGION", "us-east-1"),
+		// Sengaja tanpa default, sama seperti DB_PASSWORD.
+		AccessKey:          getString("STORAGE_ACCESS_KEY", ""),
+		SecretKey:          getString("STORAGE_SECRET_KEY", ""),
+		Bucket:             getString("STORAGE_BUCKET", defaultBucket),
+		CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
+	}
+}
+
+// loadMediaURL membaca MEDIA_PUBLIC_URL. Default: file dibuka langsung dari
+// storage, misalnya http://localhost:9000/videos. Garis miring di akhir
+// dibuang.
+func loadMediaURL(s StorageConfig) string {
+	fallback := strings.TrimSuffix(s.PublicEndpoint, "/") + "/" + s.Bucket
+	return strings.TrimSuffix(getString("MEDIA_PUBLIC_URL", fallback), "/")
+}
+
+// validMediaURL memeriksa MEDIA_PUBLIC_URL: URL http(s) lengkap tanpa query.
+func validMediaURL(v, examplePath string) error {
+	if u, err := url.Parse(v); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
+		return fmt.Errorf("MEDIA_PUBLIC_URL harus berupa URL seperti http://media.ice-stream.localhost:4000%s, dapat %q", examplePath, v)
+	}
+	return nil
 }
 
 // validNATSURL memeriksa bentuk NATS_URL, misalnya nats://nats:4222.

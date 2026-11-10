@@ -77,7 +77,7 @@ func (s *GRPCServer) ListMyVideos(ctx context.Context, req *videov1.ListMyVideos
 }
 
 func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequest) (*videov1.ListVideosResponse, error) {
-	videos, next, err := s.svc.ListVideos(ctx, int(req.GetPageSize()), req.GetPageToken())
+	videos, next, err := s.svc.ListVideos(ctx, req.GetOwnerId(), int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}

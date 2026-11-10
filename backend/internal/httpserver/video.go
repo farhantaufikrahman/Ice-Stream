@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 )
 
@@ -26,6 +27,8 @@ const (
 // videoHandler meneruskan request REST dari browser ke VideoService (gRPC).
 type videoHandler struct {
 	client videov1.VideoServiceClient
+	// users dipakai untuk mengambil info pemilik video. Boleh nil (di test).
+	users  userv1.UserServiceClient
 	logger *slog.Logger
 }
 
@@ -62,6 +65,9 @@ type videoResponse struct {
 	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
 	// ViewCount selalu ada (0 untuk video baru).
 	ViewCount int64 `json:"view_count"`
+	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
+	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
+	Owner *ownerResponse `json:"owner,omitempty"`
 }
 
 // listVideosResponse dipakai GET /videos (feed publik) dan GET /me/videos.
@@ -177,6 +183,8 @@ func (h *videoHandler) get(c *gin.Context) {
 		return
 	}
 	body := getVideoResponse{Video: toVideoResponse(resp.GetVideo())}
+	owners := lookupOwners(c.Request.Context(), h.users, h.logger, []*videov1.Video{resp.GetVideo()})
+	body.Video.Owner = owners[resp.GetVideo().GetOwnerId()]
 	if resp.GetOriginalUrl() != "" {
 		body.Original = &originalResponse{
 			URL:       resp.GetOriginalUrl(),
@@ -228,7 +236,12 @@ func (h *videoHandler) list(c *gin.Context) {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	c.JSON(http.StatusOK, toListResponse(resp.GetVideos(), resp.GetNextPageToken()))
+	body := toListResponse(resp.GetVideos(), resp.GetNextPageToken())
+	owners := lookupOwners(c.Request.Context(), h.users, h.logger, resp.GetVideos())
+	for i, v := range resp.GetVideos() {
+		body.Videos[i].Owner = owners[v.GetOwnerId()]
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // recordView dipanggil frontend saat video mulai diputar:

@@ -30,8 +30,10 @@ run: ## Jalankan API gateway
 	go run ./cmd/api
 
 
-run-auth: ## Jalankan AuthService (gRPC) di port 50051
-	go run ./cmd/auth
+# Bucket dan MEDIA_PUBLIC_URL diisi khusus di sini, karena .env dipakai
+# bersama VideoService (bucket videos). Foto profil ada di bucket images.
+run-auth: ## Jalankan AuthService + UserService (gRPC) di port 50051; butuh make k8s-forward-db dan k8s-forward-storage
+	STORAGE_BUCKET=images MEDIA_PUBLIC_URL= go run ./cmd/auth
 
 # $$VIDEO_DB_PASSWORD (dua tanda $) dibaca oleh shell dari .env, bukan oleh
 # make, jadi password tidak ikut tercetak di terminal.
