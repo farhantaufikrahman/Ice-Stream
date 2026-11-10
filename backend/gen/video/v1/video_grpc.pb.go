@@ -23,15 +23,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	VideoService_CreateUpload_FullMethodName   = "/video.v1.VideoService/CreateUpload"
-	VideoService_CompleteUpload_FullMethodName = "/video.v1.VideoService/CompleteUpload"
-	VideoService_GetVideo_FullMethodName       = "/video.v1.VideoService/GetVideo"
-	VideoService_ListMyVideos_FullMethodName   = "/video.v1.VideoService/ListMyVideos"
-	VideoService_ListVideos_FullMethodName     = "/video.v1.VideoService/ListVideos"
-	VideoService_RecordView_FullMethodName     = "/video.v1.VideoService/RecordView"
-	VideoService_LikeVideo_FullMethodName      = "/video.v1.VideoService/LikeVideo"
-	VideoService_UnlikeVideo_FullMethodName    = "/video.v1.VideoService/UnlikeVideo"
-	VideoService_SearchVideos_FullMethodName   = "/video.v1.VideoService/SearchVideos"
+	VideoService_CreateUpload_FullMethodName       = "/video.v1.VideoService/CreateUpload"
+	VideoService_CompleteUpload_FullMethodName     = "/video.v1.VideoService/CompleteUpload"
+	VideoService_GetVideo_FullMethodName           = "/video.v1.VideoService/GetVideo"
+	VideoService_ListMyVideos_FullMethodName       = "/video.v1.VideoService/ListMyVideos"
+	VideoService_ListVideos_FullMethodName         = "/video.v1.VideoService/ListVideos"
+	VideoService_RecordView_FullMethodName         = "/video.v1.VideoService/RecordView"
+	VideoService_LikeVideo_FullMethodName          = "/video.v1.VideoService/LikeVideo"
+	VideoService_UnlikeVideo_FullMethodName        = "/video.v1.VideoService/UnlikeVideo"
+	VideoService_SearchVideos_FullMethodName       = "/video.v1.VideoService/SearchVideos"
+	VideoService_SaveWatchProgress_FullMethodName  = "/video.v1.VideoService/SaveWatchProgress"
+	VideoService_ListWatchHistory_FullMethodName   = "/video.v1.VideoService/ListWatchHistory"
+	VideoService_DeleteWatchHistory_FullMethodName = "/video.v1.VideoService/DeleteWatchHistory"
+	VideoService_ClearWatchHistory_FullMethodName  = "/video.v1.VideoService/ClearWatchHistory"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -75,6 +79,20 @@ type VideoServiceClient interface {
 	// Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
 	// berisi kata dengan 2 huruf atau lebih.
 	SearchVideos(ctx context.Context, in *SearchVideosRequest, opts ...grpc.CallOption) (*SearchVideosResponse, error)
+	// SaveWatchProgress menyimpan sampai detik berapa requester menonton
+	// video READY, untuk riwayat tonton dan "lanjut menonton". Dipanggil
+	// player setiap beberapa detik. Aman dipanggil ulang: video yang sama
+	// hanya punya satu entri riwayat. Error INVALID_ARGUMENT jika
+	// position_ms negatif, NOT_FOUND jika video tidak ada atau belum READY.
+	SaveWatchProgress(ctx context.Context, in *SaveWatchProgressRequest, opts ...grpc.CallOption) (*SaveWatchProgressResponse, error)
+	// ListWatchHistory mengambil riwayat tonton requester, yang terakhir
+	// ditonton lebih dulu. Hanya video READY.
+	ListWatchHistory(ctx context.Context, in *ListWatchHistoryRequest, opts ...grpc.CallOption) (*ListWatchHistoryResponse, error)
+	// DeleteWatchHistory menghapus satu video dari riwayat requester. Aman
+	// dipanggil walau video itu tidak ada di riwayat.
+	DeleteWatchHistory(ctx context.Context, in *DeleteWatchHistoryRequest, opts ...grpc.CallOption) (*DeleteWatchHistoryResponse, error)
+	// ClearWatchHistory menghapus seluruh riwayat tonton requester.
+	ClearWatchHistory(ctx context.Context, in *ClearWatchHistoryRequest, opts ...grpc.CallOption) (*ClearWatchHistoryResponse, error)
 }
 
 type videoServiceClient struct {
@@ -175,6 +193,46 @@ func (c *videoServiceClient) SearchVideos(ctx context.Context, in *SearchVideosR
 	return out, nil
 }
 
+func (c *videoServiceClient) SaveWatchProgress(ctx context.Context, in *SaveWatchProgressRequest, opts ...grpc.CallOption) (*SaveWatchProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveWatchProgressResponse)
+	err := c.cc.Invoke(ctx, VideoService_SaveWatchProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) ListWatchHistory(ctx context.Context, in *ListWatchHistoryRequest, opts ...grpc.CallOption) (*ListWatchHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWatchHistoryResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListWatchHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) DeleteWatchHistory(ctx context.Context, in *DeleteWatchHistoryRequest, opts ...grpc.CallOption) (*DeleteWatchHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteWatchHistoryResponse)
+	err := c.cc.Invoke(ctx, VideoService_DeleteWatchHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) ClearWatchHistory(ctx context.Context, in *ClearWatchHistoryRequest, opts ...grpc.CallOption) (*ClearWatchHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearWatchHistoryResponse)
+	err := c.cc.Invoke(ctx, VideoService_ClearWatchHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -216,6 +274,20 @@ type VideoServiceServer interface {
 	// Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
 	// berisi kata dengan 2 huruf atau lebih.
 	SearchVideos(context.Context, *SearchVideosRequest) (*SearchVideosResponse, error)
+	// SaveWatchProgress menyimpan sampai detik berapa requester menonton
+	// video READY, untuk riwayat tonton dan "lanjut menonton". Dipanggil
+	// player setiap beberapa detik. Aman dipanggil ulang: video yang sama
+	// hanya punya satu entri riwayat. Error INVALID_ARGUMENT jika
+	// position_ms negatif, NOT_FOUND jika video tidak ada atau belum READY.
+	SaveWatchProgress(context.Context, *SaveWatchProgressRequest) (*SaveWatchProgressResponse, error)
+	// ListWatchHistory mengambil riwayat tonton requester, yang terakhir
+	// ditonton lebih dulu. Hanya video READY.
+	ListWatchHistory(context.Context, *ListWatchHistoryRequest) (*ListWatchHistoryResponse, error)
+	// DeleteWatchHistory menghapus satu video dari riwayat requester. Aman
+	// dipanggil walau video itu tidak ada di riwayat.
+	DeleteWatchHistory(context.Context, *DeleteWatchHistoryRequest) (*DeleteWatchHistoryResponse, error)
+	// ClearWatchHistory menghapus seluruh riwayat tonton requester.
+	ClearWatchHistory(context.Context, *ClearWatchHistoryRequest) (*ClearWatchHistoryResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -252,6 +324,18 @@ func (UnimplementedVideoServiceServer) UnlikeVideo(context.Context, *UnlikeVideo
 }
 func (UnimplementedVideoServiceServer) SearchVideos(context.Context, *SearchVideosRequest) (*SearchVideosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SearchVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) SaveWatchProgress(context.Context, *SaveWatchProgressRequest) (*SaveWatchProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveWatchProgress not implemented")
+}
+func (UnimplementedVideoServiceServer) ListWatchHistory(context.Context, *ListWatchHistoryRequest) (*ListWatchHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWatchHistory not implemented")
+}
+func (UnimplementedVideoServiceServer) DeleteWatchHistory(context.Context, *DeleteWatchHistoryRequest) (*DeleteWatchHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteWatchHistory not implemented")
+}
+func (UnimplementedVideoServiceServer) ClearWatchHistory(context.Context, *ClearWatchHistoryRequest) (*ClearWatchHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ClearWatchHistory not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -436,6 +520,78 @@ func _VideoService_SearchVideos_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_SaveWatchProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveWatchProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).SaveWatchProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_SaveWatchProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).SaveWatchProgress(ctx, req.(*SaveWatchProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_ListWatchHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWatchHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListWatchHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListWatchHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListWatchHistory(ctx, req.(*ListWatchHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_DeleteWatchHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteWatchHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).DeleteWatchHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_DeleteWatchHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).DeleteWatchHistory(ctx, req.(*DeleteWatchHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_ClearWatchHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearWatchHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ClearWatchHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ClearWatchHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ClearWatchHistory(ctx, req.(*ClearWatchHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -478,6 +634,22 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchVideos",
 			Handler:    _VideoService_SearchVideos_Handler,
+		},
+		{
+			MethodName: "SaveWatchProgress",
+			Handler:    _VideoService_SaveWatchProgress_Handler,
+		},
+		{
+			MethodName: "ListWatchHistory",
+			Handler:    _VideoService_ListWatchHistory_Handler,
+		},
+		{
+			MethodName: "DeleteWatchHistory",
+			Handler:    _VideoService_DeleteWatchHistory_Handler,
+		},
+		{
+			MethodName: "ClearWatchHistory",
+			Handler:    _VideoService_ClearWatchHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -56,7 +56,11 @@ func (s *GRPCServer) GetVideo(ctx context.Context, req *videov1.GetVideoRequest)
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	resp := &videov1.GetVideoResponse{Video: s.toProtoVideo(d.Video), ViewerLiked: d.ViewerLiked}
+	resp := &videov1.GetVideoResponse{
+		Video:            s.toProtoVideo(d.Video),
+		ViewerLiked:      d.ViewerLiked,
+		ResumePositionMs: d.ResumePositionMs,
+	}
 	if d.Original.URL != "" {
 		resp.OriginalUrl = d.Original.URL
 		resp.OriginalUrlExpiresAt = timestamppb.New(d.Original.ExpiresAt)
@@ -127,6 +131,45 @@ func (s *GRPCServer) UnlikeVideo(ctx context.Context, req *videov1.UnlikeVideoRe
 		return nil, s.toStatus(ctx, err)
 	}
 	return &videov1.UnlikeVideoResponse{Liked: r.Liked, LikeCount: r.LikeCount}, nil
+}
+
+func (s *GRPCServer) SaveWatchProgress(ctx context.Context, req *videov1.SaveWatchProgressRequest) (*videov1.SaveWatchProgressResponse, error) {
+	p, err := s.svc.SaveWatchProgress(ctx, req.GetRequesterId(), req.GetVideoId(), req.GetPositionMs())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.SaveWatchProgressResponse{PositionMs: p.PositionMs, WatchedAt: timestamppb.New(p.WatchedAt)}, nil
+}
+
+func (s *GRPCServer) ListWatchHistory(ctx context.Context, req *videov1.ListWatchHistoryRequest) (*videov1.ListWatchHistoryResponse, error) {
+	entries, next, err := s.svc.ListWatchHistory(ctx, req.GetRequesterId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.ListWatchHistoryResponse{NextPageToken: next}
+	for _, e := range entries {
+		resp.Entries = append(resp.Entries, &videov1.WatchHistoryEntry{
+			Video:      s.toProtoVideo(e.Video),
+			PositionMs: e.PositionMs,
+			WatchedAt:  timestamppb.New(e.WatchedAt),
+		})
+	}
+	return resp, nil
+}
+
+func (s *GRPCServer) DeleteWatchHistory(ctx context.Context, req *videov1.DeleteWatchHistoryRequest) (*videov1.DeleteWatchHistoryResponse, error) {
+	if err := s.svc.DeleteWatchHistory(ctx, req.GetRequesterId(), req.GetVideoId()); err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.DeleteWatchHistoryResponse{}, nil
+}
+
+func (s *GRPCServer) ClearWatchHistory(ctx context.Context, req *videov1.ClearWatchHistoryRequest) (*videov1.ClearWatchHistoryResponse, error) {
+	n, err := s.svc.ClearWatchHistory(ctx, req.GetRequesterId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.ClearWatchHistoryResponse{Deleted: n}, nil
 }
 
 // toStatus memetakan error Service ke kode gRPC.

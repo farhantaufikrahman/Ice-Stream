@@ -45,6 +45,20 @@ service VideoService {
   // Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
   // berisi kata dengan 2 huruf atau lebih.
   rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
+  // SaveWatchProgress menyimpan sampai detik berapa requester menonton
+  // video READY, untuk riwayat tonton dan "lanjut menonton". Dipanggil
+  // player setiap beberapa detik. Aman dipanggil ulang: video yang sama
+  // hanya punya satu entri riwayat. Error INVALID_ARGUMENT jika
+  // position_ms negatif, NOT_FOUND jika video tidak ada atau belum READY.
+  rpc SaveWatchProgress(SaveWatchProgressRequest) returns (SaveWatchProgressResponse);
+  // ListWatchHistory mengambil riwayat tonton requester, yang terakhir
+  // ditonton lebih dulu. Hanya video READY.
+  rpc ListWatchHistory(ListWatchHistoryRequest) returns (ListWatchHistoryResponse);
+  // DeleteWatchHistory menghapus satu video dari riwayat requester. Aman
+  // dipanggil walau video itu tidak ada di riwayat.
+  rpc DeleteWatchHistory(DeleteWatchHistoryRequest) returns (DeleteWatchHistoryResponse);
+  // ClearWatchHistory menghapus seluruh riwayat tonton requester.
+  rpc ClearWatchHistory(ClearWatchHistoryRequest) returns (ClearWatchHistoryResponse);
 }
 
 enum VideoStatus {
@@ -138,6 +152,11 @@ message GetVideoResponse {
   google.protobuf.Timestamp original_url_expires_at = 3;
   // true jika viewer_id sudah like video ini. Selalu false tanpa login.
   bool viewer_liked = 4;
+  // Detik (milidetik) tempat viewer berhenti menonton terakhir kali, untuk
+  // "lanjut menonton". 0 = putar dari awal: belum pernah ditonton, baru
+  // ditonton kurang dari 5 detik, atau sisa videonya kurang dari 10 detik.
+  // Selalu 0 tanpa login.
+  int64 resume_position_ms = 5;
 }
 
 message ListMyVideosRequest {
@@ -223,4 +242,58 @@ message UnlikeVideoResponse {
   // Selalu false.
   bool liked = 1;
   int64 like_count = 2;
+}
+
+message SaveWatchProgressRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Posisi player, milidetik dari awal video. Nilai yang melewati durasi
+  // video dipotong menjadi durasi.
+  int64 position_ms = 3;
+}
+
+message SaveWatchProgressResponse {
+  // Posisi yang benar-benar disimpan.
+  int64 position_ms = 1;
+  google.protobuf.Timestamp watched_at = 2;
+}
+
+// WatchHistoryEntry adalah satu video di riwayat tonton.
+message WatchHistoryEntry {
+  Video video = 1;
+  // Detik terakhir yang ditonton (milidetik). Untuk garis progres:
+  // position_ms / video.duration_ms.
+  int64 position_ms = 2;
+  // Waktu terakhir video ini ditonton.
+  google.protobuf.Timestamp watched_at = 3;
+}
+
+message ListWatchHistoryRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListWatchHistoryResponse {
+  repeated WatchHistoryEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message DeleteWatchHistoryRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message DeleteWatchHistoryResponse {}
+
+message ClearWatchHistoryRequest {
+  int64 requester_id = 1;
+}
+
+message ClearWatchHistoryResponse {
+  // Jumlah video yang dihapus dari riwayat.
+  int64 deleted = 1;
 }
