@@ -51,6 +51,7 @@ func testVideo(status videov1.VideoStatus) *videov1.Video {
 		v.ThumbnailUrl = "http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg"
 		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
 		v.ViewCount = 5
+		v.CommentCount = 3
 	case videov1.VideoStatus_VIDEO_STATUS_FAILED:
 		v.FailureReason = "file tidak bisa dibaca sebagai video"
 		v.ProcessedAt = timestamppb.New(testCreatedAt.Add(2 * time.Minute))
@@ -156,7 +157,7 @@ func TestCreateVideo(t *testing.T) {
 	require.Equal(t, http.StatusCreated, rec.Code)
 	assert.JSONEq(t, `{
 		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
-		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0},
+		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0,"comment_count":0},
 		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
 		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
 	}`, rec.Body.String())
@@ -205,7 +206,7 @@ func TestGetVideo(t *testing.T) {
 		          "uploaded_at":"2026-10-29T04:01:00Z","duration_ms":20023,"renditions":["360p","720p"],
 		          "hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8",
 		          "thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg",
-		          "processed_at":"2026-10-29T04:02:00Z","view_count":5}
+		          "processed_at":"2026-10-29T04:02:00Z","view_count":5,"comment_count":3}
 	}`, rec.Body.String())
 
 	// Dengan login, viewer_id diisi dari token. Pemilik juga mendapat URL

@@ -65,6 +65,8 @@ type videoResponse struct {
 	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
 	// ViewCount selalu ada (0 untuk video baru).
 	ViewCount int64 `json:"view_count"`
+	// CommentCount adalah jumlah komentar dan balasan (selalu ada).
+	CommentCount int64 `json:"comment_count"`
 	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
 	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
 	Owner *ownerResponse `json:"owner,omitempty"`
@@ -361,6 +363,7 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		FailureReason: v.GetFailureReason(),
 		ProcessedAt:   optionalTime(v.GetProcessedAt()),
 		ViewCount:     v.GetViewCount(),
+		CommentCount:  v.GetCommentCount(),
 	}
 }
 

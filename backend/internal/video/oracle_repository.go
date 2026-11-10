@@ -36,6 +36,10 @@ type videoRow struct {
 	// Belum ada fitur hapus, tapi kolomnya sudah ada di tabel. Dengan field
 	// ini GORM otomatis menyaring baris yang sudah dihapus.
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at"`
+	// Migrasi V5. "<-:false" = hanya dibaca. Nilainya diubah oleh
+	// CommentService (package comment), di transaksi yang sama dengan
+	// komentarnya.
+	CommentCount int64 `gorm:"column:comment_count;<-:false"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -52,6 +56,7 @@ func (r videoRow) toVideo() Video {
 		CreatedAt:   r.CreatedAt.UTC(),
 		ViewCount:   r.ViewCount,
 	}
+	v.CommentCount = r.CommentCount
 	if r.Description != nil {
 		v.Description = *r.Description
 	}

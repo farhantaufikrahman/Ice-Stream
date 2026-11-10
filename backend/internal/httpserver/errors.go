@@ -25,13 +25,10 @@ func abortError(c *gin.Context, httpStatus int, code, message string) {
 	c.AbortWithStatusJSON(httpStatus, gin.H{"error": errorBody{Code: code, Message: message}})
 }
 
-// writeGRPCError menerjemahkan error dari AuthService (kode gRPC) menjadi
-// respons HTTP. Pesan untuk error 4xx berasal dari AuthService dan memang
-// ditujukan untuk user. Error lain diganti pesan umum, detailnya hanya di log.
 // writeGRPCError menerjemahkan error dari service gRPC (AuthService,
-// VideoService) menjadi respons HTTP. Pesan untuk error 4xx berasal dari
-// service dan memang ditujukan untuk user. Error lain diganti pesan umum,
-// detailnya hanya di log.
+// UserService, VideoService, CommentService) menjadi respons HTTP. Pesan
+// untuk error 4xx berasal dari service dan memang ditujukan untuk user.
+// Error lain diganti pesan umum, detailnya hanya di log.
 func writeGRPCError(c *gin.Context, logger *slog.Logger, err error) {
 	st := status.Convert(err)
 	switch st.Code() {

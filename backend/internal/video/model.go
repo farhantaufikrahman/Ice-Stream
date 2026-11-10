@@ -63,6 +63,8 @@ type Video struct {
 	ProcessedAt *time.Time
 	// ViewCount adalah jumlah views (lihat Service.RecordView).
 	ViewCount int64
+	// CommentCount adalah jumlah komentar dan balasan yang belum dihapus.
+	CommentCount int64
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.

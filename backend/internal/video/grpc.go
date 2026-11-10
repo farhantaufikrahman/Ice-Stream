@@ -140,6 +140,7 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 	if v.UploadedAt != nil {
 		pv.UploadedAt = timestamppb.New(*v.UploadedAt)
 	}
+	pv.CommentCount = v.CommentCount
 	pv.DurationMs = v.DurationMs
 	pv.Renditions = v.Renditions
 	pv.FailureReason = v.FailureReason
