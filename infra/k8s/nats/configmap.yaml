@@ -1,0 +1,24 @@
+# Konfigurasi server NATS. JetStream = fitur NATS yang menyimpan pesan di
+# disk, sehingga pesan tidak hilang walau penerimanya sedang mati.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/part-of: ice-stream
+data:
+  nats.conf: |
+    # Port untuk client (VideoService, transcoder).
+    port: 4222
+    # Port pemantauan: /healthz dipakai probe Kubernetes.
+    http_port: 8222
+    server_name: nats-0
+    jetstream {
+      store_dir: /data
+      # Batas supaya RAM dan disk PC tidak terpakai berlebihan. Event video
+      # berukuran kecil (ratusan byte), jadi batas ini sangat longgar.
+      max_memory_store: 64MB
+      max_file_store: 1GB
+    }

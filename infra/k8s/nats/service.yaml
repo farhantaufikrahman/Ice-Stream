@@ -1,0 +1,20 @@
+# Alamat NATS di dalam cluster: nats://nats:4222 (client) dan
+# http://nats:8222 (pemantauan). Dari laptop: make k8s-forward-nats.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: nats
+  ports:
+    - name: client
+      port: 4222
+      targetPort: client
+    - name: monitor
+      port: 8222
+      targetPort: monitor

@@ -9,12 +9,12 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/s3client"
 )
 
 // ObjectStore adalah semua yang dibutuhkan Service dari object storage.
@@ -58,25 +58,10 @@ type S3Store struct {
 
 // NewS3Store membuat S3Store. Belum ada koneksi yang dibuka di sini.
 func NewS3Store(cfg config.StorageConfig) *S3Store {
-	newClient := func(endpoint string) *s3.Client {
-		return s3.New(s3.Options{
-			BaseEndpoint: aws.String(endpoint),
-			Region:       cfg.Region,
-			Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
-			// Path-style: http://host:9000/videos/key, bukan
-			// http://videos.host:9000/key. Storage self-hosted seperti RustFS
-			// tidak punya DNS per bucket.
-			UsePathStyle: true,
-			// Jangan tambahkan checksum CRC32 otomatis. Kalau ditambahkan,
-			// browser juga harus menghitung checksum saat mengunggah.
-			RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
-			ResponseChecksumValidation: aws.ResponseChecksumValidationWhenRequired,
-		})
-	}
 	return &S3Store{
 		bucket:    cfg.Bucket,
-		client:    newClient(cfg.Endpoint),
-		presigner: s3.NewPresignClient(newClient(cfg.PublicEndpoint)),
+		client:    s3client.New(cfg, cfg.Endpoint),
+		presigner: s3.NewPresignClient(s3client.New(cfg, cfg.PublicEndpoint)),
 	}
 }
 

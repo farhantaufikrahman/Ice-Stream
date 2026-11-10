@@ -32,8 +32,14 @@ const (
 	VideoStatus_VIDEO_STATUS_UNSPECIFIED VideoStatus = 0
 	// Baris sudah dibuat, file belum (selesai) diunggah.
 	VideoStatus_VIDEO_STATUS_PENDING_UPLOAD VideoStatus = 1
-	// File sudah ada di storage dan ukurannya sudah dicek.
+	// File sudah ada di storage dan ukurannya sudah dicek. Menunggu transcoder.
 	VideoStatus_VIDEO_STATUS_UPLOADED VideoStatus = 2
+	// Transcoder sedang membuat file HLS dan thumbnail.
+	VideoStatus_VIDEO_STATUS_PROCESSING VideoStatus = 3
+	// File HLS siap diputar. Hanya video READY yang terlihat oleh semua orang.
+	VideoStatus_VIDEO_STATUS_READY VideoStatus = 4
+	// Transcoding gagal, alasannya ada di failure_reason.
+	VideoStatus_VIDEO_STATUS_FAILED VideoStatus = 5
 )
 
 // Enum value maps for VideoStatus.
@@ -42,11 +48,17 @@ var (
 		0: "VIDEO_STATUS_UNSPECIFIED",
 		1: "VIDEO_STATUS_PENDING_UPLOAD",
 		2: "VIDEO_STATUS_UPLOADED",
+		3: "VIDEO_STATUS_PROCESSING",
+		4: "VIDEO_STATUS_READY",
+		5: "VIDEO_STATUS_FAILED",
 	}
 	VideoStatus_value = map[string]int32{
 		"VIDEO_STATUS_UNSPECIFIED":    0,
 		"VIDEO_STATUS_PENDING_UPLOAD": 1,
 		"VIDEO_STATUS_UPLOADED":       2,
+		"VIDEO_STATUS_PROCESSING":     3,
+		"VIDEO_STATUS_READY":          4,
+		"VIDEO_STATUS_FAILED":         5,
 	}
 )
 
@@ -88,7 +100,15 @@ type Video struct {
 	SizeBytes   int64                  `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// Kosong selama status masih PENDING_UPLOAD.
-	UploadedAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=uploaded_at,json=uploadedAt,proto3" json:"uploaded_at,omitempty"`
+	UploadedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=uploaded_at,json=uploadedAt,proto3" json:"uploaded_at,omitempty"`
+	// Durasi video dalam milidetik. 0 sampai status READY.
+	DurationMs int64 `protobuf:"varint,10,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// Resolusi HLS yang tersedia, misalnya ["360p", "720p"]. Kosong sampai READY.
+	Renditions []string `protobuf:"bytes,11,rep,name=renditions,proto3" json:"renditions,omitempty"`
+	// Alasan gagal. Hanya terisi jika status FAILED.
+	FailureReason string `protobuf:"bytes,12,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// Waktu transcoding selesai (READY atau FAILED).
+	ProcessedAt   *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=processed_at,json=processedAt,proto3" json:"processed_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -182,6 +202,34 @@ func (x *Video) GetCreatedAt() *timestamppb.Timestamp {
 func (x *Video) GetUploadedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UploadedAt
+	}
+	return nil
+}
+
+func (x *Video) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *Video) GetRenditions() []string {
+	if x != nil {
+		return x.Renditions
+	}
+	return nil
+}
+
+func (x *Video) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
+}
+
+func (x *Video) GetProcessedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ProcessedAt
 	}
 	return nil
 }
@@ -487,7 +535,8 @@ func (x *GetVideoRequest) GetViewerId() int64 {
 type GetVideoResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Video *Video                 `protobuf:"bytes,1,opt,name=video,proto3" json:"video,omitempty"`
-	// URL presigned untuk memutar file. Kosong selama PENDING_UPLOAD.
+	// URL presigned untuk memutar file mentah (sebelum di-transcode). Kosong
+	// selama PENDING_UPLOAD. Di langkah 6b diganti URL HLS untuk video READY.
 	PlaybackUrl          string                 `protobuf:"bytes,2,opt,name=playback_url,json=playbackUrl,proto3" json:"playback_url,omitempty"`
 	PlaybackUrlExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=playback_url_expires_at,json=playbackUrlExpiresAt,proto3" json:"playback_url_expires_at,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -664,7 +713,7 @@ var File_video_v1_video_proto protoreflect.FileDescriptor
 
 const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
-	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd3\x02\n" +
+	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x03\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\x03R\aownerId\x12\x14\n" +
@@ -677,7 +726,15 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12;\n" +
 	"\vuploaded_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"uploadedAt\"\xb2\x01\n" +
+	"uploadedAt\x12\x1f\n" +
+	"\vduration_ms\x18\n" +
+	" \x01(\x03R\n" +
+	"durationMs\x12\x1e\n" +
+	"\n" +
+	"renditions\x18\v \x03(\tR\n" +
+	"renditions\x12%\n" +
+	"\x0efailure_reason\x18\f \x01(\tR\rfailureReason\x12=\n" +
+	"\fprocessed_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAt\"\xb2\x01\n" +
 	"\x13CreateUploadRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -713,11 +770,14 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"g\n" +
 	"\x14ListMyVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*g\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xb5\x01\n" +
 	"\vVideoStatus\x12\x1c\n" +
 	"\x18VIDEO_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bVIDEO_STATUS_PENDING_UPLOAD\x10\x01\x12\x19\n" +
-	"\x15VIDEO_STATUS_UPLOADED\x10\x022\xc4\x02\n" +
+	"\x15VIDEO_STATUS_UPLOADED\x10\x02\x12\x1b\n" +
+	"\x17VIDEO_STATUS_PROCESSING\x10\x03\x12\x16\n" +
+	"\x12VIDEO_STATUS_READY\x10\x04\x12\x17\n" +
+	"\x13VIDEO_STATUS_FAILED\x10\x052\xc4\x02\n" +
 	"\fVideoService\x12M\n" +
 	"\fCreateUpload\x12\x1d.video.v1.CreateUploadRequest\x1a\x1e.video.v1.CreateUploadResponse\x12S\n" +
 	"\x0eCompleteUpload\x12\x1f.video.v1.CompleteUploadRequest\x1a .video.v1.CompleteUploadResponse\x12A\n" +
@@ -758,26 +818,27 @@ var file_video_v1_video_proto_depIdxs = []int32{
 	0,  // 0: video.v1.Video.status:type_name -> video.v1.VideoStatus
 	11, // 1: video.v1.Video.created_at:type_name -> google.protobuf.Timestamp
 	11, // 2: video.v1.Video.uploaded_at:type_name -> google.protobuf.Timestamp
-	1,  // 3: video.v1.CreateUploadResponse.video:type_name -> video.v1.Video
-	11, // 4: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
-	10, // 5: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
-	1,  // 6: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
-	1,  // 7: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
-	11, // 8: video.v1.GetVideoResponse.playback_url_expires_at:type_name -> google.protobuf.Timestamp
-	1,  // 9: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
-	2,  // 10: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
-	4,  // 11: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
-	6,  // 12: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
-	8,  // 13: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
-	3,  // 14: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
-	5,  // 15: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
-	7,  // 16: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
-	9,  // 17: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	11, // 3: video.v1.Video.processed_at:type_name -> google.protobuf.Timestamp
+	1,  // 4: video.v1.CreateUploadResponse.video:type_name -> video.v1.Video
+	11, // 5: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
+	10, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
+	1,  // 7: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
+	1,  // 8: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
+	11, // 9: video.v1.GetVideoResponse.playback_url_expires_at:type_name -> google.protobuf.Timestamp
+	1,  // 10: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
+	2,  // 11: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
+	4,  // 12: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
+	6,  // 13: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
+	8,  // 14: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
+	3,  // 15: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
+	5,  // 16: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
+	7,  // 17: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
+	9,  // 18: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_video_v1_video_proto_init() }

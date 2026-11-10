@@ -25,6 +25,23 @@ type Repository interface {
 	// ListByOwner mengambil video milik ownerID, id terbesar lebih dulu,
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
+	// MarkProcessing mengubah UPLOADED menjadi PROCESSING. Mengembalikan
+	// false (tanpa error) jika statusnya sudah bukan UPLOADED.
+	MarkProcessing(ctx context.Context, id int64, now time.Time) (bool, error)
+	// MarkReady mengubah UPLOADED/PROCESSING menjadi READY dan menyimpan
+	// hasil transcoding. false jika statusnya sudah bukan keduanya.
+	MarkReady(ctx context.Context, id int64, r TranscodeResult, now time.Time) (bool, error)
+	// MarkFailed mengubah UPLOADED/PROCESSING menjadi FAILED. false jika
+	// statusnya sudah bukan keduanya.
+	MarkFailed(ctx context.Context, id int64, reason string, now time.Time) (bool, error)
+}
+
+// Publisher mengirim event ke service lain. Implementasi NATS ada di
+// nats.go; test memakai versi palsu.
+type Publisher interface {
+	// PublishUploaded memberi tahu transcoder bahwa file video siap diproses.
+	// Boleh dipanggil lebih dari sekali untuk video yang sama.
+	PublishUploaded(ctx context.Context, v Video) error
 }
 
 // allowedContentTypes adalah tipe file yang boleh diunggah. Nanti semua
@@ -53,19 +70,21 @@ type Options struct {
 // Service berisi aturan bisnis VideoService, terpisah dari gRPC, Oracle,
 // dan storage supaya mudah diuji.
 type Service struct {
-	repo  Repository
-	store ObjectStore
-	opts  Options
-	now   func() time.Time
+	repo   Repository
+	store  ObjectStore
+	events Publisher
+	opts   Options
+	now    func() time.Time
 }
 
 // NewService membuat Service.
-func NewService(repo Repository, store ObjectStore, opts Options) *Service {
+func NewService(repo Repository, store ObjectStore, events Publisher, opts Options) *Service {
 	return &Service{
-		repo:  repo,
-		store: store,
-		opts:  opts,
-		now:   func() time.Time { return time.Now().UTC() },
+		repo:   repo,
+		store:  store,
+		events: events,
+		opts:   opts,
+		now:    func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -149,8 +168,13 @@ func newObjectKey() (string, error) {
 	return "raw/" + hex.EncodeToString(b) + "/source", nil
 }
 
-// CompleteUpload memeriksa file di storage, lalu menandai video UPLOADED.
-// Aman dipanggil ulang: video yang sudah UPLOADED dikembalikan apa adanya.
+// CompleteUpload memeriksa file di storage, menandai video UPLOADED, lalu
+// mengirim event videos.uploaded ke transcoder.
+//
+// Aman dipanggil ulang. Kalau event gagal dikirim (ErrEventsUnavailable),
+// status sudah UPLOADED; panggilan berikutnya akan mencoba mengirim event
+// lagi. Event yang sama tidak diproses dua kali karena JetStream membuang
+// duplikat berdasarkan Msg-Id.
 func (s *Service) CompleteUpload(ctx context.Context, ownerID, videoID int64) (Video, error) {
 	v, err := s.repo.FindByID(ctx, videoID)
 	if err != nil {
@@ -159,7 +183,11 @@ func (s *Service) CompleteUpload(ctx context.Context, ownerID, videoID int64) (V
 	if v.OwnerID != ownerID {
 		return Video{}, ErrNotFound
 	}
-	if v.Status == StatusUploaded {
+	switch v.Status {
+	case StatusUploaded:
+		return s.publishUploaded(ctx, v)
+	case StatusProcessing, StatusReady, StatusFailed:
+		// Sudah diterima transcoder, tidak ada yang perlu dilakukan.
 		return v, nil
 	}
 
@@ -181,28 +209,81 @@ func (s *Service) CompleteUpload(ctx context.Context, ownerID, videoID int64) (V
 		// Request lain baru saja menyelesaikannya; ambil versi terbaru.
 		return s.repo.FindByID(ctx, v.ID)
 	}
-	return updated, err
+	if err != nil {
+		return Video{}, err
+	}
+	return s.publishUploaded(ctx, updated)
+}
+
+func (s *Service) publishUploaded(ctx context.Context, v Video) (Video, error) {
+	if err := s.events.PublishUploaded(ctx, v); err != nil {
+		return Video{}, fmt.Errorf("%w: %w", ErrEventsUnavailable, err)
+	}
+	return v, nil
+}
+
+// MarkProcessing dipanggil saat transcoder mulai mengerjakan video.
+// Event yang datang terlambat atau dobel diabaikan (bukan error).
+func (s *Service) MarkProcessing(ctx context.Context, videoID int64) error {
+	if _, err := s.repo.FindByID(ctx, videoID); err != nil {
+		return err
+	}
+	_, err := s.repo.MarkProcessing(ctx, videoID, s.now())
+	return err
+}
+
+// MarkReady dipanggil setelah transcoder selesai membuat file HLS.
+func (s *Service) MarkReady(ctx context.Context, videoID int64, r TranscodeResult) error {
+	if _, err := s.repo.FindByID(ctx, videoID); err != nil {
+		return err
+	}
+	if r.PlaylistKey == "" || r.DurationMs <= 0 || len(r.Renditions) == 0 {
+		return &ValidationError{"transcode_result", "playlist, durasi, dan resolusi wajib diisi"}
+	}
+	_, err := s.repo.MarkReady(ctx, videoID, r, s.now())
+	return err
+}
+
+// MarkFailed dipanggil jika transcoder menyerah memproses video.
+func (s *Service) MarkFailed(ctx context.Context, videoID int64, reason string) error {
+	if _, err := s.repo.FindByID(ctx, videoID); err != nil {
+		return err
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "transcoding gagal"
+	}
+	// Kolom failure_reason maksimal 500 karakter.
+	if r := []rune(reason); len(r) > 500 {
+		reason = string(r[:500])
+	}
+	_, err := s.repo.MarkFailed(ctx, videoID, reason, s.now())
+	return err
 }
 
 // Playback adalah video beserta URL untuk memutarnya.
 type Playback struct {
 	Video Video
-	// Request kosong selama video belum UPLOADED.
+	// Request kosong selama video belum diunggah.
 	Request PresignedRequest
 }
 
-// GetVideo mengambil video. Video yang belum UPLOADED hanya terlihat oleh
+// GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
 // pemiliknya; untuk orang lain hasilnya ErrNotFound. viewerID 0 berarti
 // pengunjung yang belum login.
+//
+// Untuk sementara URL putar mengarah ke file mentah (presigned). Di langkah
+// 6b, video READY diputar lewat file HLS.
 func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (Playback, error) {
 	v, err := s.repo.FindByID(ctx, videoID)
 	if err != nil {
 		return Playback{}, err
 	}
-	if v.Status != StatusUploaded {
-		if viewerID == 0 || viewerID != v.OwnerID {
-			return Playback{}, ErrNotFound
-		}
+	isOwner := viewerID != 0 && viewerID == v.OwnerID
+	if v.Status != StatusReady && !isOwner {
+		return Playback{}, ErrNotFound
+	}
+	if v.Status == StatusPendingUpload {
 		return Playback{Video: v}, nil
 	}
 	req, err := s.store.PresignGet(ctx, v.ObjectKey, s.opts.PlaybackURLTTL)

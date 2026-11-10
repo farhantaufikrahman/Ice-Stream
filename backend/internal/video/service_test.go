@@ -2,6 +2,8 @@ package video
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -68,6 +70,50 @@ func (r *fakeRepo) ListByOwner(_ context.Context, ownerID, beforeID int64, limit
 	return out, nil
 }
 
+func (r *fakeRepo) transition(id int64, from []string, apply func(*Video)) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.videos[id]
+	if !ok || !slices.Contains(from, v.Status) {
+		return false, nil
+	}
+	apply(&v)
+	r.videos[id] = v
+	return true, nil
+}
+
+func (r *fakeRepo) MarkProcessing(_ context.Context, id int64, _ time.Time) (bool, error) {
+	return r.transition(id, []string{StatusUploaded}, func(v *Video) { v.Status = StatusProcessing })
+}
+
+func (r *fakeRepo) MarkReady(_ context.Context, id int64, res TranscodeResult, now time.Time) (bool, error) {
+	return r.transition(id, []string{StatusUploaded, StatusProcessing}, func(v *Video) {
+		v.Status, v.PlaylistKey, v.ThumbnailKey = StatusReady, res.PlaylistKey, res.ThumbnailKey
+		v.DurationMs, v.Renditions, v.ProcessedAt = res.DurationMs, res.Renditions, &now
+	})
+}
+
+func (r *fakeRepo) MarkFailed(_ context.Context, id int64, reason string, now time.Time) (bool, error) {
+	return r.transition(id, []string{StatusUploaded, StatusProcessing}, func(v *Video) {
+		v.Status, v.FailureReason, v.ProcessedAt = StatusFailed, reason, &now
+	})
+}
+
+// fakePublisher mencatat event yang dikirim. Isi err untuk mensimulasikan
+// NATS yang sedang mati.
+type fakePublisher struct {
+	published []int64
+	err       error
+}
+
+func (p *fakePublisher) PublishUploaded(_ context.Context, v Video) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.published = append(p.published, v.ID)
+	return nil
+}
+
 // fakeStore pura-pura menjadi object storage. objects diisi test untuk
 // mensimulasikan file yang sudah diunggah browser.
 type fakeStore struct {
@@ -91,13 +137,30 @@ func (s *fakeStore) Stat(_ context.Context, key string) (ObjectInfo, error) {
 }
 
 func newTestService() (*Service, *fakeRepo, *fakeStore) {
-	repo, store := newFakeRepo(), &fakeStore{objects: map[string]ObjectInfo{}}
-	svc := NewService(repo, store, Options{
+	svc, repo, store, _ := newTestServiceWithEvents()
+	return svc, repo, store
+}
+
+func newTestServiceWithEvents() (*Service, *fakeRepo, *fakeStore, *fakePublisher) {
+	repo, store, pub := newFakeRepo(), &fakeStore{objects: map[string]ObjectInfo{}}, &fakePublisher{}
+	svc := NewService(repo, store, pub, Options{
 		MaxUploadBytes: 10 << 20,
 		UploadURLTTL:   15 * time.Minute,
 		PlaybackURLTTL: time.Hour,
 	})
-	return svc, repo, store
+	return svc, repo, store, pub
+}
+
+// uploadedVideo membuat video milik user 7 yang sudah berstatus UPLOADED.
+func uploadedVideo(t *testing.T, svc *Service, store *fakeStore) Video {
+	t.Helper()
+	ctx := context.Background()
+	up, err := svc.CreateUpload(ctx, validInput())
+	require.NoError(t, err)
+	store.objects[up.Video.ObjectKey] = ObjectInfo{Size: 1234, ContentType: "video/mp4"}
+	v, err := svc.CompleteUpload(ctx, 7, up.Video.ID)
+	require.NoError(t, err)
+	return v
 }
 
 func validInput() CreateUploadInput {
@@ -141,7 +204,7 @@ func TestCreateUploadValidation(t *testing.T) {
 
 func TestCompleteUpload(t *testing.T) {
 	ctx := context.Background()
-	svc, _, store := newTestService()
+	svc, _, store, pub := newTestServiceWithEvents()
 	up, err := svc.CreateUpload(ctx, validInput())
 	require.NoError(t, err)
 	id := up.Video.ID
@@ -160,18 +223,89 @@ func TestCompleteUpload(t *testing.T) {
 	_, err = svc.CompleteUpload(ctx, 8, id)
 	assert.ErrorIs(t, err, ErrNotFound)
 
+	assert.Empty(t, pub.published, "belum ada event selama upload belum selesai")
+
 	v, err := svc.CompleteUpload(ctx, 7, id)
 	require.NoError(t, err)
 	assert.Equal(t, StatusUploaded, v.Status)
 	require.NotNil(t, v.UploadedAt)
+	assert.Equal(t, []int64{id}, pub.published, "event videos.uploaded terkirim")
 
-	// Memanggil ulang tetap berhasil (idempotent).
+	// Memanggil ulang tetap berhasil (idempotent) dan mengirim event lagi;
+	// JetStream yang membuang duplikatnya.
 	again, err := svc.CompleteUpload(ctx, 7, id)
 	require.NoError(t, err)
 	assert.Equal(t, v.UploadedAt, again.UploadedAt)
+	assert.Equal(t, []int64{id, id}, pub.published)
+
+	// Setelah transcoder mulai bekerja, tidak ada event baru.
+	require.NoError(t, svc.MarkProcessing(ctx, id))
+	again, err = svc.CompleteUpload(ctx, 7, id)
+	require.NoError(t, err)
+	assert.Equal(t, StatusProcessing, again.Status)
+	assert.Len(t, pub.published, 2)
 
 	_, err = svc.CompleteUpload(ctx, 7, 999)
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestCompleteUploadEventsUnavailable(t *testing.T) {
+	ctx := context.Background()
+	svc, _, store, pub := newTestServiceWithEvents()
+	up, err := svc.CreateUpload(ctx, validInput())
+	require.NoError(t, err)
+	store.objects[up.Video.ObjectKey] = ObjectInfo{Size: 1234, ContentType: "video/mp4"}
+
+	// NATS mati: client mendapat error yang boleh dicoba lagi...
+	pub.err = errors.New("nats: no responders")
+	_, err = svc.CompleteUpload(ctx, 7, up.Video.ID)
+	assert.ErrorIs(t, err, ErrEventsUnavailable)
+
+	// ...dan saat dicoba lagi setelah NATS hidup, event akhirnya terkirim.
+	pub.err = nil
+	v, err := svc.CompleteUpload(ctx, 7, up.Video.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusUploaded, v.Status)
+	assert.Equal(t, []int64{up.Video.ID}, pub.published)
+}
+
+func TestTranscodeStatusFlow(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, store := newTestService()
+	id := uploadedVideo(t, svc, store).ID
+	result := TranscodeResult{PlaylistKey: "hls/1/master.m3u8", ThumbnailKey: "hls/1/thumbnail.jpg", DurationMs: 5000, Renditions: []string{"360p"}}
+
+	require.NoError(t, svc.MarkProcessing(ctx, id))
+	assert.Equal(t, StatusProcessing, repo.videos[id].Status)
+
+	// Hasil tanpa playlist ditolak (pesan rusak dari transcoder).
+	var verr *ValidationError
+	assert.ErrorAs(t, svc.MarkReady(ctx, id, TranscodeResult{}), &verr)
+
+	require.NoError(t, svc.MarkReady(ctx, id, result))
+	v := repo.videos[id]
+	assert.Equal(t, StatusReady, v.Status)
+	assert.Equal(t, int64(5000), v.DurationMs)
+	assert.Equal(t, []string{"360p"}, v.Renditions)
+
+	// Event yang datang terlambat atau dobel tidak mengubah video READY.
+	require.NoError(t, svc.MarkProcessing(ctx, id))
+	require.NoError(t, svc.MarkFailed(ctx, id, "telat"))
+	assert.Equal(t, StatusReady, repo.videos[id].Status)
+
+	assert.ErrorIs(t, svc.MarkProcessing(ctx, 999), ErrNotFound)
+}
+
+func TestMarkFailed(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, store := newTestService()
+	id := uploadedVideo(t, svc, store).ID
+
+	require.NoError(t, svc.MarkFailed(ctx, id, strings.Repeat("x", 600)))
+	v := repo.videos[id]
+	assert.Equal(t, StatusFailed, v.Status)
+	assert.Len(t, v.FailureReason, 500, "alasan dipotong sesuai ukuran kolom")
+	require.NotNil(t, v.ProcessedAt)
 }
 
 func TestGetVideoVisibility(t *testing.T) {
@@ -194,9 +328,19 @@ func TestGetVideoVisibility(t *testing.T) {
 	_, err = svc.CompleteUpload(ctx, 7, id)
 	require.NoError(t, err)
 
-	// Setelah UPLOADED: siapa pun bisa melihat, termasuk yang belum login.
+	// UPLOADED dan PROCESSING: pemilik bisa melihat (dengan URL file mentah),
+	// orang lain belum.
+	p, err = svc.GetVideo(ctx, 7, id)
+	require.NoError(t, err)
+	assert.Contains(t, p.Request.URL, "sig=get")
+	_, err = svc.GetVideo(ctx, 0, id)
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	// READY: siapa pun bisa melihat, termasuk yang belum login.
+	require.NoError(t, svc.MarkReady(ctx, id, TranscodeResult{PlaylistKey: "hls/1/master.m3u8", DurationMs: 1000, Renditions: []string{"360p"}}))
 	p, err = svc.GetVideo(ctx, 0, id)
 	require.NoError(t, err)
+	assert.Equal(t, StatusReady, p.Video.Status)
 	assert.Contains(t, p.Request.URL, "sig=get")
 }
 

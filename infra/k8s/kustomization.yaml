@@ -24,6 +24,13 @@ resources:
   # Penyimpanan file video (RustFS, S3-compatible)
   - storage/service.yaml
   - storage/statefulset.yaml
+  # Antrean event antar service (NATS JetStream)
+  - nats/configmap.yaml
+  - nats/service.yaml
+  - nats/statefulset.yaml
+  # Worker transcoding HLS (ffmpeg)
+  - transcoder/configmap.yaml
+  - transcoder/deployment.yaml
 
 # Membuat Secret "oracle-credentials" dari file secrets/oracle.env
 # (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).

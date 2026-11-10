@@ -8,9 +8,15 @@ import (
 )
 
 // Status video, sama dengan CHECK constraint di tabel videos.
+//
+//	PENDING_UPLOAD -> UPLOADED -> PROCESSING -> READY
+//	                                        \-> FAILED
 const (
 	StatusPendingUpload = "PENDING_UPLOAD"
 	StatusUploaded      = "UPLOADED"
+	StatusProcessing    = "PROCESSING"
+	StatusReady         = "READY"
+	StatusFailed        = "FAILED"
 )
 
 // Error yang bisa dikembalikan Service. Lapisan gRPC menerjemahkannya
@@ -24,6 +30,9 @@ var (
 	// ErrNotUploading: CompleteUpload dipanggil untuk video yang tidak sedang
 	// menunggu upload.
 	ErrNotUploading = errors.New("video tidak sedang menunggu upload")
+	// ErrEventsUnavailable: event ke transcoder gagal dikirim (NATS tidak
+	// bisa dihubungi). Client boleh mencoba CompleteUpload lagi.
+	ErrEventsUnavailable = errors.New("antrean transcoding sedang tidak tersedia, coba lagi")
 )
 
 // Video adalah satu baris di tabel videos.
@@ -39,6 +48,23 @@ type Video struct {
 	CreatedAt   time.Time
 	// UploadedAt bernilai nil selama status masih PENDING_UPLOAD.
 	UploadedAt *time.Time
+	// Hasil transcoding. Terisi setelah status READY.
+	PlaylistKey  string
+	ThumbnailKey string
+	DurationMs   int64
+	Renditions   []string
+	// FailureReason terisi jika status FAILED.
+	FailureReason string
+	// ProcessedAt adalah waktu status menjadi READY atau FAILED.
+	ProcessedAt *time.Time
+}
+
+// TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
+type TranscodeResult struct {
+	PlaylistKey  string
+	ThumbnailKey string
+	DurationMs   int64
+	Renditions   []string
 }
 
 // NewVideo adalah data untuk mencatat video baru.

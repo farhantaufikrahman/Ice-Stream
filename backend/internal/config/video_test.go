@@ -19,7 +19,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 	for _, key := range []string{
 		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "DB_USER", "STORAGE_ENDPOINT",
 		"STORAGE_PUBLIC_ENDPOINT", "STORAGE_REGION", "STORAGE_BUCKET", "MAX_UPLOAD_MB",
-		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS",
+		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS", "NATS_URL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -37,6 +37,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 	assert.Equal(t, int64(2048)<<20, cfg.MaxUploadBytes)
 	assert.Equal(t, 15*time.Minute, cfg.UploadURLTTL)
 	assert.Equal(t, time.Hour, cfg.PlaybackURLTTL)
+	assert.Equal(t, "nats://localhost:4222", cfg.NATSURL)
 }
 
 func TestLoadVideoInvalid(t *testing.T) {
@@ -51,6 +52,7 @@ func TestLoadVideoInvalid(t *testing.T) {
 		"MAX_UPLOAD_MB lebih 5 GiB": {"MAX_UPLOAD_MB", "6000"},
 		"UPLOAD_URL_TTL kependekan": {"UPLOAD_URL_TTL", "10s"},
 		"PLAYBACK_URL_TTL kelamaan": {"PLAYBACK_URL_TTL", "200h"},
+		"NATS_URL bukan nats://":    {"NATS_URL", "http://nats:4222"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

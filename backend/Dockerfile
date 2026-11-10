@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 
-# Satu Dockerfile, tiga image. Pilih dengan --target:
-#   docker build --target api   -t .../ice-stream-api:dev   .
-#   docker build --target auth  -t .../ice-stream-auth:dev  .
-#   docker build --target video -t .../ice-stream-video:dev .
+# Satu Dockerfile, empat image. Pilih dengan --target:
+#   docker build --target api        -t .../ice-stream-api:dev        .
+#   docker build --target auth       -t .../ice-stream-auth:dev       .
+#   docker build --target video      -t .../ice-stream-video:dev      .
+#   docker build --target transcoder -t .../ice-stream-transcoder:dev .
 #
 # Kenapa dibedakan? API gateway tidak memakai database (hanya memanggil
 # service lain lewat gRPC), jadi bisa jadi binary statis di image distroless
@@ -110,4 +111,29 @@ ENTRYPOINT ["/app"]
 
 FROM oracle-runtime AS video
 COPY --from=build-cgo /out/video /app
+ENTRYPOINT ["/app"]
+
+# =====================================================================
+# Target "transcoder": binary statis + ffmpeg di Alpine
+# =====================================================================
+# Transcoder tidak memakai Oracle, jadi binary-nya statis (CGO_ENABLED=0)
+# seperti gateway. Bedanya, ia butuh program ffmpeg dan ffprobe, sehingga
+# tidak bisa memakai distroless. Alpine dipilih karena paket ffmpeg-nya
+# lengkap (termasuk encoder H.264 libx264) dan image-nya kecil.
+FROM golang:${GO_VERSION}-alpine AS build-transcoder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/transcoder ./cmd/transcoder
+
+FROM alpine:3.24 AS transcoder
+RUN apk add --no-cache ffmpeg ca-certificates
+COPY --from=build-transcoder /out/transcoder /app
+ENV APP_ENV=production
+# UID angka yang sama dengan service lain (bukan root).
+USER 65532:65532
 ENTRYPOINT ["/app"]
