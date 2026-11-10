@@ -232,6 +232,40 @@ func (h *videoHandler) listMine(c *gin.Context) {
 	c.JSON(http.StatusOK, toListResponse(resp.GetVideos(), resp.GetNextPageToken()))
 }
 
+// search: GET /api/v1/search/videos?q=belajar+golang&page_size=20&page_token=...
+// Tanpa login. Hasilnya berbentuk sama dengan feed, urut paling relevan.
+// Path-nya /search/videos (bukan /videos/search) supaya tidak tertukar
+// dengan /videos/:id, dan nanti bisa ditambah /search/channels.
+func (h *videoHandler) search(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
+		abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "parameter q wajib diisi")
+		return
+	}
+	pageSize, ok := pageSizeQuery(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.SearchVideos(ctx, &videov1.SearchVideosRequest{
+		Query:     q,
+		PageSize:  pageSize,
+		PageToken: c.Query("page_token"),
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	body := toListResponse(resp.GetVideos(), resp.GetNextPageToken())
+	owners := lookupOwners(c.Request.Context(), h.users, h.logger, resp.GetVideos())
+	for i, v := range resp.GetVideos() {
+		body.Videos[i].Owner = owners[v.GetOwnerId()]
+	}
+	c.JSON(http.StatusOK, body)
+}
+
 // list adalah feed publik: GET /api/v1/videos?page_size=20&page_token=...
 // Tidak butuh login.
 func (h *videoHandler) list(c *gin.Context) {

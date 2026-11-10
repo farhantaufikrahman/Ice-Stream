@@ -35,6 +35,7 @@ type fakeVideoClient struct {
 	lastView     *videov1.RecordViewRequest
 	lastLike     *videov1.LikeVideoRequest
 	lastUnlike   *videov1.UnlikeVideoRequest
+	lastSearch   *videov1.SearchVideosRequest
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
@@ -313,4 +314,33 @@ func TestRecordView(t *testing.T) {
 	fake.err = status.Error(codes.Unavailable, "pencatatan views sedang tidak tersedia")
 	rec = do(r, http.MethodPost, "/api/v1/videos/42/views", "")
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func (f *fakeVideoClient) SearchVideos(_ context.Context, in *videov1.SearchVideosRequest, _ ...grpc.CallOption) (*videov1.SearchVideosResponse, error) {
+	f.lastSearch = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.SearchVideosResponse{Videos: []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)}, NextPageToken: "czE"}, nil
+}
+
+func TestSearchVideos(t *testing.T) {
+	videos, users := &fakeVideoClient{}, &fakeUserClient{}
+	r := newTestRouter(t, Deps{Videos: videos, Users: users})
+
+	rec := do(r, http.MethodGet, "/api/v1/search/videos?q=belajar+golang&page_size=5&page_token=abc", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "belajar golang", videos.lastSearch.GetQuery())
+	assert.Equal(t, int32(5), videos.lastSearch.GetPageSize())
+	assert.Equal(t, "abc", videos.lastSearch.GetPageToken())
+	assert.Contains(t, rec.Body.String(), `"next_page_token":"czE"`)
+	assert.Contains(t, rec.Body.String(), `"id":"42"`)
+	assert.Contains(t, rec.Body.String(), `"owner":{`, "pemilik video ikut diisi seperti di feed")
+
+	rec = do(r, http.MethodGet, "/api/v1/search/videos", "")
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "q wajib")
+
+	videos.err = status.Error(codes.InvalidArgument, "query: isi minimal satu kata dengan 2 huruf atau lebih")
+	rec = do(r, http.MethodGet, "/api/v1/search/videos?q=a", "")
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

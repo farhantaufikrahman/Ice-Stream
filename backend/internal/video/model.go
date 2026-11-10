@@ -93,6 +93,10 @@ type NewVideo struct {
 	ObjectKey   string
 	ContentType string
 	SizeBytes   int64
+	// SearchTerms adalah kata dari judul dan deskripsi untuk pencarian
+	// (lihat BuildSearchTerms). Disimpan dalam transaksi yang sama dengan
+	// videonya.
+	SearchTerms []SearchTerm
 }
 
 // ValidationError menandai input dari user yang tidak valid.

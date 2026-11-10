@@ -98,6 +98,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.PUT("/:id/like", requireAuth, videos.like)
 	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
+	v1.GET("/search/videos", videos.search)
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)

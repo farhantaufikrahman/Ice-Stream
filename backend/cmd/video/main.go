@@ -97,6 +97,19 @@ func run(logger *slog.Logger) error {
 		MediaBaseURL:   cfg.MediaPublicURL,
 	})
 
+	// Video yang dibuat sebelum fitur pencarian ada belum punya kata
+	// pencarian. Diindeks di background supaya service tidak menunggu.
+	go func() {
+		n, err := svc.IndexPending(ctx)
+		if err != nil {
+			logger.Error("gagal mengindeks video untuk pencarian", slog.Any("error", err))
+			return
+		}
+		if n > 0 {
+			logger.Info("video lama selesai diindeks untuk pencarian", slog.Int("jumlah", n))
+		}
+	}()
+
 	// Terima laporan status dari transcoder (PROCESSING, READY, FAILED).
 	consumer, err := video.ConsumeTranscodeEvents(ctx, js, svc, logger)
 	if err != nil {

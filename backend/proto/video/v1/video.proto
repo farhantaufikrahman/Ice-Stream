@@ -38,6 +38,13 @@ service VideoService {
   rpc LikeVideo(LikeVideoRequest) returns (LikeVideoResponse);
   // UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
   rpc UnlikeVideo(UnlikeVideoRequest) returns (UnlikeVideoResponse);
+  // SearchVideos mencari video READY yang judul atau deskripsinya berisi
+  // SEMUA kata di query. Setiap kata cocok dengan awal kata, jadi "gol"
+  // menemukan "Golang". Urutan: paling relevan (kata di judul lebih
+  // penting), lalu views terbanyak. Boleh dipanggil tanpa login.
+  // Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
+  // berisi kata dengan 2 huruf atau lebih.
+  rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
 }
 
 enum VideoStatus {
@@ -163,6 +170,22 @@ message ListVideosRequest {
 message ListVideosResponse {
   repeated Video videos = 1;
   // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message SearchVideosRequest {
+  // Kata kunci dari kotak pencarian, maksimal 100 karakter. Hanya 5 kata
+  // pertama yang dipakai.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message SearchVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir. Pencarian dibatasi 10 halaman.
   string next_page_token = 2;
 }
 

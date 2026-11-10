@@ -51,6 +51,16 @@ type Repository interface {
 	// MarkFailed mengubah UPLOADED/PROCESSING menjadi FAILED. false jika
 	// statusnya sudah bukan keduanya.
 	MarkFailed(ctx context.Context, id int64, reason string, now time.Time) (bool, error)
+	// Search mengambil video READY yang punya kata berawalan SETIAP kata di
+	// terms, urut skor (jumlah bobot kata yang cocok) lalu views terbanyak.
+	Search(ctx context.Context, terms []string, offset, limit int) ([]Video, error)
+	// ListUnindexed mengambil video yang kata-katanya belum disimpan
+	// (dibuat sebelum fitur pencarian ada), id terkecil lebih dulu.
+	ListUnindexed(ctx context.Context, limit int) ([]Video, error)
+	// SaveSearchTerms menyimpan kata-kata video yang belum diindeks.
+	// Mengembalikan false (tanpa error) jika video itu ternyata sudah
+	// diindeks, misalnya oleh pod VideoService lain.
+	SaveSearchTerms(ctx context.Context, videoID int64, terms []SearchTerm, now time.Time) (bool, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -155,6 +165,7 @@ func (s *Service) CreateUpload(ctx context.Context, in CreateUploadInput) (Uploa
 	if err != nil {
 		return Upload{}, err
 	}
+	nv.SearchTerms = BuildSearchTerms(nv.Title, nv.Description)
 	nv.ObjectKey, err = newObjectKey()
 	if err != nil {
 		return Upload{}, err
