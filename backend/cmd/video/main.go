@@ -18,9 +18,11 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
+	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/comment"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/danmaku"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
@@ -108,6 +110,10 @@ func run(logger *slog.Logger) error {
 	// koneksi Oracle yang sama, karena tabel comments ada di schema VIDEO_SVC.
 	comments := comment.NewService(comment.NewOracleRepository(db))
 	commentv1.RegisterCommentServiceServer(srv, comment.NewGRPCServer(comments, logger))
+	// DanmakuService juga di proses ini: tabel danmaku ada di VIDEO_SVC, dan
+	// danmaku baru disiarkan lewat koneksi NATS yang sama (core NATS).
+	danmakus := danmaku.NewService(danmaku.NewOracleRepository(db), danmaku.NewNATSPublisher(nc), logger)
+	danmakuv1.RegisterDanmakuServiceServer(srv, danmaku.NewGRPCServer(danmakus, logger))
 
 	healthSrv := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthSrv)

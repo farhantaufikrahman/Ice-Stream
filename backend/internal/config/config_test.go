@@ -14,6 +14,7 @@ func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"APP_ENV", "HTTP_PORT", "CORS_ALLOWED_ORIGINS", "SHUTDOWN_TIMEOUT",
 		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "VIDEO_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
+		"NATS_URL", "LIVE_MAX_CLIENTS",
 	} {
 		t.Setenv(key, "")
 	}
@@ -31,6 +32,8 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "localhost:50051", cfg.AuthGRPCAddr)
 	assert.Equal(t, "localhost:50052", cfg.VideoGRPCAddr)
 	assert.Equal(t, "/secrets/jwt-public.pem", cfg.JWTPublicKeyFile)
+	assert.Equal(t, "nats://localhost:4222", cfg.NATSURL)
+	assert.Equal(t, 5000, cfg.LiveMaxClients)
 	// Di development cookie tidak Secure, karena localhost memakai http.
 	assert.Equal(t, CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode}, cfg.Cookie)
 }
@@ -47,6 +50,8 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("JWT_PUBLIC_KEY_FILE", "/etc/ice-stream/jwt/jwt-public.pem")
 	t.Setenv("COOKIE_SECURE", "")
 	t.Setenv("COOKIE_SAMESITE", "None")
+	t.Setenv("NATS_URL", "nats://nats:4222")
+	t.Setenv("LIVE_MAX_CLIENTS", "200")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -59,20 +64,25 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "auth:50051", cfg.AuthGRPCAddr)
 	assert.Equal(t, "video:50052", cfg.VideoGRPCAddr)
 	assert.Equal(t, "/etc/ice-stream/jwt/jwt-public.pem", cfg.JWTPublicKeyFile)
+	assert.Equal(t, "nats://nats:4222", cfg.NATSURL)
+	assert.Equal(t, 200, cfg.LiveMaxClients)
 	// Di production Secure otomatis true.
 	assert.Equal(t, CookieConfig{Secure: true, SameSite: http.SameSiteNoneMode}, cfg.Cookie)
 }
 
 func TestLoadInvalid(t *testing.T) {
 	tests := map[string]map[string]string{
-		"APP_ENV salah":               {"APP_ENV": "staging"},
-		"HTTP_PORT bukan angka":       {"HTTP_PORT": "abc"},
-		"HTTP_PORT di luar batas":     {"HTTP_PORT": "70000"},
-		"SHUTDOWN_TIMEOUT salah":      {"SHUTDOWN_TIMEOUT": "sepuluh"},
-		"JWT_PUBLIC_KEY_FILE kosong":  {"JWT_PUBLIC_KEY_FILE": ""},
-		"COOKIE_SECURE bukan boolean": {"COOKIE_SECURE": "ya"},
-		"COOKIE_SAMESITE salah":       {"COOKIE_SAMESITE": "kadang"},
-		"SameSite none tanpa Secure":  {"COOKIE_SAMESITE": "none", "COOKIE_SECURE": "false"},
+		"APP_ENV salah":                {"APP_ENV": "staging"},
+		"HTTP_PORT bukan angka":        {"HTTP_PORT": "abc"},
+		"HTTP_PORT di luar batas":      {"HTTP_PORT": "70000"},
+		"SHUTDOWN_TIMEOUT salah":       {"SHUTDOWN_TIMEOUT": "sepuluh"},
+		"JWT_PUBLIC_KEY_FILE kosong":   {"JWT_PUBLIC_KEY_FILE": ""},
+		"COOKIE_SECURE bukan boolean":  {"COOKIE_SECURE": "ya"},
+		"COOKIE_SAMESITE salah":        {"COOKIE_SAMESITE": "kadang"},
+		"SameSite none tanpa Secure":   {"COOKIE_SAMESITE": "none", "COOKIE_SECURE": "false"},
+		"NATS_URL salah":               {"NATS_URL": "http://nats:4222"},
+		"LIVE_MAX_CLIENTS nol":         {"LIVE_MAX_CLIENTS": "0"},
+		"LIVE_MAX_CLIENTS bukan angka": {"LIVE_MAX_CLIENTS": "banyak"},
 	}
 	for name, env := range tests {
 		t.Run(name, func(t *testing.T) {

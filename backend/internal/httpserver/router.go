@@ -13,10 +13,12 @@ import (
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
+	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
 
 // ReadinessCheck memeriksa satu dependensi (Oracle, NATS, dan seterusnya).
@@ -37,6 +39,12 @@ type Deps struct {
 	// Comments adalah klien gRPC ke CommentService (berjalan di proses
 	// VideoService).
 	Comments commentv1.CommentServiceClient
+	// Danmaku adalah klien gRPC ke DanmakuService (berjalan di proses
+	// VideoService).
+	Danmaku danmakuv1.DanmakuServiceClient
+	// Live membagikan danmaku baru ke penonton yang tersambung (SSE).
+	// Boleh nil di test.
+	Live *live.Hub
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
 }
@@ -96,6 +104,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/comments", requireAuth, comments.create)
 	videoGroup.GET("/:id/comments/:commentId/replies", comments.listReplies)
 	videoGroup.DELETE("/:id/comments/:commentId", requireAuth, comments.remove)
+
+	danmaku := &danmakuHandler{client: deps.Danmaku, videos: deps.Videos, hub: deps.Live, heartbeat: liveHeartbeat, logger: logger}
+	videoGroup.GET("/:id/danmaku", danmaku.list)
+	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
+	videoGroup.GET("/:id/danmaku/live", danmaku.live)
 
 	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
 	v1.GET("/users/:username", OptionalAuth(deps.Verifier), users.getByUsername)
