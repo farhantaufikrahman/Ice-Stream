@@ -193,6 +193,15 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 // ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
 // lebih kecil. id ikut dipakai supaya urutan tetap pasti walau dua video
 // selesai di detik yang sama.
+//
+// processed_at selalu dibungkus SYS_EXTRACT_UTC (mengubah waktu menjadi
+// UTC). Untuk kolom TIMESTAMP WITH TIME ZONE, Oracle menyimpan index-nya
+// dalam bentuk SYS_EXTRACT_UTC(processed_at). ORDER BY harus memakai
+// ekspresi yang sama persis; kalau tidak, Oracle tidak bisa memakai urutan
+// index videos_feed_ix / videos_owner_feed_ix, sehingga ia membaca SEMUA
+// video READY lalu mengurutkannya dulu, makin lambat setiap ada video baru.
+// Dengan SYS_EXTRACT_UTC, Oracle membaca index dari belakang dan berhenti
+// setelah limit baris (sudah dicek dengan EXPLAIN PLAN, lihat langkah 14).
 func (r *OracleRepository) ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error) {
 	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
 	switch len(ownerIDs) {
@@ -205,10 +214,12 @@ func (r *OracleRepository) ListPublic(ctx context.Context, ownerIDs []int64, aft
 		q = q.Where("owner_id IN ?", ownerIDs)
 	}
 	if after != nil {
-		q = q.Where("(processed_at < ? OR (processed_at = ? AND id < ?))", after.ProcessedAt, after.ProcessedAt, after.ID)
+		q = q.Where("(SYS_EXTRACT_UTC(processed_at) < SYS_EXTRACT_UTC(?) OR "+
+			"(SYS_EXTRACT_UTC(processed_at) = SYS_EXTRACT_UTC(?) AND id < ?))",
+			after.ProcessedAt, after.ProcessedAt, after.ID)
 	}
 	var rows []videoRow
-	if err := q.Order("processed_at DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
+	if err := q.Order("SYS_EXTRACT_UTC(processed_at) DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("select public videos: %w", err)
 	}
 	videos := make([]Video, len(rows))
