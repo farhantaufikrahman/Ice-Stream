@@ -29,6 +29,8 @@ type Config struct {
 	TrustedProxies []string
 	// AuthGRPCAddr adalah alamat AuthService, misalnya "auth:50051".
 	AuthGRPCAddr string
+	// VideoGRPCAddr adalah alamat VideoService, misalnya "video:50052".
+	VideoGRPCAddr string
 	// JWTPublicKeyFile adalah file kunci publik untuk memeriksa access token.
 	JWTPublicKeyFile string
 	// Cookie mengatur cookie refresh token.
@@ -86,6 +88,7 @@ func Load() (Config, error) {
 		ShutdownTimeout:    shutdownTimeout,
 		TrustedProxies:     getList("TRUSTED_PROXIES", nil),
 		AuthGRPCAddr:       getString("AUTH_GRPC_ADDR", "localhost:50051"),
+		VideoGRPCAddr:      getString("VIDEO_GRPC_ADDR", "localhost:50052"),
 		JWTPublicKeyFile:   getString("JWT_PUBLIC_KEY_FILE", ""),
 		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
 	}

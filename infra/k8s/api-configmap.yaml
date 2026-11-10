@@ -16,6 +16,7 @@ data:
   SHUTDOWN_TIMEOUT: 10s
   # Gateway tidak lagi terhubung ke Oracle; semua urusan akun lewat AuthService.
   AUTH_GRPC_ADDR: auth:50051
+  VIDEO_GRPC_ADDR: video:50052
   # Kunci publik untuk memeriksa access token (dari ConfigMap jwt-public).
   JWT_PUBLIC_KEY_FILE: /etc/ice-stream/jwt/jwt-public.pem
   # Cluster lokal masih http, jadi cookie belum boleh Secure. Ubah ke "true"

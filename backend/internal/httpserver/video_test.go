@@ -1,0 +1,198 @@
+package httpserver
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"net/http"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
+)
+
+// fakeVideoClient menggantikan VideoService sungguhan di test.
+type fakeVideoClient struct {
+	err error
+
+	lastCreate   *videov1.CreateUploadRequest
+	lastComplete *videov1.CompleteUploadRequest
+	lastGet      *videov1.GetVideoRequest
+	lastList     *videov1.ListMyVideosRequest
+}
+
+var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
+
+func testVideo(status videov1.VideoStatus) *videov1.Video {
+	v := &videov1.Video{
+		Id: 42, OwnerId: 7, Title: "Tes", Status: status, ContentType: "video/mp4",
+		SizeBytes: 1234, CreatedAt: timestamppb.New(testCreatedAt),
+	}
+	if status == videov1.VideoStatus_VIDEO_STATUS_UPLOADED {
+		v.UploadedAt = timestamppb.New(testCreatedAt.Add(time.Minute))
+	}
+	return v
+}
+
+func (f *fakeVideoClient) CreateUpload(_ context.Context, in *videov1.CreateUploadRequest, _ ...grpc.CallOption) (*videov1.CreateUploadResponse, error) {
+	f.lastCreate = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.CreateUploadResponse{
+		Video:              testVideo(videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD),
+		UploadUrl:          "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x",
+		UploadUrlExpiresAt: timestamppb.New(testCreatedAt.Add(15 * time.Minute)),
+		UploadHeaders:      map[string]string{"Content-Type": "video/mp4"},
+	}, nil
+}
+
+func (f *fakeVideoClient) CompleteUpload(_ context.Context, in *videov1.CompleteUploadRequest, _ ...grpc.CallOption) (*videov1.CompleteUploadResponse, error) {
+	f.lastComplete = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.CompleteUploadResponse{Video: testVideo(videov1.VideoStatus_VIDEO_STATUS_UPLOADED)}, nil
+}
+
+func (f *fakeVideoClient) GetVideo(_ context.Context, in *videov1.GetVideoRequest, _ ...grpc.CallOption) (*videov1.GetVideoResponse, error) {
+	f.lastGet = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.GetVideoResponse{
+		Video:                testVideo(videov1.VideoStatus_VIDEO_STATUS_UPLOADED),
+		PlaybackUrl:          "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y",
+		PlaybackUrlExpiresAt: timestamppb.New(testCreatedAt.Add(time.Hour)),
+	}, nil
+}
+
+func (f *fakeVideoClient) ListMyVideos(_ context.Context, in *videov1.ListMyVideosRequest, _ ...grpc.CallOption) (*videov1.ListMyVideosResponse, error) {
+	f.lastList = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &videov1.ListMyVideosResponse{
+		Videos:        []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD)},
+		NextPageToken: "42",
+	}, nil
+}
+
+// newTokenSigner membuat Verifier dan fungsi untuk menandatangani access
+// token user tertentu, supaya test bisa memanggil endpoint yang butuh login.
+func newTokenSigner(t *testing.T) (*accesstoken.Verifier, func(userID int64) func(*http.Request)) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return accesstoken.NewVerifier(pub), func(userID int64) func(*http.Request) {
+		now := time.Now()
+		token, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, accesstoken.Claims{
+			Role: "USER",
+			RegisteredClaims: jwt.RegisteredClaims{
+				Issuer: accesstoken.Issuer, Subject: strconv.FormatInt(userID, 10), Audience: jwt.ClaimStrings{accesstoken.Audience},
+				IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+			},
+		}).SignedString(priv)
+		require.NoError(t, err)
+		return func(req *http.Request) { req.Header.Set("Authorization", "Bearer "+token) }
+	}
+}
+
+func TestCreateVideo(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	rec := do(r, http.MethodPost, "/api/v1/videos", `{"title":"Tes","content_type":"video/mp4","size_bytes":1234}`, as(7))
+
+	require.Equal(t, http.StatusCreated, rec.Code)
+	assert.JSONEq(t, `{
+		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
+		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z"},
+		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
+		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
+	}`, rec.Body.String())
+	// Id pemilik diambil dari access token, bukan dari body.
+	assert.Equal(t, int64(7), fake.lastCreate.GetRequesterId())
+	assert.Equal(t, int64(1234), fake.lastCreate.GetSizeBytes())
+
+	rec = do(r, http.MethodPost, "/api/v1/videos", `{"title":"Tes"}`)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "wajib login")
+}
+
+func TestCompleteVideo(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	rec := do(r, http.MethodPost, "/api/v1/videos/42/complete", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"status":"UPLOADED"`)
+	assert.Contains(t, rec.Body.String(), `"uploaded_at":"2026-10-29T04:01:00Z"`)
+	assert.Equal(t, int64(42), fake.lastComplete.GetVideoId())
+	assert.Equal(t, int64(7), fake.lastComplete.GetRequesterId())
+
+	rec = do(r, http.MethodPost, "/api/v1/videos/abc/complete", "", as(7))
+	assert.Equal(t, http.StatusNotFound, rec.Code, "id bukan angka")
+
+	fake.err = status.Error(codes.FailedPrecondition, "file video belum selesai diunggah")
+	rec = do(r, http.MethodPost, "/api/v1/videos/42/complete", "", as(7))
+	assert.Equal(t, http.StatusConflict, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"code":"FAILED_PRECONDITION"`)
+}
+
+func TestGetVideo(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	// Tanpa login boleh, viewer_id = 0.
+	rec := do(r, http.MethodGet, "/api/v1/videos/42", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, int64(0), fake.lastGet.GetViewerId())
+	assert.Contains(t, rec.Body.String(), `"playback":{"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=y"`)
+
+	// Dengan login, viewer_id diisi dari token.
+	rec = do(r, http.MethodGet, "/api/v1/videos/42", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, int64(7), fake.lastGet.GetViewerId())
+
+	// Token rusak tetap ditolak, supaya frontend tahu harus refresh.
+	rec = do(r, http.MethodGet, "/api/v1/videos/42", "", func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer rusak")
+	})
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	fake.err = status.Error(codes.NotFound, "video tidak ditemukan")
+	rec = do(r, http.MethodGet, "/api/v1/videos/999", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestListMyVideos(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	rec := do(r, http.MethodGet, "/api/v1/me/videos?page_size=10&page_token=50", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"next_page_token":"42"`)
+	assert.Equal(t, int64(7), fake.lastList.GetRequesterId())
+	assert.Equal(t, int32(10), fake.lastList.GetPageSize())
+	assert.Equal(t, "50", fake.lastList.GetPageToken())
+
+	rec = do(r, http.MethodGet, "/api/v1/me/videos?page_size=abc", "", as(7))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	rec = do(r, http.MethodGet, "/api/v1/me/videos", "")
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
