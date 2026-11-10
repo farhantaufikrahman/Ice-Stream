@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { ApiError, errorMessage, isAbortError } from '../api/client'
-import { getVideo, recordView, saveWatchProgress, setLike } from '../api/endpoints'
-import type { VideoDetail } from '../api/types'
+import { getVideo, listVideos, recordView, saveWatchProgress, setLike } from '../api/endpoints'
+import type { Video, VideoDetail } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
-import { formatCount, timeAgo } from '../lib/format'
+import { formatCount, formatDate } from '../lib/format'
+import { VideoRow } from '../components/VideoCard'
+
+/** Jumlah video di kolom "Berikutnya". */
+const UP_NEXT_COUNT = 8
 
 const statusText: Record<string, string> = {
   PENDING_UPLOAD: 'File video belum selesai diunggah.',
@@ -123,60 +127,101 @@ function WatchView({ detail, loggedIn }: { detail: VideoDetail; loggedIn: boolea
 
   const ownerName = video.owner?.display_name || video.owner?.username || 'Channel'
   const loginLink = `/login?next=${encodeURIComponent(location.pathname)}`
+  const likeLabel = like.liked ? 'Batal suka' : 'Suka'
 
   return (
     <div className="watch">
-      {video.status === 'READY' && video.hls_url ? (
-        <HlsPlayer
-          src={video.hls_url}
-          poster={video.thumbnail_url}
-          startAt={startAt}
-          onFirstPlay={onFirstPlay}
-          onProgress={onProgress}
-        />
-      ) : (
-        <div className="player player-placeholder">
-          <p>{statusText[video.status] ?? 'Video belum bisa diputar.'}</p>
-          {video.status === 'FAILED' && video.failure_reason && <p className="muted">{video.failure_reason}</p>}
+      <div className="watch-main">
+        <div className="player-card">
+          {video.status === 'READY' && video.hls_url ? (
+            <HlsPlayer
+              src={video.hls_url}
+              poster={video.thumbnail_url}
+              startAt={startAt}
+              onFirstPlay={onFirstPlay}
+              onProgress={onProgress}
+            />
+          ) : (
+            <div className="player player-placeholder">
+              <p>{statusText[video.status] ?? 'Video belum bisa diputar.'}</p>
+              {video.status === 'FAILED' && video.failure_reason && <p className="faint">{video.failure_reason}</p>}
+            </div>
+          )}
         </div>
-      )}
 
-      <h1 className="watch-title">{video.title}</h1>
-      <div className="watch-meta">
-        <div className="channel">
-          <Avatar name={ownerName} url={video.owner?.avatar_url} size={40} />
-          <div>
-            <div className="channel-name">{ownerName}</div>
-            {video.owner && <div className="muted">@{video.owner.username}</div>}
+        <div className="watch-heading">
+          <h1 className="watch-title">{video.title}</h1>
+          <div className="watch-stats">
+            <span>{formatCount(views)} tayangan</span>
+            <span>Diunggah {formatDate(video.created_at)}</span>
+            {startAt > 0 && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>
         </div>
+
         <div className="watch-actions">
           {loggedIn ? (
             <button
               type="button"
-              className={like.liked ? 'btn btn-primary' : 'btn'}
+              className={like.liked ? 'btn btn-like is-liked' : 'btn btn-like'}
               onClick={toggleLike}
               disabled={likeBusy || video.status !== 'READY'}
               aria-pressed={like.liked}
+              aria-label={`${likeLabel}, ${like.count} suka`}
             >
-              ♥ {formatCount(like.count)}
+              <HeartIcon filled={like.liked} /> {formatCount(like.count)}
             </button>
           ) : (
-            <Link to={loginLink} className="btn" title="Masuk untuk menyukai video">
-              ♥ {formatCount(like.count)}
+            <Link to={loginLink} className="btn btn-like" title="Masuk untuk menyukai video">
+              <HeartIcon filled={false} /> {formatCount(like.count)}
             </Link>
           )}
         </div>
-      </div>
-      {likeError && <ErrorBox message={likeError} />}
+        {likeError && <ErrorBox message={likeError} />}
 
-      <section className="description card">
-        <div className="muted">
-          {formatCount(views)} x ditonton · {timeAgo(video.created_at)}
-          {startAt > 0 && ' · melanjutkan dari posisi terakhir'}
-        </div>
-        {video.description ? <p>{video.description}</p> : <p className="muted">Tidak ada deskripsi.</p>}
-      </section>
+        <section className="channel-card">
+          <Avatar name={ownerName} url={video.owner?.avatar_url} size={52} />
+          <div className="channel-text">
+            <span className="channel-name">{ownerName}</span>
+            {video.owner && <span className="muted small">@{video.owner.username}</span>}
+          </div>
+          <p className="description">{video.description || 'Tidak ada deskripsi.'}</p>
+        </section>
+      </div>
+
+      <aside className="watch-side">
+        <h2 className="side-title">Berikutnya</h2>
+        <UpNext currentId={video.id} />
+      </aside>
     </div>
+  )
+}
+
+/** Daftar video terbaru lainnya, di kolom kanan halaman tonton. */
+function UpNext({ currentId }: { currentId: string }) {
+  const [videos, setVideos] = useState<Video[] | null>(null)
+  useEffect(() => {
+    const ctrl = new AbortController()
+    listVideos('', ctrl.signal)
+      .then((page) => setVideos(page.videos))
+      .catch(() => setVideos([]))
+    return () => ctrl.abort()
+  }, [])
+  if (!videos) return <p className="muted">Memuat…</p>
+  const others = videos.filter((v) => v.id !== currentId).slice(0, UP_NEXT_COUNT)
+  if (others.length === 0) return <p className="muted">Belum ada video lain.</p>
+  return (
+    <div className="up-next">
+      {others.map((v) => (
+        <VideoRow key={v.id} video={v} />
+      ))}
+    </div>
+  )
+}
+
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+    </svg>
   )
 }
