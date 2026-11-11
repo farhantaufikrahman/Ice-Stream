@@ -1299,6 +1299,123 @@ func (x *CountNewSubscribersResponse) GetPrevious() int64 {
 	return 0
 }
 
+type SearchUsersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kata kunci, maksimal 100 karakter. Hanya 5 kata pertama yang dipakai.
+	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// Jumlah maksimal per halaman (1 sampai 50, default 20).
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchUsersRequest) Reset() {
+	*x = SearchUsersRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchUsersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchUsersRequest) ProtoMessage() {}
+
+func (x *SearchUsersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchUsersRequest.ProtoReflect.Descriptor instead.
+func (*SearchUsersRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SearchUsersRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *SearchUsersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *SearchUsersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type SearchUsersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Tanpa email.
+	Profiles []*Profile `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	// Kosong jika sudah halaman terakhir (maksimal 10 halaman).
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchUsersResponse) Reset() {
+	*x = SearchUsersResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchUsersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchUsersResponse) ProtoMessage() {}
+
+func (x *SearchUsersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchUsersResponse.ProtoReflect.Descriptor instead.
+func (*SearchUsersResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SearchUsersResponse) GetProfiles() []*Profile {
+	if x != nil {
+		return x.Profiles
+	}
+	return nil
+}
+
+func (x *SearchUsersResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
@@ -1390,7 +1507,15 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x03end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"S\n" +
 	"\x1bCountNewSubscribersResponse\x12\x18\n" +
 	"\acurrent\x18\x01 \x01(\x03R\acurrent\x12\x1a\n" +
-	"\bprevious\x18\x02 \x01(\x03R\bprevious2\xb0\a\n" +
+	"\bprevious\x18\x02 \x01(\x03R\bprevious\"f\n" +
+	"\x12SearchUsersRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"k\n" +
+	"\x13SearchUsersResponse\x12,\n" +
+	"\bprofiles\x18\x01 \x03(\v2\x10.user.v1.ProfileR\bprofiles\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xfa\a\n" +
 	"\vUserService\x12E\n" +
 	"\n" +
 	"GetProfile\x12\x1a.user.v1.GetProfileRequest\x1a\x1b.user.v1.GetProfileResponse\x12W\n" +
@@ -1403,7 +1528,8 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x11ListSubscriptions\x12!.user.v1.ListSubscriptionsRequest\x1a\".user.v1.ListSubscriptionsResponse\x12o\n" +
 	"\x18ListSubscribedChannelIds\x12(.user.v1.ListSubscribedChannelIdsRequest\x1a).user.v1.ListSubscribedChannelIdsResponse\x12Z\n" +
 	"\x11ListSubscriberIds\x12!.user.v1.ListSubscriberIdsRequest\x1a\".user.v1.ListSubscriberIdsResponse\x12`\n" +
-	"\x13CountNewSubscribers\x12#.user.v1.CountNewSubscribersRequest\x1a$.user.v1.CountNewSubscribersResponseB\x9a\x01\n" +
+	"\x13CountNewSubscribers\x12#.user.v1.CountNewSubscribersRequest\x1a$.user.v1.CountNewSubscribersResponse\x12H\n" +
+	"\vSearchUsers\x12\x1b.user.v1.SearchUsersRequest\x1a\x1c.user.v1.SearchUsersResponseB\x9a\x01\n" +
 	"\vcom.user.v1B\tUserProtoP\x01ZCgithub.com/farhantaufikrahman/ice-stream/backend/gen/user/v1;userv1\xa2\x02\x03UXX\xaa\x02\aUser.V1\xca\x02\aUser\\V1\xe2\x02\x13User\\V1\\GPBMetadata\xea\x02\bUser::V1b\x06proto3"
 
 var (
@@ -1418,7 +1544,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                          // 0: user.v1.Profile
 	(*GetProfileRequest)(nil),                // 1: user.v1.GetProfileRequest
@@ -1443,46 +1569,51 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*ListSubscriberIdsResponse)(nil),        // 20: user.v1.ListSubscriberIdsResponse
 	(*CountNewSubscribersRequest)(nil),       // 21: user.v1.CountNewSubscribersRequest
 	(*CountNewSubscribersResponse)(nil),      // 22: user.v1.CountNewSubscribersResponse
-	(*timestamppb.Timestamp)(nil),            // 23: google.protobuf.Timestamp
+	(*SearchUsersRequest)(nil),               // 23: user.v1.SearchUsersRequest
+	(*SearchUsersResponse)(nil),              // 24: user.v1.SearchUsersResponse
+	(*timestamppb.Timestamp)(nil),            // 25: google.protobuf.Timestamp
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	23, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	25, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 2: user.v1.BatchGetProfilesResponse.profiles:type_name -> user.v1.Profile
 	0,  // 3: user.v1.UpdateProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 4: user.v1.UploadAvatarResponse.profile:type_name -> user.v1.Profile
 	0,  // 5: user.v1.RemoveAvatarResponse.profile:type_name -> user.v1.Profile
 	0,  // 6: user.v1.ListSubscriptionsResponse.channels:type_name -> user.v1.Profile
-	23, // 7: user.v1.CountNewSubscribersRequest.previous_start:type_name -> google.protobuf.Timestamp
-	23, // 8: user.v1.CountNewSubscribersRequest.current_start:type_name -> google.protobuf.Timestamp
-	23, // 9: user.v1.CountNewSubscribersRequest.end:type_name -> google.protobuf.Timestamp
-	1,  // 10: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	3,  // 11: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
-	5,  // 12: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
-	7,  // 13: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
-	9,  // 14: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
-	11, // 15: user.v1.UserService.Subscribe:input_type -> user.v1.SubscribeRequest
-	13, // 16: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
-	15, // 17: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
-	17, // 18: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
-	19, // 19: user.v1.UserService.ListSubscriberIds:input_type -> user.v1.ListSubscriberIdsRequest
-	21, // 20: user.v1.UserService.CountNewSubscribers:input_type -> user.v1.CountNewSubscribersRequest
-	2,  // 21: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	4,  // 22: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
-	6,  // 23: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
-	8,  // 24: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
-	10, // 25: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
-	12, // 26: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
-	14, // 27: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
-	16, // 28: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
-	18, // 29: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
-	20, // 30: user.v1.UserService.ListSubscriberIds:output_type -> user.v1.ListSubscriberIdsResponse
-	22, // 31: user.v1.UserService.CountNewSubscribers:output_type -> user.v1.CountNewSubscribersResponse
-	21, // [21:32] is the sub-list for method output_type
-	10, // [10:21] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	25, // 7: user.v1.CountNewSubscribersRequest.previous_start:type_name -> google.protobuf.Timestamp
+	25, // 8: user.v1.CountNewSubscribersRequest.current_start:type_name -> google.protobuf.Timestamp
+	25, // 9: user.v1.CountNewSubscribersRequest.end:type_name -> google.protobuf.Timestamp
+	0,  // 10: user.v1.SearchUsersResponse.profiles:type_name -> user.v1.Profile
+	1,  // 11: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	3,  // 12: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
+	5,  // 13: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
+	7,  // 14: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
+	9,  // 15: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
+	11, // 16: user.v1.UserService.Subscribe:input_type -> user.v1.SubscribeRequest
+	13, // 17: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
+	15, // 18: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
+	17, // 19: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
+	19, // 20: user.v1.UserService.ListSubscriberIds:input_type -> user.v1.ListSubscriberIdsRequest
+	21, // 21: user.v1.UserService.CountNewSubscribers:input_type -> user.v1.CountNewSubscribersRequest
+	23, // 22: user.v1.UserService.SearchUsers:input_type -> user.v1.SearchUsersRequest
+	2,  // 23: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	4,  // 24: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
+	6,  // 25: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
+	8,  // 26: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
+	10, // 27: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
+	12, // 28: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
+	14, // 29: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
+	16, // 30: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
+	18, // 31: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
+	20, // 32: user.v1.UserService.ListSubscriberIds:output_type -> user.v1.ListSubscriberIdsResponse
+	22, // 33: user.v1.UserService.CountNewSubscribers:output_type -> user.v1.CountNewSubscribersResponse
+	24, // 34: user.v1.UserService.SearchUsers:output_type -> user.v1.SearchUsersResponse
+	23, // [23:35] is the sub-list for method output_type
+	11, // [11:23] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -1501,7 +1632,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

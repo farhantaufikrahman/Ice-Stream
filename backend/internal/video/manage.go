@@ -18,10 +18,17 @@ type UpdateInput struct {
 	VideoID     int64
 	Title       *string
 	Description *string
+	// Category nil = tidak diubah, "" = hapus kategori.
+	Category *string
+	// Tags nil = tidak diubah, slice kosong = hapus semua tag.
+	Tags []string
+	// SetTags membedakan "tag tidak dikirim" dari "hapus semua tag": slice
+	// kosong dan nil sama-sama berarti tanpa tag di Go.
+	SetTags bool
 }
 
-// UpdateVideo mengganti judul dan/atau deskripsi video milik requester.
-// Kata pencarian dibuat ulang dari judul dan deskripsi baru, dalam
+// UpdateVideo mengganti judul, deskripsi, kategori, dan/atau tag video
+// milik requester. Kata pencarian dibuat ulang dari data baru, dalam
 // transaksi yang sama, supaya pencarian langsung memakai teks terbaru.
 // Boleh untuk video dengan status apa pun.
 func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error) {
@@ -29,8 +36,8 @@ func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error
 		// Gateway selalu mengisi requester dari access token, jadi ini bug.
 		return Video{}, errors.New("requester id kosong")
 	}
-	if in.Title == nil && in.Description == nil {
-		return Video{}, &ValidationError{"title", "isi minimal title atau description"}
+	if in.Title == nil && in.Description == nil && in.Category == nil && !in.SetTags {
+		return Video{}, &ValidationError{"title", "isi minimal title, description, category, atau tags"}
 	}
 	if in.VideoID <= 0 {
 		return Video{}, ErrNotFound
@@ -44,18 +51,28 @@ func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error
 		// ini ada.
 		return Video{}, ErrNotFound
 	}
-	title, desc := v.Title, v.Description
+	d := Details{Title: v.Title, Description: v.Description, Category: v.Category, Tags: v.Tags}
 	if in.Title != nil {
-		if title, err = cleanTitle(*in.Title); err != nil {
+		if d.Title, err = cleanTitle(*in.Title); err != nil {
 			return Video{}, err
 		}
 	}
 	if in.Description != nil {
-		if desc, err = cleanDescription(*in.Description); err != nil {
+		if d.Description, err = cleanDescription(*in.Description); err != nil {
 			return Video{}, err
 		}
 	}
-	return s.repo.UpdateDetails(ctx, v.ID, in.RequesterID, title, desc, BuildSearchTerms(title, desc), s.now())
+	if in.Category != nil {
+		if d.Category, err = cleanCategory(*in.Category); err != nil {
+			return Video{}, err
+		}
+	}
+	if in.SetTags {
+		if d.Tags, err = cleanTags(in.Tags); err != nil {
+			return Video{}, err
+		}
+	}
+	return s.repo.UpdateDetails(ctx, v.ID, in.RequesterID, d, BuildSearchTerms(d.Title, d.Description, d.Tags), s.now())
 }
 
 // deletableStatuses adalah status yang boleh dihapus. UPLOADED dan

@@ -71,6 +71,10 @@ type Video struct {
 	CommentCount int64
 	// LikeCount adalah jumlah like (lihat Service.LikeVideo).
 	LikeCount int64
+	// Category kosong jika video tidak punya kategori (lihat category.go).
+	Category string
+	// Tags sesuai urutan yang diketik kreator, tanpa "#".
+	Tags []string
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
@@ -97,6 +101,8 @@ type NewVideo struct {
 	ObjectKey   string
 	ContentType string
 	SizeBytes   int64
+	Category    string
+	Tags        []string
 	// SearchTerms adalah kata dari judul dan deskripsi untuk pencarian
 	// (lihat BuildSearchTerms). Disimpan dalam transaksi yang sama dengan
 	// videonya.

@@ -33,7 +33,8 @@ type playlistResponse struct {
 	// Hanya ada di GET /me/playlists?video_id=...: true jika video itu ada
 	// di playlist ini (centang di dialog Simpan).
 	ContainsVideo *bool `json:"contains_video,omitempty"`
-	// Hanya ada di GET /playlists/:id. Kosong jika UserService gagal.
+	// Hanya ada di GET /playlists/:id dan /search/playlists. Kosong jika
+	// UserService gagal.
 	Owner *ownerResponse `json:"owner,omitempty"`
 }
 

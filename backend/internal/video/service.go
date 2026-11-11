@@ -27,9 +27,9 @@ type Repository interface {
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
 	// ListPublic mengambil video READY, processed_at lalu id terbesar lebih
-	// dulu, hanya milik salah satu ownerIDs (kosong = semua user) dan hanya
-	// yang posisinya setelah after (nil = dari awal).
-	ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error)
+	// dulu, hanya yang cocok dengan filter dan hanya yang posisinya setelah
+	// after (nil = dari awal).
+	ListPublic(ctx context.Context, filter FeedFilter, after *FeedCursor, limit int) ([]Video, error)
 	// IncrementViews menambah view_count video READY sebanyak 1, juga
 	// tayangan video itu pada tanggal day ("2006-01-02", WIB), lalu
 	// mengembalikan view_count barunya. ErrNotFound jika video tidak READY.
@@ -76,10 +76,10 @@ type Repository interface {
 	// semua entri userID jika videoID = 0. Mengembalikan jumlah baris yang
 	// dihapus.
 	DeleteHistory(ctx context.Context, userID, videoID int64) (int64, error)
-	// UpdateDetails mengganti judul, deskripsi, dan kata pencarian video
-	// milik ownerID dalam satu transaksi. ErrNotFound jika video tidak ada,
-	// sudah dihapus, atau bukan milik ownerID.
-	UpdateDetails(ctx context.Context, id, ownerID int64, title, description string, terms []SearchTerm, now time.Time) (Video, error)
+	// UpdateDetails mengganti judul, deskripsi, kategori, tag, dan kata
+	// pencarian video milik ownerID dalam satu transaksi. ErrNotFound jika
+	// video tidak ada, sudah dihapus, atau bukan milik ownerID.
+	UpdateDetails(ctx context.Context, id, ownerID int64, d Details, terms []SearchTerm, now time.Time) (Video, error)
 	// SoftDelete mengisi deleted_at video milik ownerID dan menghapus kata
 	// pencarian-nya, hanya jika statusnya ada di allowed. ErrNotFound jika
 	// video tidak ada, sudah dihapus, atau bukan milik ownerID;
@@ -172,6 +172,10 @@ type Repository interface {
 	// di semua video ownerID: current = [currentStart, end), previous =
 	// [previousStart, currentStart). Field Views tidak diisi.
 	ChannelActivity(ctx context.Context, ownerID int64, previousStart, currentStart, end time.Time) (current, previous ChannelTotals, err error)
+
+	// SearchPlaylists: playlist PUBLIC berisi video READY yang judulnya
+	// berisi setiap kata di terms, urut paling relevan (playlist_search.go).
+	SearchPlaylists(ctx context.Context, terms []string, offset, limit int) ([]Playlist, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -260,6 +264,10 @@ type CreateUploadInput struct {
 	Description string
 	ContentType string
 	SizeBytes   int64
+	// Category boleh kosong (tanpa kategori).
+	Category string
+	// Tags boleh kosong, maksimal 10 (lihat cleanTags).
+	Tags []string
 }
 
 // Upload adalah hasil CreateUpload: video baru dan cara mengunggah filenya.
@@ -279,7 +287,7 @@ func (s *Service) CreateUpload(ctx context.Context, in CreateUploadInput) (Uploa
 	if err != nil {
 		return Upload{}, err
 	}
-	nv.SearchTerms = BuildSearchTerms(nv.Title, nv.Description)
+	nv.SearchTerms = BuildSearchTerms(nv.Title, nv.Description, nv.Tags)
 	nv.ObjectKey, err = newObjectKey()
 	if err != nil {
 		return Upload{}, err
@@ -308,6 +316,14 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 	if err != nil {
 		return NewVideo{}, err
 	}
+	category, err := cleanCategory(in.Category)
+	if err != nil {
+		return NewVideo{}, err
+	}
+	tags, err := cleanTags(in.Tags)
+	if err != nil {
+		return NewVideo{}, err
+	}
 	contentType := strings.ToLower(strings.TrimSpace(in.ContentType))
 	if !allowedContentTypes[contentType] {
 		return NewVideo{}, &ValidationError{"content_type", "hanya video/mp4, video/webm, video/quicktime, atau video/x-matroska"}
@@ -321,6 +337,8 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 		Description: desc,
 		ContentType: contentType,
 		SizeBytes:   in.SizeBytes,
+		Category:    category,
+		Tags:        tags,
 	}, nil
 }
 
@@ -569,24 +587,30 @@ func (s *Service) ListMyVideos(ctx context.Context, ownerID int64, pageSize int,
 
 // ListVideos mengambil feed publik: video READY, yang paling baru selesai
 // diproses lebih dulu. Siapa saja boleh memanggilnya, termasuk pengunjung
-// yang belum login. ownerIDs membatasi ke video milik user-user itu: satu
-// id untuk halaman channel, banyak id untuk feed subscription. Kosong =
-// semua user.
+// yang belum login. filter.OwnerIDs membatasi ke video milik user-user
+// itu: satu id untuk halaman channel, banyak id untuk feed subscription.
+// filter.Category membatasi ke satu kategori (chip di beranda). Field
+// kosong = tidak dibatasi.
 //
 // pageToken kosong = halaman pertama. Token berikutnya kosong jika sudah
 // tidak ada data lagi. Isi token sengaja tidak perlu dipahami client
 // (opaque), supaya cara pagination bisa diubah tanpa mengubah API.
-func (s *Service) ListVideos(ctx context.Context, ownerIDs []int64, pageSize int, pageToken string) ([]Video, string, error) {
+func (s *Service) ListVideos(ctx context.Context, filter FeedFilter, pageSize int, pageToken string) ([]Video, string, error) {
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
 	if pageSize > maxPageSize {
 		return nil, "", &ValidationError{"page_size", fmt.Sprintf("maksimal %d", maxPageSize)}
 	}
-	ownerIDs = uniquePositive(ownerIDs)
-	if len(ownerIDs) > maxFeedOwners {
+	filter.OwnerIDs = uniquePositive(filter.OwnerIDs)
+	if len(filter.OwnerIDs) > maxFeedOwners {
 		return nil, "", &ValidationError{"owner_ids", fmt.Sprintf("maksimal %d id", maxFeedOwners)}
 	}
+	category, err := cleanCategory(filter.Category)
+	if err != nil {
+		return nil, "", err
+	}
+	filter.Category = category
 	var after *FeedCursor
 	if pageToken != "" {
 		c, err := decodeFeedCursor(pageToken)
@@ -595,7 +619,7 @@ func (s *Service) ListVideos(ctx context.Context, ownerIDs []int64, pageSize int
 		}
 		after = &c
 	}
-	videos, err := s.repo.ListPublic(ctx, ownerIDs, after, pageSize+1)
+	videos, err := s.repo.ListPublic(ctx, filter, after, pageSize+1)
 	if err != nil {
 		return nil, "", err
 	}

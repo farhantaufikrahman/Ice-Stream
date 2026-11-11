@@ -31,6 +31,10 @@ export interface Video {
   view_count: number
   comment_count: number
   like_count: number
+  /** Langkah 23. "" jika video tidak punya kategori. */
+  category: string
+  /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
+  tags: string[]
   owner?: Owner
 }
 
@@ -281,4 +285,15 @@ export interface ChannelStats {
   current: ChannelTotals
   /** Periode sebelumnya dengan panjang yang sama, untuk persentase naik/turun. */
   previous: ChannelTotals
+}
+
+/** Satu kreator di hasil pencarian (GET /search/channels). */
+export interface ChannelResult extends Profile {
+  /** Hanya ada jika sudah login: true jika sudah mengikuti kreator ini. */
+  viewer_subscribed?: boolean
+}
+
+export interface ChannelSearchPage {
+  channels: ChannelResult[]
+  next_page_token: string
 }

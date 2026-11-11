@@ -13,7 +13,8 @@ import (
 
 // UpdateDetails mengunci baris video (SELECT ... FOR UPDATE), lalu dalam
 // satu transaksi:
-//  1. mengganti title, description, updated_at, dan search_indexed_at;
+//  1. mengganti title, description, category, tags, updated_at, dan
+//     search_indexed_at;
 //  2. menghapus semua kata pencarian lama video ini;
 //  3. menyimpan kata pencarian baru.
 //
@@ -21,7 +22,7 @@ import (
 // pencarian selalu cocok dengan judul dan deskripsi yang tersimpan. Kunci
 // yang sama dipakai SaveSearchTerms (pengindeksan video lama), jadi
 // keduanya juga tidak bisa bertabrakan.
-func (r *OracleRepository) UpdateDetails(ctx context.Context, id, ownerID int64, title, description string, terms []SearchTerm, now time.Time) (Video, error) {
+func (r *OracleRepository) UpdateDetails(ctx context.Context, id, ownerID int64, d Details, terms []SearchTerm, now time.Time) (Video, error) {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row videoRow
 		// GORM menambahkan "deleted_at IS NULL" sendiri (field DeletedAt).
@@ -33,13 +34,14 @@ func (r *OracleRepository) UpdateDetails(ctx context.Context, id, ownerID int64,
 		if err != nil {
 			return fmt.Errorf("select video for update: %w", err)
 		}
-		// Deskripsi kosong disimpan sebagai NULL, sama seperti Create.
-		var desc *string
-		if description != "" {
-			desc = &description
-		}
+		// Teks kosong disimpan sebagai NULL, sama seperti Create.
 		err = tx.Model(&videoRow{}).Where("id = ?", id).Updates(map[string]any{
-			"title": title, "description": desc, "updated_at": now, "search_indexed_at": now,
+			"title":             d.Title,
+			"description":       nullIfEmpty(d.Description),
+			"category":          nullIfEmpty(d.Category),
+			"tags":              nullIfEmpty(joinTags(d.Tags)),
+			"updated_at":        now,
+			"search_indexed_at": now,
 		}).Error
 		if err != nil {
 			return fmt.Errorf("update video: %w", err)

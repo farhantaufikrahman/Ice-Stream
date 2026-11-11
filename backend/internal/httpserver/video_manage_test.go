@@ -55,6 +55,23 @@ func TestUpdateVideo(t *testing.T) {
 	assert.Empty(t, fake.lastUpdate.GetDescription())
 	assert.Nil(t, fake.lastUpdate.Title)
 
+	assert.Nil(t, fake.lastUpdate.Category, "category tidak dikirim = tidak diubah")
+	assert.Nil(t, fake.lastUpdate.Tags, "tags tidak dikirim = tidak diubah")
+
+	// Kategori dan tag. "tags":[] tetap dikirim sebagai TagList kosong
+	// (hapus semua tag), berbeda dengan tidak dikirim sama sekali.
+	rec = do(r, http.MethodPatch, "/api/v1/videos/42", `{"category":"game","tags":["horor","indie"]}`, as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "game", fake.lastUpdate.GetCategory())
+	require.NotNil(t, fake.lastUpdate.Tags)
+	assert.Equal(t, []string{"horor", "indie"}, fake.lastUpdate.GetTags().GetTags())
+	rec = do(r, http.MethodPatch, "/api/v1/videos/42", `{"category":"","tags":[]}`, as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, fake.lastUpdate.Category)
+	assert.Empty(t, fake.lastUpdate.GetCategory())
+	require.NotNil(t, fake.lastUpdate.Tags)
+	assert.Empty(t, fake.lastUpdate.GetTags().GetTags())
+
 	rec = do(r, http.MethodPatch, "/api/v1/videos/42", `bukan json`, as(7))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	rec = do(r, http.MethodPatch, "/api/v1/videos/42", `{"title":"x"}`)

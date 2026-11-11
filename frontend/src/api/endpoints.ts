@@ -7,6 +7,7 @@ import type {
   AppNotification,
   ChannelDetail,
   ChannelPage,
+  ChannelSearchPage,
   ChannelStats,
   Comment,
   CommentPage,
@@ -72,13 +73,27 @@ export async function getMyProfile(signal?: AbortSignal): Promise<Profile> {
 
 // ---------- Video ----------
 
-export function listVideos(pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
-  return apiRequest<VideoPage>(`/videos?${pageQuery(pageToken)}`, { signal })
+/** Feed publik. category (misalnya "game") hanya mengambil video kategori itu. */
+export function listVideos(pageToken: string, signal?: AbortSignal, category?: string): Promise<VideoPage> {
+  const filter = category ? `${new URLSearchParams({ category })}&` : ''
+  return apiRequest<VideoPage>(`/videos?${filter}${pageQuery(pageToken)}`, { signal })
 }
 
 export function searchVideos(q: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
   const params = new URLSearchParams({ q })
   return apiRequest<VideoPage>(`/search/videos?${params}&${pageQuery(pageToken)}`, { signal })
+}
+
+/** Tab Kreator di halaman pencarian. Dengan login, setiap kreator membawa viewer_subscribed. */
+export function searchChannels(q: string, pageToken: string, signal?: AbortSignal, pageSize = PAGE_SIZE): Promise<ChannelSearchPage> {
+  const params = new URLSearchParams({ q })
+  return apiRequest<ChannelSearchPage>(`/search/channels?${params}&${pageQuery(pageToken, pageSize)}`, { auth: 'optional', signal })
+}
+
+/** Tab Playlist di halaman pencarian: hanya playlist publik yang berisi video. */
+export function searchPlaylists(q: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistPage> {
+  const params = new URLSearchParams({ q })
+  return apiRequest<PlaylistPage>(`/search/playlists?${params}&${pageQuery(pageToken)}`, { signal })
 }
 
 export function getVideo(id: string, signal?: AbortSignal): Promise<VideoDetail> {
@@ -116,6 +131,20 @@ export interface NewVideoInput {
   description: string
   content_type: string
   size_bytes: number
+  /** Boleh tidak dikirim (tanpa kategori). */
+  category?: string
+  tags?: string[]
+}
+
+/**
+ * PATCH /videos/:id. Field yang tidak dikirim tidak diubah. category ""
+ * menghapus kategori, tags [] menghapus semua tag.
+ */
+export interface VideoChanges {
+  title?: string
+  description?: string
+  category?: string
+  tags?: string[]
 }
 
 /**
@@ -146,7 +175,7 @@ export function getChannelStats(days: StatsDays, signal?: AbortSignal): Promise<
 }
 
 /** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */
-export async function updateVideo(id: string, changes: { title?: string; description?: string }): Promise<Video> {
+export async function updateVideo(id: string, changes: VideoChanges): Promise<Video> {
   const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: changes,

@@ -181,18 +181,21 @@ func TestCreateVideo(t *testing.T) {
 	fake := &fakeVideoClient{}
 	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
 
-	rec := do(r, http.MethodPost, "/api/v1/videos", `{"title":"Tes","content_type":"video/mp4","size_bytes":1234}`, as(7))
+	rec := do(r, http.MethodPost, "/api/v1/videos", `{"title":"Tes","content_type":"video/mp4","size_bytes":1234,"category":"kuliner","tags":["esKrim","anakKos"]}`, as(7))
 
 	require.Equal(t, http.StatusCreated, rec.Code)
 	assert.JSONEq(t, `{
 		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
-		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0,"comment_count":0,"like_count":0},
+		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0,"comment_count":0,"like_count":0,
+		          "category":"","tags":[]},
 		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
 		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
 	}`, rec.Body.String())
 	// Id pemilik diambil dari access token, bukan dari body.
 	assert.Equal(t, int64(7), fake.lastCreate.GetRequesterId())
 	assert.Equal(t, int64(1234), fake.lastCreate.GetSizeBytes())
+	assert.Equal(t, "kuliner", fake.lastCreate.GetCategory())
+	assert.Equal(t, []string{"esKrim", "anakKos"}, fake.lastCreate.GetTags())
 
 	rec = do(r, http.MethodPost, "/api/v1/videos", `{"title":"Tes"}`)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code, "wajib login")
@@ -235,7 +238,8 @@ func TestGetVideo(t *testing.T) {
 		          "uploaded_at":"2026-10-29T04:01:00Z","duration_ms":20023,"renditions":["360p","720p"],
 		          "hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8",
 		          "thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg",
-		          "processed_at":"2026-10-29T04:02:00Z","view_count":5,"comment_count":3,"like_count":0}
+		          "processed_at":"2026-10-29T04:02:00Z","view_count":5,"comment_count":3,"like_count":0,
+		          "category":"","tags":[]}
 	}`, rec.Body.String())
 
 	// Dengan login, viewer_id diisi dari token. Pemilik juga mendapat URL
@@ -289,6 +293,12 @@ func TestListVideosFeed(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), `"next_page_token":"MTc2MjM4ODk2MDAwMDAwMC40Mg"`)
 	assert.Equal(t, int32(10), fake.lastFeed.GetPageSize())
 	assert.Equal(t, "abc", fake.lastFeed.GetPageToken())
+	assert.Empty(t, fake.lastFeed.GetCategory())
+
+	// Chip kategori di beranda.
+	rec = do(r, http.MethodGet, "/api/v1/videos?category=game", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "game", fake.lastFeed.GetCategory())
 
 	rec = do(r, http.MethodGet, "/api/v1/videos?page_size=banyak", "")
 	assert.Equal(t, http.StatusBadRequest, rec.Code)

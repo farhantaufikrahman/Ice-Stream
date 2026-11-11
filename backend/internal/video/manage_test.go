@@ -15,14 +15,14 @@ import (
 // Versi palsu method edit/hapus di Repository dan ObjectStore. Perilakunya
 // meniru manage_repository.go dan S3Store.DeletePrefix.
 
-func (r *fakeRepo) UpdateDetails(_ context.Context, id, ownerID int64, title, description string, terms []SearchTerm, now time.Time) (Video, error) {
+func (r *fakeRepo) UpdateDetails(_ context.Context, id, ownerID int64, d Details, terms []SearchTerm, now time.Time) (Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	v, ok := r.videos[id]
 	if !ok || v.OwnerID != ownerID {
 		return Video{}, ErrNotFound
 	}
-	v.Title, v.Description = title, description
+	v.Title, v.Description, v.Category, v.Tags = d.Title, d.Description, d.Category, d.Tags
 	r.videos[id] = v
 	r.terms[id] = terms
 	return v, nil
@@ -162,7 +162,7 @@ func TestDeleteVideo(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotFound)
 	_, err = svc.DeleteVideo(ctx, 7, v.ID)
 	assert.ErrorIs(t, err, ErrNotFound, "hapus kedua kali = tidak ditemukan")
-	feed, _, err := svc.ListVideos(ctx, nil, 0, "")
+	feed, _, err := svc.ListVideos(ctx, FeedFilter{}, 0, "")
 	require.NoError(t, err)
 	assert.Empty(t, feed)
 

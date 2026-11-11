@@ -128,6 +128,18 @@ func (s *GRPCServer) CountNewSubscribers(ctx context.Context, req *userv1.CountN
 	return &userv1.CountNewSubscribersResponse{Current: current, Previous: previous}, nil
 }
 
+func (s *GRPCServer) SearchUsers(ctx context.Context, req *userv1.SearchUsersRequest) (*userv1.SearchUsersResponse, error) {
+	found, next, err := s.svc.SearchUsers(ctx, req.GetQuery(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &userv1.SearchUsersResponse{NextPageToken: next, Profiles: make([]*userv1.Profile, len(found))}
+	for i, p := range found {
+		resp.Profiles[i] = s.toProto(p)
+	}
+	return resp, nil
+}
+
 // protoTime mengubah Timestamp kosong (nil) menjadi time.Time nol, bukan
 // 1 Januari 1970 seperti AsTime.
 func protoTime(ts *timestamppb.Timestamp) time.Time {

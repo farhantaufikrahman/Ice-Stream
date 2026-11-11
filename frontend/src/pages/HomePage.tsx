@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { listFeed, listSubscriptions, listVideos } from '../api/endpoints'
 import type { Profile } from '../api/types'
@@ -6,49 +6,72 @@ import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
 import { VideoGrid } from '../components/VideoGrid'
 import { usePagedVideos } from '../hooks/usePagedVideos'
+import { CATEGORIES, categoryLabel, isCategory } from '../lib/categories'
 
 /** Jumlah kanal di baris "Kanal yang kamu ikuti". */
 const STRIP_COUNT = 24
 
 /**
- * Beranda. Chip di atas grid mengikuti desain Home.dc.html. Backend belum
- * punya kategori, jadi chip-nya hanya "Semua" dan (setelah login)
- * "Mengikuti": video terbaru dari kanal yang kamu ikuti.
+ * Beranda. Chip di atas grid mengikuti desain Home.dc.html: "Semua",
+ * "Mengikuti" (setelah login, video terbaru dari kanal yang kamu ikuti),
+ * lalu satu chip per kategori (langkah 23).
+ *
+ * Pilihan chip disimpan di URL (?category=game atau ?tab=mengikuti),
+ * jadi tombol Back dan tautan yang dibagikan membuka chip yang sama.
  */
 export function HomePage() {
   const { status } = useAuth()
   const [params, setParams] = useSearchParams()
   const following = status === 'authenticated' && params.get('tab') === 'mengikuti'
+  const rawCategory = params.get('category')
+  // Kategori yang tidak dikenal di URL diperlakukan seperti "Semua".
+  const category = !following && isCategory(rawCategory) ? rawCategory : ''
+
+  // Di HP chip bisa digeser; chip yang aktif (misalnya dari tautan
+  // ?category=olahraga) digeser sampai terlihat.
+  const chipsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const active = chipsRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+    // jsdom (tes) tidak punya scrollIntoView, jadi dipanggil hanya jika ada.
+    active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [category, following])
+
+  const chip = (label: string, active: boolean, next: Record<string, string>) => (
+    <button
+      key={label}
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={active ? 'chip-tab is-active' : 'chip-tab'}
+      onClick={() => setParams(next)}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <>
-      {status === 'authenticated' && (
-        <div className="chips" role="tablist" aria-label="Pilih daftar video">
-          <button type="button" role="tab" aria-selected={!following} className={following ? 'chip-tab' : 'chip-tab is-active'} onClick={() => setParams({})}>
-            Semua
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={following}
-            className={following ? 'chip-tab is-active' : 'chip-tab'}
-            onClick={() => setParams({ tab: 'mengikuti' })}
-          >
-            Mengikuti
-          </button>
-        </div>
-      )}
-      {following ? <FollowingFeed /> : <LatestFeed />}
+      <div ref={chipsRef} className="chips chips-scroll" role="tablist" aria-label="Pilih daftar video">
+        {chip('Semua', !following && !category, {})}
+        {status === 'authenticated' && chip('Mengikuti', following, { tab: 'mengikuti' })}
+        {CATEGORIES.map((c) => chip(c.label, category === c.value, { category: c.value }))}
+      </div>
+      {following ? <FollowingFeed /> : <LatestFeed category={category} />}
     </>
   )
 }
 
-function LatestFeed() {
-  const feed = usePagedVideos('home', listVideos)
+function LatestFeed({ category }: { category: string }) {
+  // key berbeda per kategori: daftar dimulai lagi dari halaman pertama.
+  const feed = usePagedVideos(`home:${category}`, (token, signal) => listVideos(token, signal, category))
+  const label = categoryLabel(category)
   return (
     <>
-      <h1 className="page-title">Video terbaru</h1>
-      <VideoGrid feed={feed} empty="Belum ada video. Jadilah yang pertama mengunggah!" />
+      <h1 className="page-title">{label ? `${label} terbaru` : 'Video terbaru'}</h1>
+      <VideoGrid
+        feed={feed}
+        empty={label ? `Belum ada video di kategori ${label}.` : 'Belum ada video. Jadilah yang pertama mengunggah!'}
+      />
     </>
   )
 }

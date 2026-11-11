@@ -46,6 +46,9 @@ type videoRow struct {
 	LikeCount int64 `gorm:"column:like_count;<-:update"`
 	// Migrasi V8: waktu kata-kata video ini disimpan untuk pencarian.
 	SearchIndexedAt *time.Time `gorm:"column:search_indexed_at"`
+	// Migrasi V15. NULL = tanpa kategori / tanpa tag.
+	Category *string `gorm:"column:category"`
+	Tags     *string `gorm:"column:tags"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -90,6 +93,12 @@ func (r videoRow) toVideo() Video {
 		t := r.ProcessedAt.UTC()
 		v.ProcessedAt = &t
 	}
+	if r.Category != nil {
+		v.Category = *r.Category
+	}
+	if r.Tags != nil {
+		v.Tags = splitTags(*r.Tags)
+	}
 	return v
 }
 
@@ -118,6 +127,8 @@ func (r *OracleRepository) Create(ctx context.Context, v NewVideo) (Video, error
 	if v.Description != "" {
 		row.Description = &v.Description
 	}
+	row.Category = nullIfEmpty(v.Category)
+	row.Tags = nullIfEmpty(joinTags(v.Tags))
 	now := time.Now().UTC()
 	row.SearchIndexedAt = &now
 	// Video dan kata-katanya disimpan dalam satu transaksi: tidak ada video
@@ -184,10 +195,11 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 }
 
 // ListPublic mengambil maksimal limit video READY untuk feed publik,
-// diurutkan processed_at lalu id dari yang terbaru. Jika ownerIDs diisi,
-// hanya video milik user-user itu (halaman channel atau feed
-// subscription). Jika after tidak nil, hanya video setelah cursor itu
-// (halaman berikutnya).
+// diurutkan processed_at lalu id dari yang terbaru. Jika filter.OwnerIDs
+// diisi, hanya video milik user-user itu (halaman channel atau feed
+// subscription). Jika filter.Category diisi, hanya video kategori itu
+// (index videos_category_feed_ix, migrasi V15). Jika after tidak nil,
+// hanya video setelah cursor itu (halaman berikutnya).
 //
 // Oracle tidak mendukung perbandingan (a, b) < (x, y), jadi syaratnya
 // ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
@@ -202,8 +214,12 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 // video READY lalu mengurutkannya dulu, makin lambat setiap ada video baru.
 // Dengan SYS_EXTRACT_UTC, Oracle membaca index dari belakang dan berhenti
 // setelah limit baris (sudah dicek dengan EXPLAIN PLAN, lihat langkah 14).
-func (r *OracleRepository) ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error) {
+func (r *OracleRepository) ListPublic(ctx context.Context, filter FeedFilter, after *FeedCursor, limit int) ([]Video, error) {
 	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
+	if filter.Category != "" {
+		q = q.Where("category = ?", filter.Category)
+	}
+	ownerIDs := filter.OwnerIDs
 	switch len(ownerIDs) {
 	case 0:
 	case 1:
@@ -546,4 +562,13 @@ func (r *OracleRepository) SaveSearchTerms(ctx context.Context, videoID int64, t
 		return nil
 	})
 	return saved, err
+}
+
+// nullIfEmpty mengubah "" menjadi NULL. Oracle memang menganggap ” sama
+// dengan NULL; dengan pointer nil, maksudnya juga jelas di kode Go.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

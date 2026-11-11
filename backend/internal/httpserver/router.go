@@ -142,6 +142,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 
 	users := &userHandler{users: deps.Users, videos: videos, logger: logger}
 	v1.GET("/users/:username", OptionalAuth(deps.Verifier), users.getByUsername)
+	// Tab Kreator dan Playlist di halaman pencarian (langkah 22c).
+	v1.GET("/search/channels", OptionalAuth(deps.Verifier), users.searchChannels)
+	v1.GET("/search/playlists", videos.searchPlaylists)
 	v1.PUT("/users/:username/subscription", requireAuth, users.subscribe)
 	v1.DELETE("/users/:username/subscription", requireAuth, users.unsubscribe)
 	v1.GET("/me/subscriptions", requireAuth, users.subscriptions)

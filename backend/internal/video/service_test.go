@@ -94,7 +94,7 @@ func (r *fakeRepo) Create(_ context.Context, nv NewVideo) (Video, error) {
 	v := Video{
 		ID: r.nextID, OwnerID: nv.OwnerID, Title: nv.Title, Description: nv.Description,
 		Status: StatusPendingUpload, ObjectKey: nv.ObjectKey, ContentType: nv.ContentType,
-		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(),
+		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(), Category: nv.Category, Tags: nv.Tags,
 	}
 	r.videos[v.ID] = v
 	r.terms[v.ID] = nv.SearchTerms
@@ -136,12 +136,13 @@ func (r *fakeRepo) ListByOwner(_ context.Context, ownerID, beforeID int64, limit
 	return out, nil
 }
 
-func (r *fakeRepo) ListPublic(_ context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error) {
+func (r *fakeRepo) ListPublic(_ context.Context, filter FeedFilter, after *FeedCursor, limit int) ([]Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var ready []Video
 	for _, v := range r.videos {
-		if v.Status == StatusReady && (len(ownerIDs) == 0 || slices.Contains(ownerIDs, v.OwnerID)) {
+		if v.Status == StatusReady && (len(filter.OwnerIDs) == 0 || slices.Contains(filter.OwnerIDs, v.OwnerID)) &&
+			(filter.Category == "" || v.Category == filter.Category) {
 			ready = append(ready, v)
 		}
 	}
