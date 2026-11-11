@@ -18,8 +18,13 @@ export interface Video {
   title: string
   description: string
   status: VideoStatus
+  /** Tipe file asli, misalnya "video/mp4". */
+  content_type: string
+  size_bytes: number
   created_at: string
   duration_ms?: number
+  /** Kualitas hasil transcoding, misalnya ["720p", "480p"]. Ada saat READY. */
+  renditions?: string[]
   hls_url?: string
   thumbnail_url?: string
   failure_reason?: string
@@ -37,6 +42,8 @@ export interface VideoPage {
 
 export interface VideoDetail {
   video: Video
+  /** Hanya untuk pemilik video: URL sementara untuk mengunduh file asli. */
+  original?: { url: string; expires_at: string }
   /** Hanya ada jika penonton sudah login. */
   viewer_liked?: boolean
   /** Hanya ada jika penonton sudah login. 0 = belum pernah menonton. */
@@ -69,4 +76,21 @@ export interface LikeResult {
 export interface ViewResult {
   counted: boolean
   view_count: number
+}
+
+/**
+ * Cara mengunggah file langsung ke storage (RustFS) memakai URL presigned:
+ * kirim request `method` ke `url` dengan semua `headers`, body = file.
+ */
+export interface UploadTicket {
+  url: string
+  method: string
+  headers: Record<string, string>
+  expires_at: string
+}
+
+/** Jawaban POST /videos. */
+export interface CreateUploadResult {
+  video: Video
+  upload: UploadTicket
 }

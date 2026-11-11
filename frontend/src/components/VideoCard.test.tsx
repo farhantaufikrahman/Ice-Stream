@@ -10,6 +10,8 @@ const video: Video = {
   title: 'Belajar Go dari nol',
   description: '',
   status: 'READY',
+  content_type: 'video/mp4',
+  size_bytes: 1024,
   created_at: new Date().toISOString(),
   duration_ms: 75_000,
   thumbnail_url: 'http://media.test/thumb.jpg',

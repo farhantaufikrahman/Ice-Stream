@@ -1,0 +1,525 @@
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { Link, useBlocker } from 'react-router'
+import { errorMessage, isAbortError } from '../api/client'
+import { completeUpload, createUpload, deleteVideo, updateVideo } from '../api/endpoints'
+import type { Video } from '../api/types'
+import { putFile } from '../api/upload'
+import { ErrorBox } from '../components/ErrorBox'
+import { StatusChip } from '../components/studio/StatusChip'
+import { StudioHeader, UploadIcon } from '../components/studio/StudioLayout'
+import { VideoDetailsFields } from '../components/studio/VideoDetailsFields'
+import { useVideoPoll } from '../hooks/useVideoPoll'
+import { formatDuration } from '../lib/format'
+import {
+  ACCEPT_VIDEO,
+  checkVideoFile,
+  descriptionError,
+  formatBytes,
+  formatEta,
+  isProcessing,
+  titleError,
+  titleFromFileName,
+} from '../lib/upload'
+
+/**
+ * Tahap unggah:
+ *   pick       belum ada file
+ *   creating   POST /videos (mencatat video + minta URL presigned)
+ *   uploading  PUT file langsung ke RustFS, dengan progres
+ *   uploaded   file lengkap di storage, menunggu user menekan Terbitkan
+ *   publishing PATCH judul/deskripsi (jika diubah) lalu POST /complete
+ *   published  transcoding berjalan; status dicek berkala sampai READY/FAILED
+ *   failed     salah satu langkah di atas gagal (lihat error.at)
+ */
+type Phase = 'pick' | 'creating' | 'uploading' | 'uploaded' | 'publishing' | 'published' | 'failed'
+
+interface Progress {
+  loaded: number
+  total: number
+  /** Perkiraan sisa waktu dalam detik, dihitung dari kecepatan rata-rata. */
+  etaSeconds: number
+}
+
+interface UploadErr {
+  at: 'create' | 'upload' | 'publish'
+  message: string
+}
+
+/**
+ * Halaman Unggah (desain Upload.dc.html). File langsung mulai diunggah
+ * setelah dipilih, sambil user mengisi judul dan deskripsi, seperti di
+ * desain (progres 64% sambil mengisi detail).
+ *
+ * Bagian desain yang belum didukung backend (kategori, bahasa, tag, pilihan
+ * thumbnail, visibilitas, draf) sengaja belum ditampilkan.
+ */
+export function UploadPage() {
+  const [file, setFile] = useState<File | null>(null)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [video, setVideo] = useState<Video | null>(null)
+  const [phase, setPhase] = useState<Phase>('pick')
+  const [progress, setProgress] = useState<Progress>({ loaded: 0, total: 0, etaSeconds: Number.NaN })
+  const [error, setError] = useState<UploadErr | null>(null)
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const uploadCtrl = useRef<AbortController | null>(null)
+
+  // Menutup halaman = membatalkan unggahan yang sedang berjalan.
+  useEffect(() => () => uploadCtrl.current?.abort(), [])
+
+  const busyTransfer = phase === 'creating' || phase === 'uploading'
+
+  // Peringatan sebelum meninggalkan halaman saat file masih terkirim:
+  // useBlocker untuk pindah halaman di dalam aplikasi, beforeunload untuk
+  // menutup tab / reload. https://reactrouter.com/api/hooks/useBlocker
+  // https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeunload_event
+  const blocker = useBlocker(busyTransfer)
+  useEffect(() => {
+    if (!busyTransfer) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // Untuk browser lama (Chrome/Edge < 119), sesuai contoh di MDN.
+      e.returnValue = true
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [busyTransfer])
+
+  // Setelah Terbitkan: cek status sampai transcoding selesai.
+  useVideoPoll(video?.id ?? null, phase === 'published' && video !== null && isProcessing(video.status), setVideo)
+
+  const startUpload = useCallback(
+    async (f: File, contentType: string, initialTitle: string, initialDescription: string) => {
+      uploadCtrl.current?.abort()
+      const ctrl = new AbortController()
+      uploadCtrl.current = ctrl
+      setError(null)
+      setPhase('creating')
+      setProgress({ loaded: 0, total: f.size, etaSeconds: Number.NaN })
+
+      let created
+      try {
+        created = await createUpload({
+          title: initialTitle,
+          description: initialDescription,
+          content_type: contentType,
+          size_bytes: f.size,
+        })
+      } catch (err) {
+        if (ctrl.signal.aborted) return
+        setError({ at: 'create', message: errorMessage(err) })
+        setPhase('failed')
+        return
+      }
+      if (ctrl.signal.aborted) {
+        // User mengganti file saat POST /videos berjalan: buang catatan ini.
+        deleteVideo(created.video.id).catch(() => {})
+        return
+      }
+      setVideo(created.video)
+      setPhase('uploading')
+      const startedAt = performance.now()
+      try {
+        await putFile(created.upload, f, {
+          signal: ctrl.signal,
+          onProgress: (loaded, total) => {
+            const speed = loaded / ((performance.now() - startedAt) / 1000)
+            setProgress({ loaded, total, etaSeconds: speed > 0 ? (total - loaded) / speed : Number.NaN })
+          },
+        })
+        setPhase('uploaded')
+      } catch (err) {
+        if (isAbortError(err)) return
+        setError({ at: 'upload', message: errorMessage(err) })
+        setPhase('failed')
+      }
+    },
+    [],
+  )
+
+  const pickFile = (f: File | undefined) => {
+    if (!f) return
+    const check = checkVideoFile(f)
+    if (!check.ok) {
+      setFileError(check.message)
+      return
+    }
+    setFileError(null)
+    setFile(f)
+    setVideo(null)
+    const t = titleFromFileName(f.name)
+    setTitle(t)
+    setDescription('')
+    void startUpload(f, check.contentType, t, '')
+  }
+
+  /** Batalkan file sekarang dan kembali memilih file. */
+  const resetFile = () => {
+    uploadCtrl.current?.abort()
+    // Catatan video yang filenya belum lengkap dihapus supaya tidak
+    // menumpuk di Studio. Gagal pun tidak apa-apa (bisa dihapus di Studio).
+    if (video && video.status === 'PENDING_UPLOAD' && phase !== 'published') {
+      deleteVideo(video.id).catch(() => {})
+    }
+    setFile(null)
+    setVideo(null)
+    setError(null)
+    setPhase('pick')
+  }
+
+  const retry = () => {
+    if (!file) return
+    if (error?.at === 'publish') {
+      void publish()
+      return
+    }
+    const check = checkVideoFile(file)
+    if (!check.ok) return
+    // URL presigned lama mungkin sudah kedaluwarsa dan backend tidak punya
+    // endpoint untuk meminta URL baru, jadi catatan lama dihapus lalu dibuat
+    // ulang.
+    if (video && video.status === 'PENDING_UPLOAD') {
+      deleteVideo(video.id).catch(() => {})
+      setVideo(null)
+    }
+    const t = titleError(title) ? titleFromFileName(file.name) : title.trim()
+    const d = descriptionError(description) ? '' : description.trim()
+    void startUpload(file, check.contentType, t, d)
+  }
+
+  const publish = async () => {
+    if (!video) return
+    if (titleError(title) || descriptionError(description)) return
+    setPhase('publishing')
+    setError(null)
+    try {
+      let current = video
+      const changes: { title?: string; description?: string } = {}
+      if (title.trim() !== current.title) changes.title = title.trim()
+      if (description.trim() !== current.description) changes.description = description.trim()
+      if (changes.title !== undefined || changes.description !== undefined) {
+        current = await updateVideo(current.id, changes)
+        // Disimpan sekarang: jika /complete gagal, Coba lagi tidak PATCH ulang.
+        setVideo(current)
+      }
+      setVideo(await completeUpload(current.id))
+      setPhase('published')
+    } catch (err) {
+      setError({ at: 'publish', message: errorMessage(err) })
+      setPhase('failed')
+    }
+  }
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    void publish()
+  }
+
+  const step = phase === 'pick' ? 1 : phase === 'published' ? 3 : 2
+  const done = phase === 'published' && video?.status === 'READY'
+  const fieldsLocked = phase === 'publishing' || phase === 'published'
+  const canPublish = phase === 'uploaded' || (phase === 'failed' && error?.at === 'publish')
+
+  return (
+    <div className="app">
+      <StudioHeader current="Unggah video" />
+      <main className="upload-page">
+        <ol className="steps" aria-label="Langkah unggah">
+          <Step n={1} label="Pilih berkas" step={step} done={step > 1} />
+          <Step n={2} label="Detail video" step={step} done={step > 2} />
+          <Step n={3} label="Terbitkan" step={step} done={done} />
+        </ol>
+
+        {blocker.state === 'blocked' && (
+          <div className="leave-box" role="alertdialog" aria-label="Tinggalkan halaman?">
+            <span>Unggahan belum selesai. Jika pindah halaman, unggahan dibatalkan.</span>
+            <div className="leave-actions">
+              <button type="button" className="btn btn-small" onClick={() => blocker.reset()}>
+                Tetap di sini
+              </button>
+              <button
+                type="button"
+                className="btn btn-small btn-danger"
+                onClick={() => {
+                  resetFile()
+                  blocker.proceed()
+                }}
+              >
+                Batalkan unggahan
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!file ? (
+          <FilePicker onPick={pickFile} error={fileError} />
+        ) : (
+          <div className="upload-grid">
+            <form className="panel upload-form" onSubmit={onSubmit} noValidate>
+              <h1 className="panel-title">{phase === 'published' ? 'Video diterbitkan' : 'Detail video'}</h1>
+              {phase === 'published' && video ? (
+                <PublishedNote video={video} onAnother={resetFile} />
+              ) : (
+                <>
+                  <VideoDetailsFields
+                    idPrefix="up"
+                    title={title}
+                    description={description}
+                    onTitleChange={setTitle}
+                    onDescriptionChange={setDescription}
+                    disabled={fieldsLocked}
+                  />
+                  {error && <ErrorBox message={errorText(error)} onRetry={retry} />}
+                  <div className="form-actions">
+                    <button type="button" className="btn" onClick={resetFile} disabled={phase === 'publishing'}>
+                      Ganti berkas
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={!canPublish}>
+                      {phase === 'publishing' ? 'Menerbitkan…' : 'Terbitkan'}
+                    </button>
+                  </div>
+                  {!canPublish && phase !== 'publishing' && (
+                    <p className="muted small form-hint">Tombol Terbitkan aktif setelah unggahan selesai.</p>
+                  )}
+                </>
+              )}
+            </form>
+
+            <aside className="upload-side">
+              <div className="panel">
+                <FilePreview key={`${file.name}-${file.size}-${file.lastModified}`} file={file} />
+                <TransferProgress phase={phase} progress={progress} errorAt={error?.at} />
+              </div>
+              <TranscodeCard phase={phase} video={video} />
+            </aside>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+function errorText(err: UploadErr): string {
+  const prefix = { create: 'Gagal memulai unggahan', upload: 'Unggahan gagal', publish: 'Gagal menerbitkan' }[err.at]
+  return `${prefix}: ${err.message}`
+}
+
+function Step({ n, label, step, done }: { n: number; label: string; step: number; done: boolean }) {
+  const current = n === step && !done
+  const cls = done ? 'step is-done' : current ? 'step is-current' : 'step'
+  return (
+    <li className={cls} aria-current={current ? 'step' : undefined}>
+      <span className="step-dot">{done ? '✓' : n}</span>
+      {label}
+    </li>
+  )
+}
+
+/** Kotak pilih file. Bisa diklik atau file di-drag ke dalamnya. */
+function FilePicker({ onPick, error }: { onPick: (f: File | undefined) => void; error: string | null }) {
+  const [dragging, setDragging] = useState(false)
+  const onDrop = (e: DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    onPick(e.dataTransfer.files[0])
+  }
+  return (
+    <div className="panel">
+      <h1 className="panel-title">Pilih berkas</h1>
+      <label
+        className={dragging ? 'dropzone is-dragging' : 'dropzone'}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+      >
+        <span className="dropzone-icon">
+          <UploadIcon />
+        </span>
+        <strong>Seret file video ke sini, atau klik untuk memilih</strong>
+        <span className="muted small">MP4, WebM, MOV, atau MKV. Maksimal 2 GB.</span>
+        <input
+          type="file"
+          accept={ACCEPT_VIDEO}
+          className="sr-only"
+          onChange={(e) => {
+            onPick(e.target.files?.[0])
+            // Supaya memilih file yang sama lagi tetap memicu onChange.
+            e.target.value = ''
+          }}
+        />
+      </label>
+      {error && <ErrorBox message={error} />}
+    </div>
+  )
+}
+
+interface Meta {
+  width: number
+  height: number
+  duration: number
+}
+
+/**
+ * Pratinjau file dari komputer user (belum dari server), memakai URL
+ * sementara dari URL.createObjectURL. URL dibuat dan dilepas di effect yang
+ * sama supaya tidak bocor memori.
+ * https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL_static
+ */
+function FilePreview({ file }: { file: File }) {
+  const ref = useRef<HTMLVideoElement>(null)
+  const [meta, setMeta] = useState<Meta | null>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const url = URL.createObjectURL(file)
+    el.src = url
+    return () => {
+      el.removeAttribute('src')
+      el.load()
+      URL.revokeObjectURL(url)
+    }
+  }, [file])
+
+  const details = [
+    meta && meta.width > 0 ? `${meta.width}×${meta.height}` : null,
+    meta && Number.isFinite(meta.duration) ? formatDuration(meta.duration * 1000) : null,
+    formatBytes(file.size),
+  ].filter(Boolean)
+
+  return (
+    <>
+      <video
+        ref={ref}
+        className="upload-preview"
+        muted
+        playsInline
+        controls
+        preload="metadata"
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget
+          setMeta({ width: v.videoWidth, height: v.videoHeight, duration: v.duration })
+        }}
+      />
+      <div className="file-info">
+        <span className="file-name">{file.name}</span>
+        <span className="mono small muted">{details.join(' · ')}</span>
+      </div>
+    </>
+  )
+}
+
+function TransferProgress({ phase, progress, errorAt }: { phase: Phase; progress: Progress; errorAt?: UploadErr['at'] }) {
+  const finished = phase === 'uploaded' || phase === 'publishing' || phase === 'published' || (phase === 'failed' && errorAt === 'publish')
+  const percent = finished ? 100 : progress.total > 0 ? Math.floor((progress.loaded / progress.total) * 100) : 0
+
+  let label = 'Mengunggah'
+  let detail = `${formatBytes(progress.loaded)} dari ${formatBytes(progress.total)}`
+  if (phase === 'creating') {
+    label = 'Menyiapkan'
+    detail = 'Meminta izin unggah ke server…'
+  } else if (finished) {
+    label = 'Unggahan selesai'
+    detail = formatBytes(progress.total)
+  } else if (phase === 'failed') {
+    label = 'Unggahan berhenti'
+  } else {
+    const eta = formatEta(progress.etaSeconds)
+    if (eta) detail += ` · ${eta}`
+  }
+
+  return (
+    <div className="transfer">
+      <div className="transfer-head">
+        <span>{label}</span>
+        <span className="mono">{percent}%</span>
+      </div>
+      <div
+        className={phase === 'failed' && !finished ? 'bar is-failed' : 'bar'}
+        role="progressbar"
+        aria-label="Progres unggah"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+      >
+        <div className="bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <span className="muted small">{detail}</span>
+    </div>
+  )
+}
+
+type RowState = 'wait' | 'run' | 'done' | 'fail'
+
+/**
+ * Kartu "Proses transcode (HLS)". Backend belum mengirim progres per
+ * kualitas (desain: 1080p 40%, ...), jadi yang ditampilkan adalah tahapan
+ * status video. Daftar kualitas muncul saat video sudah READY.
+ */
+function TranscodeCard({ phase, video }: { phase: Phase; video: Video | null }) {
+  const status = phase === 'published' && video ? video.status : null
+  const rows: { label: string; state: RowState }[] = [
+    { label: 'Antre transcoding', state: !status ? 'wait' : status === 'UPLOADED' ? 'run' : 'done' },
+    {
+      label: 'Membuat HLS',
+      state: !status || status === 'UPLOADED' ? 'wait' : status === 'PROCESSING' ? 'run' : status === 'FAILED' ? 'fail' : 'done',
+    },
+    { label: 'Siap ditonton', state: status === 'READY' ? 'done' : status === 'FAILED' ? 'fail' : 'wait' },
+  ]
+  const chipText: Record<RowState, string> = { wait: 'Menunggu', run: 'Diproses', done: 'Selesai', fail: 'Gagal' }
+  const chipTone: Record<RowState, string> = { wait: 'chip', run: 'chip chip-amber', done: 'chip chip-mint', fail: 'chip chip-pink' }
+
+  return (
+    <div className="panel transcode">
+      <h2 className="panel-subtitle">Proses transcode (HLS)</h2>
+      {rows.map((r) => (
+        <div key={r.label} className="transcode-row">
+          <span>{r.label}</span>
+          <span className={chipTone[r.state]}>{chipText[r.state]}</span>
+        </div>
+      ))}
+      {video?.status === 'READY' && video.renditions && video.renditions.length > 0 && (
+        <p className="mono small">Kualitas: {video.renditions.join(' · ')}</p>
+      )}
+      <p className="muted small">{transcodeNote(status)}</p>
+    </div>
+  )
+}
+
+function transcodeNote(status: Video['status'] | null): string {
+  if (!status) return 'Transcoding dimulai setelah kamu menekan Terbitkan.'
+  if (status === 'READY') return 'Selesai. Video sudah bisa ditonton.'
+  if (status === 'FAILED') return 'Transcoding gagal. Hapus video ini di Studio lalu unggah ulang.'
+  return 'Halaman ini mengecek status secara otomatis. Boleh ditutup, prosesnya tetap berjalan di server.'
+}
+
+function PublishedNote({ video, onAnother }: { video: Video; onAnother: () => void }) {
+  return (
+    <div className="published">
+      <p className="published-title">{video.title}</p>
+      <p>
+        Status: <StatusChip status={video.status} />
+      </p>
+      {video.status === 'FAILED' && video.failure_reason && <p className="muted small">{video.failure_reason}</p>}
+      {isProcessing(video.status) && (
+        <p className="muted">Video sedang diubah ke format HLS. Setelah statusnya Siap, video muncul di beranda.</p>
+      )}
+      <div className="form-actions form-actions-start">
+        {video.status === 'READY' && (
+          <Link to={`/watch/${video.id}`} className="btn btn-primary">
+            Tonton
+          </Link>
+        )}
+        <Link to="/studio" className="btn">
+          Buka Studio
+        </Link>
+        <button type="button" className="btn btn-ghost" onClick={onAnother}>
+          Unggah video lain
+        </button>
+      </div>
+    </div>
+  )
+}
