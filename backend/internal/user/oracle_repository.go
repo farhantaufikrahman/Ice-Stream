@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -359,4 +360,54 @@ func (r *OracleRepository) CountNewSubscribers(ctx context.Context, channelID in
 		return 0, 0, fmt.Errorf("count new subscribers: %w", err)
 	}
 	return row.CurrentCount, row.PreviousCount, nil
+}
+
+// SearchUsers menyusun query seperti ini (satu baris AND per kata):
+//
+//	SELECT ... FROM users
+//	 WHERE deleted_at IS NULL AND status <> 'BANNED'
+//	   AND (username LIKE '%budi%' OR LOWER(display_name) LIKE '%budi%')
+//	 ORDER BY <relevansi kata pertama>, subscriber_count DESC, id
+//	OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+//
+// Nama kolom diberi alias huruf kecil dalam tanda kutip (AS "bio") supaya
+// cocok dengan tag gorm di profileRow; tanpa itu Oracle menjawab nama
+// kolom huruf besar.
+//
+// username selalu huruf kecil (lihat auth.Register), display_name tidak,
+// jadi hanya display_name yang perlu LOWER. LIKE '%kata%' tidak bisa
+// memakai index, jadi Oracle membaca seluruh tabel users; untuk jumlah
+// user saat ini itu cepat. Jika user sudah jutaan, penggantinya adalah
+// Oracle Text atau mesin pencari terpisah (Elasticsearch/Meilisearch).
+func (r *OracleRepository) SearchUsers(ctx context.Context, terms []string, offset, limit int) ([]Profile, error) {
+	if len(terms) == 0 {
+		return nil, nil
+	}
+	var sql strings.Builder
+	sql.WriteString(`SELECT id AS "id", username AS "username", email AS "email", display_name AS "display_name", bio AS "bio", avatar_key AS "avatar_key", status AS "status", created_at AS "created_at", updated_at AS "updated_at", subscriber_count AS "subscriber_count"
+  FROM users
+ WHERE deleted_at IS NULL AND status <> ?`)
+	args := []any{statusBanned}
+	for _, t := range terms {
+		sql.WriteString("\n   AND (username LIKE ? OR LOWER(display_name) LIKE ?)")
+		args = append(args, "%"+t+"%", "%"+t+"%")
+	}
+	first := terms[0]
+	sql.WriteString(`
+ ORDER BY CASE WHEN username = ? THEN 0
+               WHEN username LIKE ? OR LOWER(display_name) LIKE ? THEN 1
+               ELSE 2 END,
+          subscriber_count DESC, id
+OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`)
+	args = append(args, first, first+"%", first+"%", offset, limit)
+
+	var rows []profileRow
+	if err := r.db.WithContext(ctx).Raw(sql.String(), args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("search users: %w", err)
+	}
+	out := make([]Profile, len(rows))
+	for i, row := range rows {
+		out[i] = row.toProfile()
+	}
+	return out, nil
 }

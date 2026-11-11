@@ -172,6 +172,10 @@ type Repository interface {
 	// di semua video ownerID: current = [currentStart, end), previous =
 	// [previousStart, currentStart). Field Views tidak diisi.
 	ChannelActivity(ctx context.Context, ownerID int64, previousStart, currentStart, end time.Time) (current, previous ChannelTotals, err error)
+
+	// SearchPlaylists: playlist PUBLIC berisi video READY yang judulnya
+	// berisi setiap kata di terms, urut paling relevan (playlist_search.go).
+	SearchPlaylists(ctx context.Context, terms []string, offset, limit int) ([]Playlist, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di

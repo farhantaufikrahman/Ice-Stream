@@ -1785,6 +1785,64 @@ a.channel-name:hover {
   color: var(--fg);
   border-bottom-color: var(--mint);
 }
+
+/* ---------- Halaman pencarian (desain Search.dc.html) ---------- */
+.search-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.search-page > .page-title {
+  margin: 0;
+}
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.channel-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.channel-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.channel-result-avatar {
+  flex: none;
+  line-height: 0;
+}
+.channel-result-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.channel-result-name {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+a.channel-result-name:hover {
+  color: var(--accent-text);
+}
 .channel-videos {
   display: flex;
   flex-direction: column;

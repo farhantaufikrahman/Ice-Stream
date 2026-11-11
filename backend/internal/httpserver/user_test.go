@@ -36,6 +36,8 @@ type fakeUserClient struct {
 	// Subscriber baru untuk dasbor (stats_test.go).
 	lastNewSubs *userv1.CountNewSubscribersRequest
 	newSubsErr  error
+	// Pencarian kreator (search_test.go).
+	lastSearch *userv1.SearchUsersRequest
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)

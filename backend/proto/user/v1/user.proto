@@ -54,6 +54,11 @@ service UserService {
   // 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
   // sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
   rpc CountNewSubscribers(CountNewSubscribersRequest) returns (CountNewSubscribersResponse);
+  // SearchUsers mencari kreator yang username atau nama tampilannya berisi
+  // setiap kata di query (langkah 22c, tab Kreator di halaman pencarian).
+  // Akun yang diblokir tidak ikut. Urutan: username yang sama persis, lalu
+  // username/nama yang diawali kata pertama, lalu subscriber terbanyak.
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
 }
 
 message Profile {
@@ -194,4 +199,20 @@ message CountNewSubscribersRequest {
 message CountNewSubscribersResponse {
   int64 current = 1;
   int64 previous = 2;
+}
+
+message SearchUsersRequest {
+  // Kata kunci, maksimal 100 karakter. Hanya 5 kata pertama yang dipakai.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message SearchUsersResponse {
+  // Tanpa email.
+  repeated Profile profiles = 1;
+  // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
+  string next_page_token = 2;
 }

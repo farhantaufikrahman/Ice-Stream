@@ -53,6 +53,7 @@ const (
 	VideoService_RemoveFromPlaylist_FullMethodName       = "/video.v1.VideoService/RemoveFromPlaylist"
 	VideoService_ListPlaylistVideos_FullMethodName       = "/video.v1.VideoService/ListPlaylistVideos"
 	VideoService_GetChannelStats_FullMethodName          = "/video.v1.VideoService/GetChannelStats"
+	VideoService_SearchPlaylists_FullMethodName          = "/video.v1.VideoService/SearchPlaylists"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -170,6 +171,11 @@ type VideoServiceClient interface {
 	// yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
 	// INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
 	GetChannelStats(ctx context.Context, in *GetChannelStatsRequest, opts ...grpc.CallOption) (*GetChannelStatsResponse, error)
+	// SearchPlaylists mencari playlist PUBLIC yang judulnya berisi setiap
+	// kata di query (langkah 22c, tab Playlist di halaman pencarian).
+	// Playlist tanpa video READY tidak ikut. Urutan: judul yang diawali kata
+	// pertama lebih dulu, lalu yang paling baru diperbarui.
+	SearchPlaylists(ctx context.Context, in *SearchPlaylistsRequest, opts ...grpc.CallOption) (*SearchPlaylistsResponse, error)
 }
 
 type videoServiceClient struct {
@@ -480,6 +486,16 @@ func (c *videoServiceClient) GetChannelStats(ctx context.Context, in *GetChannel
 	return out, nil
 }
 
+func (c *videoServiceClient) SearchPlaylists(ctx context.Context, in *SearchPlaylistsRequest, opts ...grpc.CallOption) (*SearchPlaylistsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchPlaylistsResponse)
+	err := c.cc.Invoke(ctx, VideoService_SearchPlaylists_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -595,6 +611,11 @@ type VideoServiceServer interface {
 	// yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
 	// INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
 	GetChannelStats(context.Context, *GetChannelStatsRequest) (*GetChannelStatsResponse, error)
+	// SearchPlaylists mencari playlist PUBLIC yang judulnya berisi setiap
+	// kata di query (langkah 22c, tab Playlist di halaman pencarian).
+	// Playlist tanpa video READY tidak ikut. Urutan: judul yang diawali kata
+	// pertama lebih dulu, lalu yang paling baru diperbarui.
+	SearchPlaylists(context.Context, *SearchPlaylistsRequest) (*SearchPlaylistsResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -694,6 +715,9 @@ func (UnimplementedVideoServiceServer) ListPlaylistVideos(context.Context, *List
 }
 func (UnimplementedVideoServiceServer) GetChannelStats(context.Context, *GetChannelStatsRequest) (*GetChannelStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetChannelStats not implemented")
+}
+func (UnimplementedVideoServiceServer) SearchPlaylists(context.Context, *SearchPlaylistsRequest) (*SearchPlaylistsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchPlaylists not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -1256,6 +1280,24 @@ func _VideoService_GetChannelStats_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_SearchPlaylists_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchPlaylistsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).SearchPlaylists(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_SearchPlaylists_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).SearchPlaylists(ctx, req.(*SearchPlaylistsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1382,6 +1424,10 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetChannelStats",
 			Handler:    _VideoService_GetChannelStats_Handler,
+		},
+		{
+			MethodName: "SearchPlaylists",
+			Handler:    _VideoService_SearchPlaylists_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

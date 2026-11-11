@@ -36,6 +36,7 @@ const (
 	UserService_ListSubscribedChannelIds_FullMethodName = "/user.v1.UserService/ListSubscribedChannelIds"
 	UserService_ListSubscriberIds_FullMethodName        = "/user.v1.UserService/ListSubscriberIds"
 	UserService_CountNewSubscribers_FullMethodName      = "/user.v1.UserService/CountNewSubscribers"
+	UserService_SearchUsers_FullMethodName              = "/user.v1.UserService/SearchUsers"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -86,6 +87,11 @@ type UserServiceClient interface {
 	// 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
 	// sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
 	CountNewSubscribers(ctx context.Context, in *CountNewSubscribersRequest, opts ...grpc.CallOption) (*CountNewSubscribersResponse, error)
+	// SearchUsers mencari kreator yang username atau nama tampilannya berisi
+	// setiap kata di query (langkah 22c, tab Kreator di halaman pencarian).
+	// Akun yang diblokir tidak ikut. Urutan: username yang sama persis, lalu
+	// username/nama yang diawali kata pertama, lalu subscriber terbanyak.
+	SearchUsers(ctx context.Context, in *SearchUsersRequest, opts ...grpc.CallOption) (*SearchUsersResponse, error)
 }
 
 type userServiceClient struct {
@@ -206,6 +212,16 @@ func (c *userServiceClient) CountNewSubscribers(ctx context.Context, in *CountNe
 	return out, nil
 }
 
+func (c *userServiceClient) SearchUsers(ctx context.Context, in *SearchUsersRequest, opts ...grpc.CallOption) (*SearchUsersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchUsersResponse)
+	err := c.cc.Invoke(ctx, UserService_SearchUsers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -254,6 +270,11 @@ type UserServiceServer interface {
 	// 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
 	// sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
 	CountNewSubscribers(context.Context, *CountNewSubscribersRequest) (*CountNewSubscribersResponse, error)
+	// SearchUsers mencari kreator yang username atau nama tampilannya berisi
+	// setiap kata di query (langkah 22c, tab Kreator di halaman pencarian).
+	// Akun yang diblokir tidak ikut. Urutan: username yang sama persis, lalu
+	// username/nama yang diawali kata pertama, lalu subscriber terbanyak.
+	SearchUsers(context.Context, *SearchUsersRequest) (*SearchUsersResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -296,6 +317,9 @@ func (UnimplementedUserServiceServer) ListSubscriberIds(context.Context, *ListSu
 }
 func (UnimplementedUserServiceServer) CountNewSubscribers(context.Context, *CountNewSubscribersRequest) (*CountNewSubscribersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CountNewSubscribers not implemented")
+}
+func (UnimplementedUserServiceServer) SearchUsers(context.Context, *SearchUsersRequest) (*SearchUsersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchUsers not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -516,6 +540,24 @@ func _UserService_CountNewSubscribers_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SearchUsers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchUsersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SearchUsers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SearchUsers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SearchUsers(ctx, req.(*SearchUsersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -566,6 +608,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CountNewSubscribers",
 			Handler:    _UserService_CountNewSubscribers_Handler,
+		},
+		{
+			MethodName: "SearchUsers",
+			Handler:    _UserService_SearchUsers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
