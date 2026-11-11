@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,9 @@ type fakeSubs struct {
 	subMu  sync.Mutex
 	nextID int64
 	subs   []fakeSub
+	// createdAt[id subscription] = waktu subscribe. Hanya diisi test yang
+	// membutuhkannya (lihat TestCountNewSubscribers).
+	createdAt map[int64]time.Time
 }
 
 type fakeSub struct {

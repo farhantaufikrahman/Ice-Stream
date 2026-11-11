@@ -335,3 +335,28 @@ func (r *OracleRepository) ListSubscriberIDs(ctx context.Context, channelID, aft
 	}
 	return ids, nil
 }
+
+// countNewSubscribersSQL memakai index subscriptions_channel_ix untuk
+// mencari baris channel ini, lalu COUNT(CASE ...) memilah dua periode
+// dalam satu kali baca (CASE tanpa ELSE bernilai NULL, dan COUNT tidak
+// menghitung NULL).
+const countNewSubscribersSQL = `SELECT
+       COUNT(CASE WHEN created_at >= ? THEN 1 END) AS "current_count",
+       COUNT(CASE WHEN created_at < ? THEN 1 END) AS "previous_count"
+  FROM subscriptions
+ WHERE channel_id = ? AND created_at >= ? AND created_at < ?`
+
+// CountNewSubscribers menjalankan countNewSubscribersSQL.
+func (r *OracleRepository) CountNewSubscribers(ctx context.Context, channelID int64, previousStart, currentStart, end time.Time) (int64, int64, error) {
+	var row struct {
+		CurrentCount  int64 `gorm:"column:current_count"`
+		PreviousCount int64 `gorm:"column:previous_count"`
+	}
+	err := r.db.WithContext(ctx).
+		Raw(countNewSubscribersSQL, currentStart, currentStart, channelID, previousStart, end).
+		Scan(&row).Error
+	if err != nil {
+		return 0, 0, fmt.Errorf("count new subscribers: %w", err)
+	}
+	return row.CurrentCount, row.PreviousCount, nil
+}

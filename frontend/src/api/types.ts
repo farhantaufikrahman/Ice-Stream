@@ -255,3 +255,30 @@ export interface PlaylistVideoPage {
 
 /** Jawaban PUT dan DELETE /playlists/:id/videos/:videoId (bentuknya sama dengan Tonton nanti). */
 export type PlaylistVideoResult = WatchLaterResult
+
+/** Pilihan rentang di dasbor Creator Studio (desain Studio.dc.html). */
+export type StatsDays = 7 | 28 | 90
+
+export interface DailyViews {
+  /** Tanggal WIB, misalnya "2026-11-11". */
+  date: string
+  views: number
+}
+
+export interface ChannelTotals {
+  views: number
+  danmaku: number
+  comments: number
+  /** null jika jumlahnya sedang tidak bisa dimuat. */
+  new_subscribers: number | null
+}
+
+/** Jawaban GET /me/channel-stats?days=... */
+export interface ChannelStats {
+  days: StatsDays
+  /** Tepat sebanyak days, dari yang terlama sampai hari ini. */
+  daily: DailyViews[]
+  current: ChannelTotals
+  /** Periode sebelumnya dengan panjang yang sama, untuk persentase naik/turun. */
+  previous: ChannelTotals
+}

@@ -7,6 +7,7 @@ import type {
   AppNotification,
   ChannelDetail,
   ChannelPage,
+  ChannelStats,
   Comment,
   CommentPage,
   CreateUploadResult,
@@ -23,6 +24,7 @@ import type {
   PlaylistVideoResult,
   PlaylistVisibility,
   Profile,
+  StatsDays,
   SubscriptionResult,
   Video,
   VideoDetail,
@@ -136,6 +138,11 @@ export async function completeUpload(id: string): Promise<Video> {
 /** Semua video milik user yang login, termasuk yang belum READY. */
 export function listMyVideos(pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
   return apiRequest<VideoPage>(`/me/videos?${pageQuery(pageToken)}`, { auth: 'required', signal })
+}
+
+/** Statistik dasbor Creator Studio untuk 7, 28, atau 90 hari terakhir (WIB). */
+export function getChannelStats(days: StatsDays, signal?: AbortSignal): Promise<ChannelStats> {
+  return apiRequest<ChannelStats>(`/me/channel-stats?days=${days}`, { auth: 'required', signal })
 }
 
 /** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */

@@ -29,7 +29,7 @@ export function SubscribeButton({ username, subscribed, subscriberCount, isOwn, 
 
   if (isOwn) {
     return (
-      <Link to="/studio" className="btn">
+      <Link to="/studio/content" className="btn">
         Kelola video
       </Link>
     )

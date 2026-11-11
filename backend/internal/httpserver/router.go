@@ -120,6 +120,8 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	playlistGroup.PUT("/:id/videos/:videoId", requireAuth, videos.addPlaylistVideo)
 	playlistGroup.DELETE("/:id/videos/:videoId", requireAuth, videos.removePlaylistVideo)
 	v1.GET("/me/playlists", requireAuth, videos.myPlaylists)
+	// Dasbor Creator Studio (langkah 22b).
+	v1.GET("/me/channel-stats", requireAuth, videos.channelStats)
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)

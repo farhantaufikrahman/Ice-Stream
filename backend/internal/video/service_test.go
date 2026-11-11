@@ -39,6 +39,10 @@ type fakeRepo struct {
 	// (lihat playlist_test.go).
 	playlists map[int64]Playlist
 	items     map[int64]map[int64]time.Time
+	// daily[videoID][tanggal] = tayangan, dan activity = danmaku/komentar
+	// yang diterima (lihat stats_test.go).
+	daily    map[int64]map[string]int64
+	activity []fakeActivity
 }
 
 func newFakeRepo() *fakeRepo {
@@ -162,7 +166,7 @@ func (r *fakeRepo) ListPublic(_ context.Context, ownerIDs []int64, after *FeedCu
 	return out, nil
 }
 
-func (r *fakeRepo) IncrementViews(_ context.Context, id int64) (int64, error) {
+func (r *fakeRepo) IncrementViews(_ context.Context, id int64, day string) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.incrementErr != nil {
@@ -174,6 +178,13 @@ func (r *fakeRepo) IncrementViews(_ context.Context, id int64) (int64, error) {
 	}
 	v.ViewCount++
 	r.videos[id] = v
+	if r.daily == nil {
+		r.daily = map[int64]map[string]int64{}
+	}
+	if r.daily[id] == nil {
+		r.daily[id] = map[string]int64{}
+	}
+	r.daily[id][day]++
 	return v.ViewCount, nil
 }
 

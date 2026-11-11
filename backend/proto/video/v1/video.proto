@@ -118,6 +118,13 @@ service VideoService {
   // ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
   // Hanya video READY.
   rpc ListPlaylistVideos(ListPlaylistVideosRequest) returns (ListPlaylistVideosResponse);
+
+  // GetChannelStats mengambil statistik channel milik requester untuk
+  // dasbor Creator Studio (langkah 22b): tayangan per hari, jumlah danmaku
+  // dan komentar yang diterima, untuk periode ini dan periode sebelumnya
+  // yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
+  // INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
+  rpc GetChannelStats(GetChannelStatsRequest) returns (GetChannelStatsResponse);
 }
 
 enum VideoStatus {
@@ -599,4 +606,38 @@ message ListPlaylistVideosResponse {
   repeated PlaylistEntry entries = 1;
   // Kosong jika sudah halaman terakhir.
   string next_page_token = 2;
+}
+
+message GetChannelStatsRequest {
+  int64 requester_id = 1;
+  // Panjang periode dalam hari: 7, 28, atau 90.
+  int32 days = 2;
+}
+
+// DailyViews adalah jumlah tayangan semua video channel pada satu hari.
+message DailyViews {
+  // Tanggal dalam WIB, format "2006-01-02".
+  string date = 1;
+  int64 views = 2;
+}
+
+// ChannelTotals adalah jumlah dalam satu periode.
+message ChannelTotals {
+  int64 views = 1;
+  int64 danmaku = 2;
+  int64 comments = 3;
+}
+
+message GetChannelStatsResponse {
+  // Tepat sebanyak days, urut dari yang terlama sampai hari ini. Hari tanpa
+  // tayangan tetap ada dengan views = 0.
+  repeated DailyViews daily = 1;
+  ChannelTotals current = 2;
+  ChannelTotals previous = 3;
+  // Batas periode, supaya gateway bisa menanyakan jumlah subscriber baru
+  // ke UserService dengan rentang waktu yang sama persis:
+  // periode ini = [current_start, end), sebelumnya = [previous_start, current_start).
+  google.protobuf.Timestamp previous_start = 4;
+  google.protobuf.Timestamp current_start = 5;
+  google.protobuf.Timestamp end = 6;
 }

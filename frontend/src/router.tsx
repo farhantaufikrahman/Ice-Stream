@@ -13,6 +13,7 @@ import { PlaylistPage } from './pages/PlaylistPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { StudioDashboardPage } from './pages/StudioDashboardPage'
 import { StudioPage } from './pages/StudioPage'
 import { UploadPage } from './pages/UploadPage'
 import { WatchLaterPage } from './pages/WatchLaterPage'
@@ -59,7 +60,8 @@ export const router = createBrowserRouter([
         // Creator Studio: wajib login, punya kerangka sendiri (tanpa header utama).
         element: <RequireAuth />,
         children: [
-          { path: '/studio', element: <StudioPage /> },
+          { path: '/studio', element: <StudioDashboardPage /> },
+          { path: '/studio/content', element: <StudioPage /> },
           { path: '/studio/settings', element: <SettingsPage /> },
           { path: '/upload', element: <UploadPage /> },
         ],
