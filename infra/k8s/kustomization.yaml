@@ -32,6 +32,10 @@ resources:
   # Worker transcoding HLS (ffmpeg)
   - transcoder/configmap.yaml
   - transcoder/deployment.yaml
+  # Frontend React (nginx), dibuka di http://ice-stream.localhost:4000
+  - web/deployment.yaml
+  - web/service.yaml
+  - web/httproute.yaml
 
 # Membuat Secret "oracle-credentials" dari file secrets/oracle.env
 # (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).

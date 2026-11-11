@@ -1,0 +1,10 @@
+# File yang tidak perlu dikirim ke Docker saat build.
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
+.vscode
+.idea
