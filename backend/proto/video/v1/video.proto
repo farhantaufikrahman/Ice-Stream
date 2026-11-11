@@ -80,6 +80,17 @@ service VideoService {
   // MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
   // sudah dibaca. Aman dipanggil berulang.
   rpc MarkNotificationsRead(MarkNotificationsReadRequest) returns (MarkNotificationsReadResponse);
+  // AddToWatchLater menyimpan video READY ke daftar Tonton nanti requester.
+  // Aman dipanggil ulang: video yang sudah tersimpan tidak berubah
+  // (added_at tetap waktu pertama disimpan). NOT_FOUND jika video tidak ada
+  // atau belum READY.
+  rpc AddToWatchLater(AddToWatchLaterRequest) returns (AddToWatchLaterResponse);
+  // RemoveFromWatchLater mengeluarkan video dari daftar Tonton nanti. Aman
+  // dipanggil walau video itu tidak ada di daftar.
+  rpc RemoveFromWatchLater(RemoveFromWatchLaterRequest) returns (RemoveFromWatchLaterResponse);
+  // ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
+  // disimpan lebih dulu. Hanya video READY.
+  rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
 }
 
 enum VideoStatus {
@@ -178,6 +189,9 @@ message GetVideoResponse {
   // ditonton kurang dari 5 detik, atau sisa videonya kurang dari 10 detik.
   // Selalu 0 tanpa login.
   int64 resume_position_ms = 5;
+  // true jika viewer_id sudah menyimpan video ini ke Tonton nanti. Selalu
+  // false tanpa login.
+  bool viewer_saved = 6;
 }
 
 message ListMyVideosRequest {
@@ -386,4 +400,41 @@ message MarkNotificationsReadResponse {
   int64 updated = 1;
   // Sisa yang belum dibaca, sama seperti CountUnreadNotifications.
   int64 unread_count = 2;
+}
+
+message WatchLaterEntry {
+  Video video = 1;
+  // Waktu video ini disimpan ke Tonton nanti.
+  google.protobuf.Timestamp added_at = 2;
+}
+
+message AddToWatchLaterRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message AddToWatchLaterResponse {
+  // Waktu video pertama kali disimpan (tidak berubah jika disimpan ulang).
+  google.protobuf.Timestamp added_at = 1;
+}
+
+message RemoveFromWatchLaterRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message RemoveFromWatchLaterResponse {}
+
+message ListWatchLaterRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListWatchLaterResponse {
+  repeated WatchLaterEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
 }

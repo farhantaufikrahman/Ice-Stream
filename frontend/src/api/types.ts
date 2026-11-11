@@ -48,6 +48,8 @@ export interface VideoDetail {
   viewer_liked?: boolean
   /** Hanya ada jika penonton sudah login. 0 = belum pernah menonton. */
   resume_position_ms?: number
+  /** Hanya ada jika penonton sudah login: true jika video ada di Tonton nanti. */
+  viewer_saved?: boolean
 }
 
 export interface Profile {
@@ -189,4 +191,24 @@ export interface HistoryEntry {
 export interface HistoryPage {
   entries: HistoryEntry[]
   next_page_token: string
+}
+
+// ---------- Tonton nanti (langkah 21b) ----------
+
+export interface WatchLaterEntry {
+  video: Video
+  /** Waktu video disimpan. */
+  added_at: string
+}
+
+export interface WatchLaterPage {
+  entries: WatchLaterEntry[]
+  next_page_token: string
+}
+
+/** Jawaban PUT dan DELETE /me/watch-later/:id. */
+export interface WatchLaterResult {
+  saved: boolean
+  /** Hanya ada jika saved = true. */
+  added_at?: string
 }

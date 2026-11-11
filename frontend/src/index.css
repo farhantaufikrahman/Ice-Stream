@@ -488,6 +488,15 @@ a:focus-visible {
   border-color: var(--strawberry);
   color: var(--pink-text);
 }
+.btn-like.is-saved {
+  background: var(--chip-mint);
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+}
+/* Pesan gagal dari tombol di baris ini tampil di baris sendiri. */
+.watch-actions .error-box {
+  flex-basis: 100%;
+}
 .channel-card {
   display: flex;
   flex-wrap: wrap;

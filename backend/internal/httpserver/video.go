@@ -123,6 +123,9 @@ type getVideoResponse struct {
 	// (milidetik) untuk melanjutkan video, 0 = putar dari awal. Di browser:
 	// video.currentTime = resume_position_ms / 1000.
 	ResumePositionMs *int64 `json:"resume_position_ms,omitempty"`
+	// ViewerSaved hanya ada jika request membawa access token: true jika
+	// video ini ada di Tonton nanti user tersebut.
+	ViewerSaved *bool `json:"viewer_saved,omitempty"`
 }
 
 // likeResponse adalah jawaban PUT dan DELETE /videos/:id/like.
@@ -205,6 +208,8 @@ func (h *videoHandler) get(c *gin.Context) {
 		body.ViewerLiked = &liked
 		resume := resp.GetResumePositionMs()
 		body.ResumePositionMs = &resume
+		saved := resp.GetViewerSaved()
+		body.ViewerSaved = &saved
 	}
 	owners := lookupOwners(c.Request.Context(), h.users, h.logger, []*videov1.Video{resp.GetVideo()})
 	body.Video.Owner = owners[resp.GetVideo().GetOwnerId()]

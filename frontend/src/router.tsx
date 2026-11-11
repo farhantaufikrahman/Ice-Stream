@@ -14,6 +14,7 @@ import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StudioPage } from './pages/StudioPage'
 import { UploadPage } from './pages/UploadPage'
+import { WatchLaterPage } from './pages/WatchLaterPage'
 import { WatchPage } from './pages/WatchPage'
 
 // Daftar halaman. Mirip app.get('/watch/:id', ...) di Express, tetapi
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
             children: [
               { path: '/notifications', element: <NotificationsPage /> },
               { path: '/history', element: <HistoryPage /> },
+              { path: '/watch-later', element: <WatchLaterPage /> },
             ],
           },
           { path: '*', element: <NotFoundPage /> },

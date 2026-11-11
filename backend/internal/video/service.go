@@ -104,6 +104,18 @@ type Repository interface {
 	// (notificationID > 0) atau semuanya (0), hanya yang belum dibaca.
 	// Mengembalikan jumlah baris yang berubah.
 	MarkNotificationsRead(ctx context.Context, userID, notificationID int64, now time.Time) (int64, error)
+	// AddWatchLater menyimpan videoID ke Tonton nanti userID dengan waktu
+	// now, kecuali sudah tersimpan. Mengembalikan added_at yang tersimpan
+	// (waktu pertama kali disimpan).
+	AddWatchLater(ctx context.Context, userID, videoID int64, now time.Time) (time.Time, error)
+	// RemoveWatchLater menghapus videoID dari Tonton nanti userID (jika ada).
+	RemoveWatchLater(ctx context.Context, userID, videoID int64) error
+	// IsInWatchLater mengembalikan true jika userID sudah menyimpan videoID.
+	IsInWatchLater(ctx context.Context, userID, videoID int64) (bool, error)
+	// ListWatchLater mengambil Tonton nanti userID untuk video READY,
+	// added_at lalu video_id terbesar lebih dulu, hanya yang posisinya
+	// setelah after (nil = dari awal).
+	ListWatchLater(ctx context.Context, userID int64, after *WatchLaterCursor, limit int) ([]WatchLaterEntry, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -408,6 +420,9 @@ type VideoDetail struct {
 	// ResumePositionMs adalah detik (milidetik) tempat viewer berhenti
 	// menonton terakhir kali (lihat ResumePosition). 0 = mulai dari awal.
 	ResumePositionMs int64
+	// ViewerSaved bernilai true jika viewer sudah menyimpan video ini ke
+	// Tonton nanti.
+	ViewerSaved bool
 }
 
 // GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
@@ -428,6 +443,9 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 	d := VideoDetail{Video: v}
 	if viewerID != 0 && v.Status == StatusReady {
 		if d.ViewerLiked, err = s.repo.IsLiked(ctx, v.ID, viewerID); err != nil {
+			return VideoDetail{}, err
+		}
+		if d.ViewerSaved, err = s.repo.IsInWatchLater(ctx, viewerID, v.ID); err != nil {
 			return VideoDetail{}, err
 		}
 		pos, found, err := s.repo.GetProgress(ctx, viewerID, v.ID)

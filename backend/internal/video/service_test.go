@@ -33,11 +33,13 @@ type fakeRepo struct {
 	purged map[int64]bool
 	// notifs berisi semua notifikasi, urut id (lihat notification_test.go).
 	notifs []fakeNotif
+	// later[userID][videoID] = waktu disimpan ke Tonton nanti.
+	later map[int64]map[int64]time.Time
 }
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{videos: map[int64]Video{}, likes: map[int64]map[int64]bool{}, terms: map[int64][]SearchTerm{}, history: map[int64]map[int64]HistoryEntry{},
-		trash: map[int64]Video{}, purged: map[int64]bool{}}
+		trash: map[int64]Video{}, purged: map[int64]bool{}, later: map[int64]map[int64]time.Time{}}
 }
 
 func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {

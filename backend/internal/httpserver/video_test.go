@@ -44,6 +44,8 @@ type fakeVideoClient struct {
 	lastDeleteV  *videov1.DeleteVideoRequest
 	// notif berisi request notifikasi terakhir (notification_test.go).
 	notif fakeNotifications
+	// later berisi request Tonton nanti terakhir (watchlater_test.go).
+	later fakeWatchLater
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
@@ -106,6 +108,7 @@ func (f *fakeVideoClient) GetVideo(_ context.Context, in *videov1.GetVideoReques
 	// User 8 pernah menonton video ini sampai detik 93,5.
 	if in.GetViewerId() == 8 {
 		resp.ResumePositionMs = 93500
+		resp.ViewerSaved = true
 	}
 	// Seperti VideoService: file asli hanya untuk pemilik (user 7).
 	if in.GetViewerId() == 7 {
