@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar'
 import { SubscribeButton } from '../components/channel/SubscribeButton'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
+import { categoryLabel } from '../lib/categories'
 import { formatCount, formatDate } from '../lib/format'
 import { VideoRow } from '../components/VideoCard'
 import { CommentSection } from '../components/watch/CommentSection'
@@ -308,6 +309,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
             <span>Diunggah {formatDate(video.created_at)}</span>
             {startAt > 0 && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>
+          <VideoTags category={video.category} tags={video.tags} />
         </div>
 
         <div className="watch-actions">
@@ -361,7 +363,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
         {playlistPanel && <div className="watch-playlist-side">{playlistPanel}</div>}
         {playable && <DanmakuList items={danmaku.list} onSeek={seekTo} />}
         <h2 className="side-title">Berikutnya</h2>
-        <UpNext currentId={video.id} />
+        <UpNext currentId={video.id} category={video.category} />
       </aside>
     </div>
   )
@@ -403,16 +405,51 @@ function ChannelCardHead({ owner }: { owner: Owner }) {
   )
 }
 
-/** Daftar video terbaru lainnya, di kolom kanan halaman tonton. */
-function UpNext({ currentId }: { currentId: string }) {
+/**
+ * Kategori dan tag di bawah judul (desain Watch.dc.html: "#kuliner #esKrim").
+ * Kategori membuka chip kategori itu di beranda. Tag membuka pencarian
+ * kata itu, seperti Bilibili; tag ikut disimpan sebagai kata pencarian di
+ * backend, jadi video bertag #esKrim ditemukan dengan kata "eskrim".
+ */
+function VideoTags({ category, tags }: { category: string; tags: string[] }) {
+  const label = categoryLabel(category)
+  if (!label && tags.length === 0) return null
+  return (
+    <div className="watch-stats watch-tags">
+      {label && (
+        <Link className="watch-category" to={`/?${new URLSearchParams({ category })}`}>
+          {label}
+        </Link>
+      )}
+      {tags.map((t) => (
+        <Link key={t} to={`/search?${new URLSearchParams({ q: t })}`}>
+          #{t}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Video lain di kolom kanan halaman tonton: yang sekategori lebih dulu,
+ * lalu ditambah video terbaru supaya daftarnya tetap penuh.
+ */
+function UpNext({ currentId, category }: { currentId: string; category: string }) {
   const [videos, setVideos] = useState<Video[] | null>(null)
   useEffect(() => {
     const ctrl = new AbortController()
-    listVideos('', ctrl.signal)
-      .then((page) => setVideos(page.videos))
-      .catch(() => setVideos([]))
+    const sameCategory = category ? listVideos('', ctrl.signal, category).catch(() => null) : Promise.resolve(null)
+    Promise.all([sameCategory, listVideos('', ctrl.signal).catch(() => null)]).then(([same, latest]) => {
+      if (ctrl.signal.aborted) return
+      // Gabungkan tanpa dobel: video sekategori juga ada di daftar terbaru.
+      const merged = new Map<string, Video>()
+      for (const v of [...(same?.videos ?? []), ...(latest?.videos ?? [])]) {
+        if (!merged.has(v.id)) merged.set(v.id, v)
+      }
+      setVideos([...merged.values()])
+    })
     return () => ctrl.abort()
-  }, [])
+  }, [category])
   if (!videos) return <p className="muted">Memuat…</p>
   const others = videos.filter((v) => v.id !== currentId).slice(0, UP_NEXT_COUNT)
   if (others.length === 0) return <p className="muted">Belum ada video lain.</p>

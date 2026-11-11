@@ -31,6 +31,10 @@ export interface Video {
   view_count: number
   comment_count: number
   like_count: number
+  /** Langkah 23. "" jika video tidak punya kategori. */
+  category: string
+  /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
+  tags: string[]
   owner?: Owner
 }
 

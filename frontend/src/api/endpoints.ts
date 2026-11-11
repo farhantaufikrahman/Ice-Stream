@@ -73,8 +73,10 @@ export async function getMyProfile(signal?: AbortSignal): Promise<Profile> {
 
 // ---------- Video ----------
 
-export function listVideos(pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
-  return apiRequest<VideoPage>(`/videos?${pageQuery(pageToken)}`, { signal })
+/** Feed publik. category (misalnya "game") hanya mengambil video kategori itu. */
+export function listVideos(pageToken: string, signal?: AbortSignal, category?: string): Promise<VideoPage> {
+  const filter = category ? `${new URLSearchParams({ category })}&` : ''
+  return apiRequest<VideoPage>(`/videos?${filter}${pageQuery(pageToken)}`, { signal })
 }
 
 export function searchVideos(q: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
@@ -129,6 +131,20 @@ export interface NewVideoInput {
   description: string
   content_type: string
   size_bytes: number
+  /** Boleh tidak dikirim (tanpa kategori). */
+  category?: string
+  tags?: string[]
+}
+
+/**
+ * PATCH /videos/:id. Field yang tidak dikirim tidak diubah. category ""
+ * menghapus kategori, tags [] menghapus semua tag.
+ */
+export interface VideoChanges {
+  title?: string
+  description?: string
+  category?: string
+  tags?: string[]
 }
 
 /**
@@ -159,7 +175,7 @@ export function getChannelStats(days: StatsDays, signal?: AbortSignal): Promise<
 }
 
 /** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */
-export async function updateVideo(id: string, changes: { title?: string; description?: string }): Promise<Video> {
+export async function updateVideo(id: string, changes: VideoChanges): Promise<Video> {
   const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: changes,

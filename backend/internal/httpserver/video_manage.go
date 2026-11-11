@@ -12,12 +12,18 @@ import (
 // updateVideoRequest memakai *string: nil = field tidak dikirim (jangan
 // diubah), "" = dikirim kosong (misalnya menghapus deskripsi). Sama seperti
 // updateProfileRequest.
+//
+// Tags memakai *[]string: nil = tidak dikirim, [] = hapus semua tag.
+// encoding/json mengisi pointer hanya jika key-nya ada di body.
 type updateVideoRequest struct {
-	Title       *string `json:"title"`
-	Description *string `json:"description"`
+	Title       *string   `json:"title"`
+	Description *string   `json:"description"`
+	Category    *string   `json:"category"`
+	Tags        *[]string `json:"tags"`
 }
 
-// update: PATCH /api/v1/videos/:id dengan body {"title": "...", "description": "..."}.
+// update: PATCH /api/v1/videos/:id dengan body {"title": "...", "description": "...",
+// "category": "game", "tags": ["horor"]}.
 // Wajib login, hanya pemilik video. Field yang tidak dikirim tidak diubah.
 // PATCH (bukan PUT) karena yang dikirim hanya sebagian data video.
 func (h *videoHandler) update(c *gin.Context) {
@@ -36,12 +42,18 @@ func (h *videoHandler) update(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
-	resp, err := h.client.UpdateVideo(ctx, &videov1.UpdateVideoRequest{
+	upd := &videov1.UpdateVideoRequest{
 		RequesterId: userID,
 		VideoId:     videoID,
 		Title:       req.Title,
 		Description: req.Description,
-	})
+		Category:    req.Category,
+	}
+	if req.Tags != nil {
+		// Termasuk daftar kosong: TagList tanpa isi = hapus semua tag.
+		upd.Tags = &videov1.TagList{Tags: *req.Tags}
+	}
+	resp, err := h.client.UpdateVideo(ctx, upd)
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return

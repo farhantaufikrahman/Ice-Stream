@@ -50,10 +50,11 @@ type SearchTerm struct {
 	Weight int
 }
 
-// BuildSearchTerms memecah judul dan deskripsi menjadi daftar kata unik.
-// Kata yang ada di judul dan deskripsi hanya muncul sekali, dengan bobot
-// judul.
-func BuildSearchTerms(title, description string) []SearchTerm {
+// BuildSearchTerms memecah judul, deskripsi, dan tag menjadi daftar kata
+// unik. Kata yang ada di judul dan deskripsi hanya muncul sekali, dengan
+// bobot judul. Tag berbobot sama dengan judul: kreator memilihnya sendiri
+// sebagai kata kunci video (tag "esKrim" menjadi kata "eskrim").
+func BuildSearchTerms(title, description string, tags []string) []SearchTerm {
 	weights := make(map[string]int)
 	var order []string
 	add := func(text string, weight int) {
@@ -71,6 +72,11 @@ func BuildSearchTerms(title, description string) []SearchTerm {
 		}
 	}
 	add(title, WeightTitle)
+	// Sebelum deskripsi: kalau deskripsi sangat panjang dan batas
+	// maxTermsPerVideo tercapai, tag tidak ikut terpotong.
+	for _, t := range tags {
+		add(t, WeightTitle)
+	}
 	add(description, WeightDescription)
 
 	terms := make([]SearchTerm, len(order))
@@ -205,7 +211,7 @@ func (s *Service) IndexPending(ctx context.Context) (int, error) {
 		}
 		indexed := 0
 		for _, v := range videos {
-			ok, err := s.repo.SaveSearchTerms(ctx, v.ID, BuildSearchTerms(v.Title, v.Description), s.now())
+			ok, err := s.repo.SaveSearchTerms(ctx, v.ID, BuildSearchTerms(v.Title, v.Description, v.Tags), s.now())
 			if err != nil {
 				return total, err
 			}

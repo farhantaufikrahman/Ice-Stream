@@ -32,6 +32,8 @@ func (s *GRPCServer) CreateUpload(ctx context.Context, req *videov1.CreateUpload
 		Description: req.GetDescription(),
 		ContentType: req.GetContentType(),
 		SizeBytes:   req.GetSizeBytes(),
+		Category:    req.GetCategory(),
+		Tags:        req.GetTags(),
 	})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
@@ -89,7 +91,8 @@ func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequ
 	if req.GetOwnerId() > 0 {
 		owners = append([]int64{req.GetOwnerId()}, owners...)
 	}
-	videos, next, err := s.svc.ListVideos(ctx, owners, int(req.GetPageSize()), req.GetPageToken())
+	filter := FeedFilter{OwnerIDs: owners, Category: req.GetCategory()}
+	videos, next, err := s.svc.ListVideos(ctx, filter, int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -182,6 +185,10 @@ func (s *GRPCServer) UpdateVideo(ctx context.Context, req *videov1.UpdateVideoRe
 		// Field "optional" di proto menjadi pointer di Go: nil = tidak dikirim.
 		Title:       req.Title,
 		Description: req.Description,
+		Category:    req.Category,
+		// tags adalah message: nil = tidak dikirim (lihat TagList di proto).
+		Tags:    req.GetTags().GetTags(),
+		SetTags: req.GetTags() != nil,
 	})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
@@ -301,6 +308,8 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 	pv.DurationMs = v.DurationMs
 	pv.Renditions = v.Renditions
 	pv.FailureReason = v.FailureReason
+	pv.Category = v.Category
+	pv.Tags = v.Tags
 	if v.ProcessedAt != nil {
 		pv.ProcessedAt = timestamppb.New(*v.ProcessedAt)
 	}

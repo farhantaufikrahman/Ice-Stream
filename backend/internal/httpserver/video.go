@@ -42,6 +42,9 @@ type createVideoRequest struct {
 	ContentType string `json:"content_type"`
 	// Ukuran file dalam byte, misalnya file.size.
 	SizeBytes int64 `json:"size_bytes"`
+	// Boleh tidak dikirim. Lihat CreateUploadRequest di video.proto.
+	Category string   `json:"category"`
+	Tags     []string `json:"tags"`
 }
 
 type videoResponse struct {
@@ -72,6 +75,10 @@ type videoResponse struct {
 	CommentCount int64 `json:"comment_count"`
 	// LikeCount adalah jumlah like (selalu ada).
 	LikeCount int64 `json:"like_count"`
+	// Category selalu ada; "" jika video tidak punya kategori.
+	Category string `json:"category"`
+	// Tags selalu berupa array (bisa kosong), tanpa "#".
+	Tags []string `json:"tags"`
 	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
 	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
 	Owner *ownerResponse `json:"owner,omitempty"`
@@ -155,6 +162,8 @@ func (h *videoHandler) create(c *gin.Context) {
 		Description: req.Description,
 		ContentType: req.ContentType,
 		SizeBytes:   req.SizeBytes,
+		Category:    req.Category,
+		Tags:        req.Tags,
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
@@ -286,7 +295,8 @@ func (h *videoHandler) search(c *gin.Context) {
 }
 
 // list adalah feed publik: GET /api/v1/videos?page_size=20&page_token=...
-// Tidak butuh login.
+// Tidak butuh login. ?category=game hanya mengambil video kategori itu
+// (chip di beranda); kategori yang tidak dikenal dijawab 400.
 func (h *videoHandler) list(c *gin.Context) {
 	pageSize, ok := pageSizeQuery(c)
 	if !ok {
@@ -298,6 +308,7 @@ func (h *videoHandler) list(c *gin.Context) {
 	resp, err := h.client.ListVideos(ctx, &videov1.ListVideosRequest{
 		PageSize:  pageSize,
 		PageToken: c.Query("page_token"),
+		Category:  c.Query("category"),
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
@@ -484,6 +495,10 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		ViewCount:     v.GetViewCount(),
 		CommentCount:  v.GetCommentCount(),
 		LikeCount:     v.GetLikeCount(),
+		Category:      v.GetCategory(),
+		// Selalu array, bukan null, supaya frontend bisa langsung
+		// video.tags.map(...).
+		Tags: append([]string{}, v.GetTags()...),
 	}
 }
 

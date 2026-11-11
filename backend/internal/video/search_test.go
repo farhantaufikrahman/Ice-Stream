@@ -98,7 +98,7 @@ func TestTokenize(t *testing.T) {
 }
 
 func TestBuildSearchTerms(t *testing.T) {
-	terms := BuildSearchTerms("Belajar Golang", "Tutorial golang untuk pemula, belajar dari nol")
+	terms := BuildSearchTerms("Belajar Golang", "Tutorial golang untuk pemula, belajar dari nol", nil)
 	assert.Equal(t, []SearchTerm{
 		{"belajar", WeightTitle}, {"golang", WeightTitle},
 		{"tutorial", WeightDescription}, {"untuk", WeightDescription},
@@ -110,7 +110,7 @@ func TestBuildSearchTerms(t *testing.T) {
 	for i := 0; i < 400; i++ {
 		fmt.Fprintf(&long, "kata%d ", i)
 	}
-	assert.Len(t, BuildSearchTerms("judul", long.String()), maxTermsPerVideo)
+	assert.Len(t, BuildSearchTerms("judul", long.String(), nil), maxTermsPerVideo)
 }
 
 func TestParseSearchQuery(t *testing.T) {

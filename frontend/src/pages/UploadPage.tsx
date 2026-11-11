@@ -7,8 +7,10 @@ import { putFile } from '../api/upload'
 import { ErrorBox } from '../components/ErrorBox'
 import { StatusChip } from '../components/studio/StatusChip'
 import { StudioHeader, UploadIcon } from '../components/studio/StudioLayout'
+import { CategoryTagFields, type TagFieldHandle } from '../components/studio/CategoryTagFields'
 import { VideoDetailsFields } from '../components/studio/VideoDetailsFields'
 import { useVideoPoll } from '../hooks/useVideoPoll'
+import { detailsChanges } from '../lib/categories'
 import { formatDuration } from '../lib/format'
 import {
   ACCEPT_VIDEO,
@@ -50,8 +52,9 @@ interface UploadErr {
  * setelah dipilih, sambil user mengisi judul dan deskripsi, seperti di
  * desain (progres 64% sambil mengisi detail).
  *
- * Bagian desain yang belum didukung backend (kategori, bahasa, tag, pilihan
- * thumbnail, visibilitas, draf) sengaja belum ditampilkan.
+ * Bagian desain yang belum didukung backend (bahasa, pilihan thumbnail,
+ * visibilitas, draf) sengaja belum ditampilkan. Kategori dan tag ada sejak
+ * langkah 23.
  */
 export function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -62,6 +65,11 @@ export function UploadPage() {
   const [error, setError] = useState<UploadErr | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  // Pesan "Pilih kategori." baru muncul setelah Terbitkan ditekan.
+  const [triedPublish, setTriedPublish] = useState(false)
+  const tagsRef = useRef<TagFieldHandle>(null)
   const uploadCtrl = useRef<AbortController | null>(null)
 
   // Menutup halaman = membatalkan unggahan yang sedang berjalan.
@@ -150,6 +158,9 @@ export function UploadPage() {
     const t = titleFromFileName(f.name)
     setTitle(t)
     setDescription('')
+    setCategory('')
+    setTags([])
+    setTriedPublish(false)
     void startUpload(f, check.contentType, t, '')
   }
 
@@ -189,15 +200,20 @@ export function UploadPage() {
 
   const publish = async () => {
     if (!video) return
-    if (titleError(title) || descriptionError(description)) return
+    setTriedPublish(true)
+    // Kategori wajib dipilih saat menerbitkan (seperti YouTube Studio),
+    // supaya video muncul di chip beranda. Video lama boleh tanpa kategori.
+    // Tag yang masih diketik ikut disimpan; null = teksnya salah.
+    const finalTags = tagsRef.current ? tagsRef.current.flush() : tags
+    if (titleError(title) || descriptionError(description) || !category || !finalTags) return
     setPhase('publishing')
     setError(null)
     try {
       let current = video
-      const changes: { title?: string; description?: string } = {}
-      if (title.trim() !== current.title) changes.title = title.trim()
-      if (description.trim() !== current.description) changes.description = description.trim()
-      if (changes.title !== undefined || changes.description !== undefined) {
+      // Video dicatat saat file dipilih (judul dari nama file), jadi detail
+      // yang diisi sesudahnya dikirim sekarang lewat PATCH.
+      const changes = detailsChanges(current, { title, description, category, tags: finalTags })
+      if (Object.keys(changes).length > 0) {
         current = await updateVideo(current.id, changes)
         // Disimpan sekarang: jika /complete gagal, Coba lagi tidak PATCH ulang.
         setVideo(current)
@@ -268,6 +284,17 @@ export function UploadPage() {
                     onTitleChange={setTitle}
                     onDescriptionChange={setDescription}
                     disabled={fieldsLocked}
+                  />
+                  <CategoryTagFields
+                    idPrefix="up"
+                    category={category}
+                    tags={tags}
+                    onCategoryChange={setCategory}
+                    onTagsChange={setTags}
+                    disabled={fieldsLocked}
+                    emptyCategoryLabel="Pilih kategori"
+                    categoryError={triedPublish && !category ? 'Pilih kategori.' : null}
+                    tagsRef={tagsRef}
                   />
                   {error && <ErrorBox message={errorText(error)} onRetry={retry} />}
                   <div className="form-actions">

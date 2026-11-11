@@ -18,6 +18,8 @@ const video: Video = {
   view_count: 1500,
   comment_count: 0,
   like_count: 3,
+  category: 'game',
+  tags: [],
   owner: { id: '7', username: 'budi', display_name: 'Budi', avatar_url: '' },
 }
 
@@ -34,6 +36,16 @@ describe('VideoCard', () => {
     expect(screen.getByText('1:15')).toBeInTheDocument()
     expect(screen.getByText(/▶ 1,5/)).toBeInTheDocument()
     expect(screen.getByText('BU')).toBeInTheDocument()
+    expect(screen.getByText('Game')).toHaveClass('thumb-category')
+  })
+
+  it('tanpa kategori tidak ada label di thumbnail', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <VideoCard video={{ ...video, category: '' }} />
+      </MemoryRouter>,
+    )
+    expect(container.querySelector('.thumb-category')).toBeNull()
   })
 })
 
