@@ -247,6 +247,34 @@ export function listSubscriptions(pageToken: string, signal?: AbortSignal): Prom
   return apiRequest<ChannelPage>(`/me/subscriptions?${pageQuery(pageToken)}`, { auth: 'required', signal })
 }
 
+// ---------- Pengaturan profil (langkah 17e) ----------
+
+export interface ProfileChanges {
+  display_name?: string
+  bio?: string
+}
+
+/** PATCH /me/profile: kirim hanya field yang berubah. */
+export async function updateMyProfile(changes: ProfileChanges): Promise<Profile> {
+  const body = await apiRequest<{ user: Profile }>('/me/profile', { method: 'PATCH', body: changes, auth: 'required' })
+  return body.user
+}
+
+/**
+ * PUT /me/avatar: body = isi file gambar apa adanya (bukan multipart/form-data).
+ * Server memotongnya persegi 256x256 dan menyimpannya ulang sebagai JPEG.
+ */
+export async function uploadAvatar(file: Blob): Promise<Profile> {
+  const body = await apiRequest<{ user: Profile }>('/me/avatar', { method: 'PUT', body: file, auth: 'required' })
+  return body.user
+}
+
+/** DELETE /me/avatar: kembali ke inisial berwarna. */
+export async function removeAvatar(): Promise<Profile> {
+  const body = await apiRequest<{ user: Profile }>('/me/avatar', { method: 'DELETE', auth: 'required' })
+  return body.user
+}
+
 const PAGE_SIZE = 24
 
 function pageQuery(pageToken: string): string {
