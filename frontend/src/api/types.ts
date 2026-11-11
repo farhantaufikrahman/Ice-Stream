@@ -134,3 +134,24 @@ export interface DanmakuPage {
   danmaku: Danmaku[]
   next_page_token: string
 }
+
+// ---------- Kanal dan langganan (langkah 17d) ----------
+
+/** Jawaban GET /users/:username (halaman kanal). */
+export interface ChannelDetail {
+  user: Profile
+  /** Hanya ada jika penonton sudah login. */
+  viewer_subscribed?: boolean
+}
+
+/** Jawaban PUT dan DELETE /users/:username/subscription. */
+export interface SubscriptionResult {
+  subscribed: boolean
+  subscriber_count: number
+}
+
+/** Jawaban GET /me/subscriptions. */
+export interface ChannelPage {
+  channels: Profile[]
+  next_page_token: string
+}

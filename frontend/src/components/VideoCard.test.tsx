@@ -36,3 +36,17 @@ describe('VideoCard', () => {
     expect(screen.getByText('BU')).toBeInTheDocument()
   })
 })
+
+describe('VideoCard hideOwner', () => {
+  it('di halaman kanal menampilkan jumlah tayangan, bukan nama dan avatar kanal', () => {
+    render(
+      <MemoryRouter>
+        <VideoCard video={video} hideOwner />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/1,5 rb tayangan ·/)).toBeInTheDocument()
+    expect(screen.queryByText(/Budi ·/)).not.toBeInTheDocument()
+    expect(screen.queryByText('BU')).not.toBeInTheDocument()
+    expect(screen.queryByText(/▶/)).not.toBeInTheDocument()
+  })
+})

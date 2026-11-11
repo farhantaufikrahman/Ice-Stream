@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { ApiError, errorMessage, isAbortError } from '../api/client'
 import { getVideo, listVideos, recordView, saveWatchProgress, setLike } from '../api/endpoints'
-import type { Danmaku, Profile, Video, VideoDetail } from '../api/types'
+import type { Danmaku, Owner, Profile, Video, VideoDetail } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
+import { SubscribeButton } from '../components/channel/SubscribeButton'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
 import { formatCount, formatDate } from '../lib/format'
@@ -13,6 +14,7 @@ import { CommentSection } from '../components/watch/CommentSection'
 import { DanmakuComposer } from '../components/watch/DanmakuComposer'
 import { DanmakuLayer, type DanmakuLayerHandle } from '../components/watch/DanmakuLayer'
 import { DanmakuList } from '../components/watch/DanmakuList'
+import { useChannel } from '../hooks/useChannel'
 import { useDanmaku } from '../hooks/useDanmaku'
 
 /** Jumlah video di kolom "Berikutnya". */
@@ -238,11 +240,16 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
         {likeError && <ErrorBox message={likeError} />}
 
         <section className="channel-card">
-          <Avatar name={ownerName} url={video.owner?.avatar_url} size={52} />
-          <div className="channel-text">
-            <span className="channel-name">{ownerName}</span>
-            {video.owner && <span className="muted small">@{video.owner.username}</span>}
-          </div>
+          {video.owner ? (
+            <ChannelCardHead owner={video.owner} />
+          ) : (
+            <>
+              <Avatar name={ownerName} size={52} />
+              <div className="channel-text">
+                <span className="channel-name">{ownerName}</span>
+              </div>
+            </>
+          )}
           <p className="description">{video.description || 'Tidak ada deskripsi.'}</p>
         </section>
 
@@ -255,6 +262,42 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
         <UpNext currentId={video.id} />
       </aside>
     </div>
+  )
+}
+
+/**
+ * Avatar, nama, jumlah pengikut, dan tombol Ikuti di kartu kanal
+ * (desain Watch.dc.html). Jumlah pengikut tidak ada di data video, jadi
+ * profil kanal diambil terpisah lewat GET /users/:username.
+ */
+function ChannelCardHead({ owner }: { owner: Owner }) {
+  const { channel, isOwn, applySubscription } = useChannel(owner.username)
+  const name = owner.display_name || owner.username
+  const href = `/channel/${encodeURIComponent(owner.username)}`
+  return (
+    <>
+      <Link to={href} className="channel-avatar-link" aria-label={`Kanal ${name}`}>
+        <Avatar name={name} url={owner.avatar_url} size={52} />
+      </Link>
+      <div className="channel-text">
+        <Link to={href} className="channel-name">
+          {name}
+        </Link>
+        <span className="muted small">
+          @{owner.username}
+          {channel && ` · ${formatCount(channel.user.subscriber_count)} pengikut`}
+        </span>
+      </div>
+      {channel && (
+        <SubscribeButton
+          username={owner.username}
+          subscribed={channel.viewer_subscribed ?? false}
+          subscriberCount={channel.user.subscriber_count}
+          isOwn={isOwn}
+          onChange={applySubscription}
+        />
+      )}
+    </>
   )
 }
 

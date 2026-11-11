@@ -1497,6 +1497,271 @@ a.studio-video-title:hover {
   overflow: auto;
 }
 
+/* ---------- Kanal & langganan (langkah 17d) ---------- */
+.section-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin: 0 0 16px;
+}
+/* Tombol Ikuti: stroberi (desain), abu-abu saat sudah mengikuti. */
+.btn-follow,
+.btn-follow:hover:not(:disabled) {
+  background: var(--strawberry);
+  border-color: var(--strawberry);
+  color: var(--night);
+  padding: 0 22px;
+}
+.btn-follow:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.btn-follow.is-following,
+.btn-follow.is-following:hover:not(:disabled) {
+  background: var(--raised);
+  border-color: var(--line-strong);
+  color: var(--fg);
+  filter: none;
+}
+.follow {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.channel-avatar-link {
+  display: flex;
+  border-radius: 50%;
+}
+a.channel-name {
+  color: var(--fg);
+}
+a.channel-name:hover {
+  color: var(--accent-text);
+}
+
+.channel-page {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.channel-banner {
+  height: 220px;
+  margin-bottom: -82px;
+  border-radius: 18px;
+  background: #17304a;
+  overflow: hidden;
+  display: flex;
+  gap: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 60px;
+}
+.channel-banner svg {
+  flex: none;
+  opacity: 0.22;
+}
+.channel-head {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  padding: 0 24px;
+}
+.channel-avatar {
+  display: flex;
+  border-radius: 50%;
+  border: 6px solid var(--bg);
+  background: var(--bg);
+}
+.channel-info {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.channel-title {
+  margin: 0;
+  font-size: 2.25rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.channel-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin-top: 4px;
+  font-size: 0.9rem;
+}
+.channel-head > .btn,
+.channel-head > .follow {
+  margin-bottom: 6px;
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--fg);
+}
+.tab.is-active {
+  color: var(--fg);
+  border-bottom-color: var(--mint);
+}
+.channel-videos {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.channel-latest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 20px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.channel-latest-thumb {
+  flex: 1 1 420px;
+  min-width: 0;
+  max-width: 560px;
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.channel-latest-badge {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--amber);
+  color: var(--night);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.channel-latest-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.channel-latest-title {
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.channel-latest-title:hover {
+  color: var(--accent-text);
+}
+.channel-latest-desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--soft);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.channel-about {
+  max-width: 760px;
+}
+.channel-about .description {
+  overflow-wrap: anywhere;
+}
+.channel-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  margin: 20px 0 0;
+}
+.channel-facts dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.channel-facts dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+}
+
+/* Chip beranda (desain Home.dc.html) */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.chip-tab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--soft);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chip-tab:hover {
+  border-color: var(--accent-text);
+}
+.chip-tab.is-active {
+  background: var(--inv-bg);
+  border-color: var(--inv-bg);
+  color: var(--inv-fg);
+}
+.subs-strip {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 24px;
+}
+.subs-item {
+  flex: none;
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.subs-item:hover {
+  color: var(--accent-text);
+}
+.subs-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- Layar kecil (HP) ---------- */
 @media (max-width: 640px) {
   .search {
@@ -1536,5 +1801,27 @@ a.studio-video-title:hover {
   }
   .auth-card {
     padding: 24px;
+  }
+  .channel-banner {
+    height: 140px;
+    margin-bottom: -60px;
+    gap: 20px;
+    padding-right: 16px;
+  }
+  .channel-banner svg {
+    width: 80px;
+    height: 80px;
+  }
+  .channel-head {
+    padding: 0 8px;
+  }
+  .channel-title {
+    font-size: 1.7rem;
+  }
+  .channel-latest {
+    padding: 14px;
+  }
+  .channel-latest-title {
+    font-size: 1.3rem;
   }
 }
