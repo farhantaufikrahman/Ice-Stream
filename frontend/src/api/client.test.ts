@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, apiRequest, getAccessToken, onSessionLost, refreshAccessToken, setAccessToken } from './client'
+import { ApiError, apiRequest, errorMessage, getAccessToken, onSessionLost, refreshAccessToken, setAccessToken } from './client'
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -95,5 +95,12 @@ describe('apiRequest', () => {
   it('204 mengembalikan undefined', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
     await expect(apiRequest('/auth/logout', { method: 'POST' })).resolves.toBeUndefined()
+  })
+})
+
+describe('errorMessage untuk unggahan', () => {
+  it('memakai pesan UploadError apa adanya', async () => {
+    const { UploadError } = await import('./upload')
+    expect(errorMessage(new UploadError(0, 'tidak bisa menghubungi storage di http://localhost:9000'))).toContain('localhost:9000')
   })
 })

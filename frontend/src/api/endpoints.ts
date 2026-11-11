@@ -1,10 +1,15 @@
 // Satu fungsi untuk setiap endpoint REST yang dipakai frontend.
 // Daftar lengkap route ada di backend/internal/httpserver/router.go.
 
-import { apiRequest, setAccessToken } from './client'
+import { API_BASE, apiRequest, setAccessToken } from './client'
 import type {
   AccessToken,
+  Comment,
+  CommentPage,
   CreateUploadResult,
+  Danmaku,
+  DanmakuMode,
+  DanmakuPage,
   LikeResult,
   Profile,
   Video,
@@ -132,6 +137,81 @@ export async function updateVideo(id: string, changes: { title?: string; descrip
 /** Server menjawab 409 jika video sedang menunggu atau menjalani transcoding. */
 export async function deleteVideo(id: string): Promise<void> {
   await apiRequest(`/videos/${encodeURIComponent(id)}`, { method: 'DELETE', auth: 'required' })
+}
+
+// ---------- Komentar (langkah 17c) ----------
+
+const COMMENT_PAGE_SIZE = 20
+
+/** Komentar utama, terbaru lebih dulu. */
+export function listComments(videoId: string, pageToken: string, signal?: AbortSignal): Promise<CommentPage> {
+  const params = new URLSearchParams({ page_size: String(COMMENT_PAGE_SIZE) })
+  if (pageToken) params.set('page_token', pageToken)
+  return apiRequest<CommentPage>(`/videos/${encodeURIComponent(videoId)}/comments?${params}`, { signal })
+}
+
+/** Balasan untuk satu komentar utama, terlama lebih dulu. */
+export function listReplies(videoId: string, commentId: string, pageToken: string, signal?: AbortSignal): Promise<CommentPage> {
+  const params = new URLSearchParams({ page_size: String(COMMENT_PAGE_SIZE) })
+  if (pageToken) params.set('page_token', pageToken)
+  return apiRequest<CommentPage>(
+    `/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/replies?${params}`,
+    { signal },
+  )
+}
+
+/** parentId diisi untuk membalas. Balasan untuk balasan ikut menempel ke komentar utamanya. */
+export async function createComment(videoId: string, body: string, parentId?: string): Promise<Comment> {
+  const res = await apiRequest<{ comment: Comment }>(`/videos/${encodeURIComponent(videoId)}/comments`, {
+    method: 'POST',
+    body: parentId ? { body, parent_id: parentId } : { body },
+    auth: 'required',
+  })
+  return res.comment
+}
+
+/** Boleh oleh penulis komentar atau pemilik video. Komentar utama ikut menghapus balasannya. */
+export async function deleteComment(videoId: string, commentId: string): Promise<void> {
+  await apiRequest(`/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}`, {
+    method: 'DELETE',
+    auth: 'required',
+  })
+}
+
+// ---------- Danmaku (langkah 17c) ----------
+
+/** Danmaku di rentang [fromMs, toMs]. Server membatasi satu rentang maksimal 6 menit. */
+export function listDanmaku(
+  videoId: string,
+  fromMs: number,
+  toMs: number,
+  pageToken: string,
+  signal?: AbortSignal,
+): Promise<DanmakuPage> {
+  const params = new URLSearchParams({ from_ms: String(fromMs), to_ms: String(toMs), page_size: '1000' })
+  if (pageToken) params.set('page_token', pageToken)
+  return apiRequest<DanmakuPage>(`/videos/${encodeURIComponent(videoId)}/danmaku?${params}`, { signal })
+}
+
+export interface NewDanmaku {
+  body: string
+  position_ms: number
+  color: string
+  mode: DanmakuMode
+}
+
+export async function sendDanmaku(videoId: string, input: NewDanmaku): Promise<Danmaku> {
+  const res = await apiRequest<{ danmaku: Danmaku }>(`/videos/${encodeURIComponent(videoId)}/danmaku`, {
+    method: 'POST',
+    body: input,
+    auth: 'required',
+  })
+  return res.danmaku
+}
+
+/** Alamat Server-Sent Events untuk danmaku live (dibuka dengan EventSource). */
+export function danmakuLiveUrl(videoId: string): string {
+  return `${API_BASE}/videos/${encodeURIComponent(videoId)}/danmaku/live`
 }
 
 const PAGE_SIZE = 24

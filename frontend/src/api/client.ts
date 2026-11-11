@@ -189,7 +189,8 @@ async function toApiError(res: Response): Promise<ApiError> {
 
 /** Mengubah error apa pun menjadi kalimat yang boleh ditampilkan ke user. */
 export function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
+  if (err instanceof ApiError || (err instanceof Error && err.name === 'UploadError')) {
+    // UploadError (src/api/upload.ts) juga sudah berisi kalimat untuk user.
     return err.message
   }
   if (err instanceof TypeError) {
