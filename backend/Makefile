@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
 
@@ -13,6 +13,8 @@ VIDEO_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-video:dev
 MIGRATE_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-migrations:dev
 
 TRANSCODER_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-transcoder:dev
+
+WEB_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-web:dev
 
 docker-push: ## Upload image ke Docker Hub (jalankan docker login sekali dulu)
 	docker push $(IMAGE)
@@ -25,6 +27,9 @@ docker-push-video: ## Upload image VideoService ke Docker Hub
 
 docker-push-transcoder: ## Upload image transcoder ke Docker Hub
 	docker push $(TRANSCODER_IMAGE)
+
+docker-push-web: ## Upload image frontend (nginx) ke Docker Hub
+	docker push $(WEB_IMAGE)
 
 run: ## Jalankan API gateway
 	go run ./cmd/api
@@ -77,6 +82,9 @@ docker-build-video: ## Build image Docker untuk VideoService
 docker-build-transcoder: ## Build image Docker untuk transcoder (Go + ffmpeg)
 	docker build --target transcoder -t $(TRANSCODER_IMAGE) .
 
+docker-build-web: ## Build image frontend: React di-build lalu disajikan nginx (Dockerfile ada di ../frontend)
+	docker build -t $(WEB_IMAGE) ../frontend
+
 docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService dan VideoService harus jalan (make run-auth, make run-video)
 	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 \
 		-e AUTH_GRPC_ADDR=host.docker.internal:50051 \
@@ -95,6 +103,10 @@ k8s-restart: ## Restart pod gateway, auth, video, dan transcoder supaya memakai 
 	kubectl -n ice-stream rollout status deployment/transcoder --timeout=120s
 	kubectl -n ice-stream rollout status deployment/api --timeout=60s
 
+k8s-restart-web: ## Restart pod frontend supaya memakai image web yang baru di-push
+	kubectl -n ice-stream rollout restart deployment/web
+	kubectl -n ice-stream rollout status deployment/web --timeout=60s
+
 k8s-logs: ## Lihat log API gateway secara live
 	kubectl -n ice-stream logs -f deployment/api
 
@@ -106,6 +118,9 @@ k8s-logs-video: ## Lihat log VideoService secara live
 
 k8s-logs-transcoder: ## Lihat log transcoder secara live
 	kubectl -n ice-stream logs -f deployment/transcoder
+
+k8s-logs-web: ## Lihat log nginx frontend secara live
+	kubectl -n ice-stream logs -f deployment/web
 
 k8s-forward: ## Akses API dari PC
 	kubectl -n ice-stream port-forward svc/api 4010:80

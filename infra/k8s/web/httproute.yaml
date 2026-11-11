@@ -1,0 +1,35 @@
+# Satu alamat untuk semuanya: http://ice-stream.localhost:4000
+#   /api/...  -> Service api (REST)
+#   lainnya   -> Service web (nginx + hasil build React)
+# Karena halaman dan API ada di origin yang sama, cookie refresh token
+# terkirim tanpa CORS. Route "api" (api.ice-stream.localhost) tetap ada
+# untuk curl dan untuk npm run dev.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  parentRefs:
+    - name: ice-stream-gateway
+  hostnames:
+    - ice-stream.localhost
+  rules:
+    # Gateway memilih prefix yang paling panjang, jadi /api menang atas /.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: web
+          port: 80
