@@ -1197,6 +1197,306 @@ a.studio-video-title:hover {
   overflow-wrap: anywhere;
 }
 
+/* ---------- Komentar & danmaku (langkah 17c) ---------- */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.link-btn:hover {
+  color: var(--accent-text);
+}
+.link-btn.link-danger:hover {
+  color: var(--pink-text);
+}
+
+/* Lapisan danmaku di atas video. pointer-events: none supaya klik tetap
+   sampai ke kontrol <video> di bawahnya. */
+.danmaku-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.dm {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  font-weight: 700;
+  /* Bayangan hitam supaya teks terbaca di atas gambar terang maupun gelap. */
+  text-shadow:
+    0 1px 2px #000,
+    0 0 3px #000;
+  will-change: transform;
+}
+.dm.is-mine {
+  padding: 0 6px;
+  border: 1px solid var(--mint);
+  border-radius: 6px;
+}
+.dm-scroll {
+  animation: dm-scroll 8s linear forwards;
+}
+.dm-fixed {
+  left: 50%;
+  transform: translateX(-50%);
+  animation: dm-fixed 4s linear forwards;
+}
+/* Saat video dijeda, danmaku ikut berhenti. Kecuali danmaku milik sendiri
+   yang baru dikirim, supaya pengirim tetap melihatnya lewat. */
+.danmaku-layer.is-paused .dm:not(.is-mine) {
+  animation-play-state: paused;
+}
+@keyframes dm-scroll {
+  from {
+    transform: translateX(var(--dm-from));
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+/* Animasi "kosong" yang hanya dipakai sebagai pengatur waktu 4 detik:
+   onAnimationEnd menghapus danmaku dari layar. */
+@keyframes dm-fixed {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dm-scroll {
+    left: 50%;
+    animation-name: dm-fixed;
+    transform: translateX(-50%);
+  }
+}
+
+.dm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.dm-bar input {
+  flex: 1 1 220px;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.dm-bar input:focus {
+  border-color: var(--accent-text);
+  outline: none;
+}
+.dm-toggle.is-on,
+.dm-toggle.is-on:hover:not(:disabled) {
+  background: var(--mint);
+  border-color: var(--mint);
+  color: var(--night);
+}
+.dm-colors {
+  display: flex;
+  gap: 6px;
+}
+.dm-color {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  cursor: pointer;
+}
+.dm-color.is-picked {
+  border: 3px solid var(--fg);
+}
+.dm-error {
+  margin: -6px 0 0;
+}
+
+.dm-list {
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.dm-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.dm-list-head .side-title {
+  margin: 0;
+}
+.dm-list-empty {
+  margin: 0;
+  padding: 14px 16px;
+}
+.dm-list-body {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+.dm-list-body button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 10px;
+  padding: 9px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dm-list-body button:hover {
+  background: var(--raised);
+}
+.dm-list-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comments {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.comments-title {
+  font-size: 1.4rem;
+}
+.comments-title .muted {
+  font-size: 1rem;
+}
+.comment,
+.comment-composer {
+  display: flex;
+  gap: 12px;
+}
+.comment-main,
+.comment-composer-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.82rem;
+}
+.comment-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip-amber);
+  color: var(--amber-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.comment-body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.comment-actions {
+  display: flex;
+  gap: 16px;
+}
+.comment-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comment-children {
+  margin-left: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.comment-children > * {
+  align-self: stretch;
+}
+.comment-children > .link-btn {
+  align-self: flex-start;
+  color: var(--accent-text);
+}
+.replies {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.replies > * {
+  align-self: stretch;
+}
+.replies > .link-btn {
+  align-self: flex-start;
+}
+.comment-composer textarea {
+  width: 100%;
+  padding: 10px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+.comment-composer textarea:focus {
+  border-bottom-color: var(--accent-text);
+  outline: none;
+}
+.comment-composer textarea::placeholder {
+  color: var(--faint);
+}
+.comment-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-quote {
+  padding: 10px 12px;
+  border-left: 3px solid var(--line-strong);
+  background: var(--bg);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
+}
+
 /* ---------- Layar kecil (HP) ---------- */
 @media (max-width: 640px) {
   .search {
@@ -1209,6 +1509,9 @@ a.studio-video-title:hover {
   .user-name,
   .hide-narrow {
     display: none;
+  }
+  .comment-children {
+    margin-left: 20px;
   }
   .studio-nav {
     border-right: 0;

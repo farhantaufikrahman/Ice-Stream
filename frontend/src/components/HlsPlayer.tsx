@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 interface Props {
   /** URL master.m3u8 dari API (hls_url). */
@@ -10,6 +10,13 @@ interface Props {
   onFirstPlay?: () => void
   /** Dipanggil berkala selama diputar, saat dijeda, dan saat player ditutup. */
   onProgress?: (seconds: number) => void
+  /**
+   * Ref dari luar untuk elemen <video>, misalnya untuk lapisan danmaku yang
+   * perlu membaca posisi video. Jika kosong, player memakai ref sendiri.
+   */
+  videoRef?: RefObject<HTMLVideoElement | null>
+  /** Lapisan di atas video (danmaku). */
+  children?: ReactNode
 }
 
 /** Seberapa sering posisi tonton dilaporkan selama video berjalan. */
@@ -28,8 +35,9 @@ const PROGRESS_INTERVAL_MS = 15_000
  * kita tidak butuh subtitle, multi-audio, atau DRM (ukurannya jauh lebih
  * kecil); H.264 + AAC hasil transcoder (langkah 6) tetap didukung.
  */
-export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress, videoRef: outerRef, children }: Props) {
+  const ownRef = useRef<HTMLVideoElement>(null)
+  const videoRef = outerRef ?? ownRef
   const [error, setError] = useState<string | null>(null)
 
   // Callback terbaru disimpan di ref supaya player tidak dibuat ulang setiap
@@ -95,7 +103,7 @@ export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress }:
       // Pindah halaman saat video masih berjalan: simpan posisi terakhir.
       if (playing) report()
     }
-  }, [src])
+  }, [src, videoRef])
 
   useEffect(() => {
     const video = videoRef.current
@@ -155,11 +163,12 @@ export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress }:
       cancelled = true
       destroy()
     }
-  }, [src])
+  }, [src, videoRef])
 
   return (
     <div className="player">
       <video ref={videoRef} controls playsInline poster={poster} preload="metadata" />
+      {children}
       {error && <div className="player-error">{error}</div>}
     </div>
   )

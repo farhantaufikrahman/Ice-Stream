@@ -1,17 +1,42 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { ApiError, errorMessage, isAbortError } from '../api/client'
 import { getVideo, listVideos, recordView, saveWatchProgress, setLike } from '../api/endpoints'
-import type { Video, VideoDetail } from '../api/types'
+import type { Danmaku, Profile, Video, VideoDetail } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
 import { formatCount, formatDate } from '../lib/format'
 import { VideoRow } from '../components/VideoCard'
+import { CommentSection } from '../components/watch/CommentSection'
+import { DanmakuComposer } from '../components/watch/DanmakuComposer'
+import { DanmakuLayer, type DanmakuLayerHandle } from '../components/watch/DanmakuLayer'
+import { DanmakuList } from '../components/watch/DanmakuList'
+import { useDanmaku } from '../hooks/useDanmaku'
 
 /** Jumlah video di kolom "Berikutnya". */
 const UP_NEXT_COUNT = 8
+
+/** Pilihan "Danmaku aktif/mati" diingat per browser. */
+const DANMAKU_PREF_KEY = 'ice-danmaku'
+
+function readDanmakuPref(): boolean {
+  try {
+    return localStorage.getItem(DANMAKU_PREF_KEY) !== 'off'
+  } catch {
+    // localStorage bisa diblokir (mode privat tertentu): pakai default.
+    return true
+  }
+}
+
+function saveDanmakuPref(on: boolean): void {
+  try {
+    localStorage.setItem(DANMAKU_PREF_KEY, on ? 'on' : 'off')
+  } catch {
+    // Tidak tersimpan pun tidak apa-apa.
+  }
+}
 
 const statusText: Record<string, string> = {
   PENDING_UPLOAD: 'File video belum selesai diunggah.',
@@ -73,12 +98,33 @@ export function WatchPage() {
   }
   // key: state di dalam (jumlah like, dan lain-lain) diulang dari awal saat
   // pindah ke video lain.
-  return <WatchView key={detail.video.id} detail={detail} loggedIn={authStatus === 'authenticated'} />
+  return <WatchView key={detail.video.id} detail={detail} loggedIn={authStatus === 'authenticated'} user={user} />
 }
 
-function WatchView({ detail, loggedIn }: { detail: VideoDetail; loggedIn: boolean }) {
+function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: boolean; user: Profile | null }) {
   const { video } = detail
   const location = useLocation()
+  const playable = video.status === 'READY' && Boolean(video.hls_url)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const layerRef = useRef<DanmakuLayerHandle>(null)
+  const [showDanmaku, setShowDanmaku] = useState(readDanmakuPref)
+  // Danmaku live dari penonton lain langsung ditampilkan di layar.
+  const danmaku = useDanmaku(video.id, videoRef, playable, (d) => layerRef.current?.show(d))
+
+  const toggleDanmaku = () => {
+    setShowDanmaku((on) => {
+      saveDanmakuPref(!on)
+      return !on
+    })
+  }
+  const onDanmakuSent = (d: Danmaku) => {
+    danmaku.add(d)
+    layerRef.current?.show(d, true)
+  }
+  const seekTo = (ms: number) => {
+    const el = videoRef.current
+    if (el) el.currentTime = ms / 1000
+  }
   const [views, setViews] = useState(video.view_count)
   const [like, setLikeState] = useState({ liked: detail.viewer_liked ?? false, count: video.like_count })
   const [likeBusy, setLikeBusy] = useState(false)
@@ -133,14 +179,17 @@ function WatchView({ detail, loggedIn }: { detail: VideoDetail; loggedIn: boolea
     <div className="watch">
       <div className="watch-main">
         <div className="player-card">
-          {video.status === 'READY' && video.hls_url ? (
+          {playable && video.hls_url ? (
             <HlsPlayer
               src={video.hls_url}
               poster={video.thumbnail_url}
               startAt={startAt}
               onFirstPlay={onFirstPlay}
               onProgress={onProgress}
-            />
+              videoRef={videoRef}
+            >
+              <DanmakuLayer ref={layerRef} videoRef={videoRef} items={danmaku.list} visible={showDanmaku} />
+            </HlsPlayer>
           ) : (
             <div className="player player-placeholder">
               <p>{statusText[video.status] ?? 'Video belum bisa diputar.'}</p>
@@ -148,6 +197,16 @@ function WatchView({ detail, loggedIn }: { detail: VideoDetail; loggedIn: boolea
             </div>
           )}
         </div>
+        {playable && (
+          <DanmakuComposer
+            videoId={video.id}
+            videoRef={videoRef}
+            loggedIn={loggedIn}
+            visible={showDanmaku}
+            onToggle={toggleDanmaku}
+            onSent={onDanmakuSent}
+          />
+        )}
 
         <div className="watch-heading">
           <h1 className="watch-title">{video.title}</h1>
@@ -186,9 +245,12 @@ function WatchView({ detail, loggedIn }: { detail: VideoDetail; loggedIn: boolea
           </div>
           <p className="description">{video.description || 'Tidak ada deskripsi.'}</p>
         </section>
+
+        {playable && <CommentSection videoId={video.id} videoOwnerId={video.owner_id} initialCount={video.comment_count} user={user} />}
       </div>
 
       <aside className="watch-side">
+        {playable && <DanmakuList items={danmaku.list} onSeek={seekTo} />}
         <h2 className="side-title">Berikutnya</h2>
         <UpNext currentId={video.id} />
       </aside>

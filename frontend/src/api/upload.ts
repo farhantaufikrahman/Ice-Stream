@@ -57,7 +57,9 @@ export function putFile(ticket: UploadTicket, file: Blob, { signal, onProgress }
     })
     xhr.addEventListener('error', () => {
       cleanup()
-      reject(new UploadError(0, 'koneksi ke storage terputus, periksa jaringan lalu coba lagi'))
+      // Browser tidak memberi detail (demi keamanan): bisa server mati,
+      // port belum dibuka, atau CORS ditolak. Detailnya ada di DevTools.
+      reject(new UploadError(0, `tidak bisa menghubungi storage di ${originOf(ticket.url)}. Pastikan alamat itu bisa dibuka dari browser (lihat DevTools, tab Network)`))
     })
     xhr.addEventListener('abort', () => {
       cleanup()
@@ -74,6 +76,14 @@ export function putFile(ticket: UploadTicket, file: Blob, { signal, onProgress }
     }
     xhr.send(file)
   })
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin
+  } catch {
+    return url
+  }
 }
 
 function storageMessage(status: number): string {

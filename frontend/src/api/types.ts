@@ -94,3 +94,43 @@ export interface CreateUploadResult {
   video: Video
   upload: UploadTicket
 }
+
+// ---------- Komentar dan danmaku (langkah 17c) ----------
+
+export interface Comment {
+  id: string
+  video_id: string
+  /** Hanya ada pada balasan: id komentar utama yang dibalas. */
+  parent_id?: string
+  author_id: string
+  /** Bisa kosong jika profil penulis gagal diambil server. */
+  author?: Owner
+  body: string
+  /** Jumlah balasan (hanya bermakna pada komentar utama). */
+  reply_count: number
+  created_at: string
+}
+
+export interface CommentPage {
+  comments: Comment[]
+  next_page_token: string
+}
+
+export type DanmakuMode = 'SCROLL' | 'TOP' | 'BOTTOM'
+
+export interface Danmaku {
+  id: string
+  video_id: string
+  /** Detik ke berapa (dalam milidetik) danmaku muncul di video. */
+  position_ms: number
+  body: string
+  /** Format "#RRGGBB". */
+  color: string
+  mode: DanmakuMode
+  created_at: string
+}
+
+export interface DanmakuPage {
+  danmaku: Danmaku[]
+  next_page_token: string
+}
