@@ -8,10 +8,20 @@ interface Props {
   onTitleChange: (value: string) => void
   onDescriptionChange: (value: string) => void
   disabled?: boolean
+  /** Contoh isi deskripsi. Bawaan: untuk video. */
+  descriptionPlaceholder?: string
 }
 
-/** Input judul dan deskripsi beserta penghitung karakter. Dipakai di Unggah dan Edit. */
-export function VideoDetailsFields({ idPrefix, title, description, onTitleChange, onDescriptionChange, disabled }: Props) {
+/** Input judul dan deskripsi beserta penghitung karakter. Dipakai di Unggah, Edit video, dan form playlist. */
+export function VideoDetailsFields({
+  idPrefix,
+  title,
+  description,
+  onTitleChange,
+  onDescriptionChange,
+  disabled,
+  descriptionPlaceholder = 'Ceritakan isi videomu',
+}: Props) {
   const tErr = titleError(title)
   const dErr = descriptionError(description)
   const titleCount = charCount(title.trim())
@@ -54,7 +64,7 @@ export function VideoDetailsFields({ idPrefix, title, description, onTitleChange
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           disabled={disabled}
-          placeholder="Ceritakan isi videomu"
+          placeholder={descriptionPlaceholder}
           aria-invalid={dErr ? true : undefined}
           aria-describedby={dErr ? `${idPrefix}-desc-err` : undefined}
         />

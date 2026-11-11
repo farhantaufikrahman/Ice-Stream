@@ -44,6 +44,14 @@ const (
 	VideoService_AddToWatchLater_FullMethodName          = "/video.v1.VideoService/AddToWatchLater"
 	VideoService_RemoveFromWatchLater_FullMethodName     = "/video.v1.VideoService/RemoveFromWatchLater"
 	VideoService_ListWatchLater_FullMethodName           = "/video.v1.VideoService/ListWatchLater"
+	VideoService_CreatePlaylist_FullMethodName           = "/video.v1.VideoService/CreatePlaylist"
+	VideoService_UpdatePlaylist_FullMethodName           = "/video.v1.VideoService/UpdatePlaylist"
+	VideoService_DeletePlaylist_FullMethodName           = "/video.v1.VideoService/DeletePlaylist"
+	VideoService_GetPlaylist_FullMethodName              = "/video.v1.VideoService/GetPlaylist"
+	VideoService_ListPlaylists_FullMethodName            = "/video.v1.VideoService/ListPlaylists"
+	VideoService_AddToPlaylist_FullMethodName            = "/video.v1.VideoService/AddToPlaylist"
+	VideoService_RemoveFromPlaylist_FullMethodName       = "/video.v1.VideoService/RemoveFromPlaylist"
+	VideoService_ListPlaylistVideos_FullMethodName       = "/video.v1.VideoService/ListPlaylistVideos"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -133,6 +141,28 @@ type VideoServiceClient interface {
 	// ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
 	// disimpan lebih dulu. Hanya video READY.
 	ListWatchLater(ctx context.Context, in *ListWatchLaterRequest, opts ...grpc.CallOption) (*ListWatchLaterResponse, error)
+	// CreatePlaylist membuat playlist kosong milik requester.
+	// INVALID_ARGUMENT jika judul/deskripsi/visibilitas tidak valid atau
+	// requester sudah mencapai batas jumlah playlist.
+	CreatePlaylist(ctx context.Context, in *CreatePlaylistRequest, opts ...grpc.CallOption) (*CreatePlaylistResponse, error)
+	// UpdatePlaylist mengubah judul, deskripsi, dan/atau visibilitas.
+	UpdatePlaylist(ctx context.Context, in *UpdatePlaylistRequest, opts ...grpc.CallOption) (*UpdatePlaylistResponse, error)
+	// DeletePlaylist menghapus playlist beserta isinya (videonya tidak).
+	DeletePlaylist(ctx context.Context, in *DeletePlaylistRequest, opts ...grpc.CallOption) (*DeletePlaylistResponse, error)
+	// GetPlaylist mengambil satu playlist, termasuk jumlah video dan thumbnail.
+	GetPlaylist(ctx context.Context, in *GetPlaylistRequest, opts ...grpc.CallOption) (*GetPlaylistResponse, error)
+	// ListPlaylists mengambil playlist milik owner_id, terbaru lebih dulu.
+	// PRIVATE hanya ikut jika viewer_id = owner_id.
+	ListPlaylists(ctx context.Context, in *ListPlaylistsRequest, opts ...grpc.CallOption) (*ListPlaylistsResponse, error)
+	// AddToPlaylist menambahkan video READY ke akhir playlist. Aman dipanggil
+	// ulang: video yang sudah ada tidak berpindah posisi.
+	AddToPlaylist(ctx context.Context, in *AddToPlaylistRequest, opts ...grpc.CallOption) (*AddToPlaylistResponse, error)
+	// RemoveFromPlaylist mengeluarkan video dari playlist. Aman dipanggil
+	// walau video itu tidak ada di playlist.
+	RemoveFromPlaylist(ctx context.Context, in *RemoveFromPlaylistRequest, opts ...grpc.CallOption) (*RemoveFromPlaylistResponse, error)
+	// ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
+	// Hanya video READY.
+	ListPlaylistVideos(ctx context.Context, in *ListPlaylistVideosRequest, opts ...grpc.CallOption) (*ListPlaylistVideosResponse, error)
 }
 
 type videoServiceClient struct {
@@ -353,6 +383,86 @@ func (c *videoServiceClient) ListWatchLater(ctx context.Context, in *ListWatchLa
 	return out, nil
 }
 
+func (c *videoServiceClient) CreatePlaylist(ctx context.Context, in *CreatePlaylistRequest, opts ...grpc.CallOption) (*CreatePlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreatePlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_CreatePlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) UpdatePlaylist(ctx context.Context, in *UpdatePlaylistRequest, opts ...grpc.CallOption) (*UpdatePlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdatePlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_UpdatePlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) DeletePlaylist(ctx context.Context, in *DeletePlaylistRequest, opts ...grpc.CallOption) (*DeletePlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeletePlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_DeletePlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) GetPlaylist(ctx context.Context, in *GetPlaylistRequest, opts ...grpc.CallOption) (*GetPlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_GetPlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) ListPlaylists(ctx context.Context, in *ListPlaylistsRequest, opts ...grpc.CallOption) (*ListPlaylistsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPlaylistsResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListPlaylists_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) AddToPlaylist(ctx context.Context, in *AddToPlaylistRequest, opts ...grpc.CallOption) (*AddToPlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddToPlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_AddToPlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) RemoveFromPlaylist(ctx context.Context, in *RemoveFromPlaylistRequest, opts ...grpc.CallOption) (*RemoveFromPlaylistResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveFromPlaylistResponse)
+	err := c.cc.Invoke(ctx, VideoService_RemoveFromPlaylist_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) ListPlaylistVideos(ctx context.Context, in *ListPlaylistVideosRequest, opts ...grpc.CallOption) (*ListPlaylistVideosResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPlaylistVideosResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListPlaylistVideos_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -440,6 +550,28 @@ type VideoServiceServer interface {
 	// ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
 	// disimpan lebih dulu. Hanya video READY.
 	ListWatchLater(context.Context, *ListWatchLaterRequest) (*ListWatchLaterResponse, error)
+	// CreatePlaylist membuat playlist kosong milik requester.
+	// INVALID_ARGUMENT jika judul/deskripsi/visibilitas tidak valid atau
+	// requester sudah mencapai batas jumlah playlist.
+	CreatePlaylist(context.Context, *CreatePlaylistRequest) (*CreatePlaylistResponse, error)
+	// UpdatePlaylist mengubah judul, deskripsi, dan/atau visibilitas.
+	UpdatePlaylist(context.Context, *UpdatePlaylistRequest) (*UpdatePlaylistResponse, error)
+	// DeletePlaylist menghapus playlist beserta isinya (videonya tidak).
+	DeletePlaylist(context.Context, *DeletePlaylistRequest) (*DeletePlaylistResponse, error)
+	// GetPlaylist mengambil satu playlist, termasuk jumlah video dan thumbnail.
+	GetPlaylist(context.Context, *GetPlaylistRequest) (*GetPlaylistResponse, error)
+	// ListPlaylists mengambil playlist milik owner_id, terbaru lebih dulu.
+	// PRIVATE hanya ikut jika viewer_id = owner_id.
+	ListPlaylists(context.Context, *ListPlaylistsRequest) (*ListPlaylistsResponse, error)
+	// AddToPlaylist menambahkan video READY ke akhir playlist. Aman dipanggil
+	// ulang: video yang sudah ada tidak berpindah posisi.
+	AddToPlaylist(context.Context, *AddToPlaylistRequest) (*AddToPlaylistResponse, error)
+	// RemoveFromPlaylist mengeluarkan video dari playlist. Aman dipanggil
+	// walau video itu tidak ada di playlist.
+	RemoveFromPlaylist(context.Context, *RemoveFromPlaylistRequest) (*RemoveFromPlaylistResponse, error)
+	// ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
+	// Hanya video READY.
+	ListPlaylistVideos(context.Context, *ListPlaylistVideosRequest) (*ListPlaylistVideosResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -512,6 +644,30 @@ func (UnimplementedVideoServiceServer) RemoveFromWatchLater(context.Context, *Re
 }
 func (UnimplementedVideoServiceServer) ListWatchLater(context.Context, *ListWatchLaterRequest) (*ListWatchLaterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListWatchLater not implemented")
+}
+func (UnimplementedVideoServiceServer) CreatePlaylist(context.Context, *CreatePlaylistRequest) (*CreatePlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreatePlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) UpdatePlaylist(context.Context, *UpdatePlaylistRequest) (*UpdatePlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdatePlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) DeletePlaylist(context.Context, *DeletePlaylistRequest) (*DeletePlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeletePlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) GetPlaylist(context.Context, *GetPlaylistRequest) (*GetPlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) ListPlaylists(context.Context, *ListPlaylistsRequest) (*ListPlaylistsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPlaylists not implemented")
+}
+func (UnimplementedVideoServiceServer) AddToPlaylist(context.Context, *AddToPlaylistRequest) (*AddToPlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddToPlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) RemoveFromPlaylist(context.Context, *RemoveFromPlaylistRequest) (*RemoveFromPlaylistResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveFromPlaylist not implemented")
+}
+func (UnimplementedVideoServiceServer) ListPlaylistVideos(context.Context, *ListPlaylistVideosRequest) (*ListPlaylistVideosResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPlaylistVideos not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -912,6 +1068,150 @@ func _VideoService_ListWatchLater_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_CreatePlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).CreatePlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_CreatePlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).CreatePlaylist(ctx, req.(*CreatePlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_UpdatePlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdatePlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).UpdatePlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_UpdatePlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).UpdatePlaylist(ctx, req.(*UpdatePlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_DeletePlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).DeletePlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_DeletePlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).DeletePlaylist(ctx, req.(*DeletePlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_GetPlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).GetPlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_GetPlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).GetPlaylist(ctx, req.(*GetPlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_ListPlaylists_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPlaylistsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListPlaylists(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListPlaylists_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListPlaylists(ctx, req.(*ListPlaylistsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_AddToPlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddToPlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).AddToPlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_AddToPlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).AddToPlaylist(ctx, req.(*AddToPlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_RemoveFromPlaylist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFromPlaylistRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).RemoveFromPlaylist(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_RemoveFromPlaylist_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).RemoveFromPlaylist(ctx, req.(*RemoveFromPlaylistRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_ListPlaylistVideos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPlaylistVideosRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListPlaylistVideos(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListPlaylistVideos_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListPlaylistVideos(ctx, req.(*ListPlaylistVideosRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1002,6 +1302,38 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListWatchLater",
 			Handler:    _VideoService_ListWatchLater_Handler,
+		},
+		{
+			MethodName: "CreatePlaylist",
+			Handler:    _VideoService_CreatePlaylist_Handler,
+		},
+		{
+			MethodName: "UpdatePlaylist",
+			Handler:    _VideoService_UpdatePlaylist_Handler,
+		},
+		{
+			MethodName: "DeletePlaylist",
+			Handler:    _VideoService_DeletePlaylist_Handler,
+		},
+		{
+			MethodName: "GetPlaylist",
+			Handler:    _VideoService_GetPlaylist_Handler,
+		},
+		{
+			MethodName: "ListPlaylists",
+			Handler:    _VideoService_ListPlaylists_Handler,
+		},
+		{
+			MethodName: "AddToPlaylist",
+			Handler:    _VideoService_AddToPlaylist_Handler,
+		},
+		{
+			MethodName: "RemoveFromPlaylist",
+			Handler:    _VideoService_RemoveFromPlaylist_Handler,
+		},
+		{
+			MethodName: "ListPlaylistVideos",
+			Handler:    _VideoService_ListPlaylistVideos_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

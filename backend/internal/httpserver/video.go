@@ -126,6 +126,9 @@ type getVideoResponse struct {
 	// ViewerSaved hanya ada jika request membawa access token: true jika
 	// video ini ada di Tonton nanti user tersebut.
 	ViewerSaved *bool `json:"viewer_saved,omitempty"`
+	// ViewerInPlaylist hanya ada jika request membawa access token: true
+	// jika video ini ada di salah satu playlist milik user tersebut.
+	ViewerInPlaylist *bool `json:"viewer_in_playlist,omitempty"`
 }
 
 // likeResponse adalah jawaban PUT dan DELETE /videos/:id/like.
@@ -210,6 +213,8 @@ func (h *videoHandler) get(c *gin.Context) {
 		body.ResumePositionMs = &resume
 		saved := resp.GetViewerSaved()
 		body.ViewerSaved = &saved
+		inPlaylist := resp.GetViewerInPlaylist()
+		body.ViewerInPlaylist = &inPlaylist
 	}
 	owners := lookupOwners(c.Request.Context(), h.users, h.logger, []*videov1.Video{resp.GetVideo()})
 	body.Video.Owner = owners[resp.GetVideo().GetOwnerId()]

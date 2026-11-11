@@ -116,6 +116,50 @@ type Repository interface {
 	// added_at lalu video_id terbesar lebih dulu, hanya yang posisinya
 	// setelah after (nil = dari awal).
 	ListWatchLater(ctx context.Context, userID int64, after *WatchLaterCursor, limit int) ([]WatchLaterEntry, error)
+
+	// Playlist (playlist_repository.go).
+
+	// CreatePlaylist menyimpan playlist baru tanpa isi.
+	CreatePlaylist(ctx context.Context, p NewPlaylist) (Playlist, error)
+	// CountPlaylists menghitung semua playlist milik ownerID.
+	CountPlaylists(ctx context.Context, ownerID int64) (int64, error)
+	// FindPlaylist mencari satu playlist (tanpa VideoCount dan
+	// ThumbnailKey). ErrPlaylistNotFound jika tidak ada.
+	FindPlaylist(ctx context.Context, id int64) (Playlist, error)
+	// UpdatePlaylist menyimpan judul, deskripsi, visibilitas, dan
+	// updated_at dari p.
+	UpdatePlaylist(ctx context.Context, p Playlist) error
+	// DeletePlaylist menghapus playlist beserta isinya.
+	DeletePlaylist(ctx context.Context, id int64) error
+	// ListPlaylists mengambil playlist ownerID dengan id lebih kecil dari
+	// afterID (0 = dari awal), id terbesar lebih dulu. PRIVATE hanya ikut
+	// jika includePrivate.
+	ListPlaylists(ctx context.Context, ownerID int64, includePrivate bool, afterID int64, limit int) ([]Playlist, error)
+	// PlaylistStats menghitung video READY dan thumbnail video pertama
+	// untuk setiap playlist. Playlist kosong tidak ada di map.
+	PlaylistStats(ctx context.Context, playlistIDs []int64) (map[int64]PlaylistStats, error)
+	// PlaylistsContaining mengembalikan playlist (dari playlistIDs) yang
+	// berisi videoID.
+	PlaylistsContaining(ctx context.Context, playlistIDs []int64, videoID int64) (map[int64]bool, error)
+	// IsInAnyPlaylist mengembalikan true jika videoID ada di salah satu
+	// playlist milik ownerID.
+	IsInAnyPlaylist(ctx context.Context, ownerID, videoID int64) (bool, error)
+	// PlaylistItemAddedAt membaca waktu videoID ditambahkan ke playlist.
+	// found = false jika belum ada.
+	PlaylistItemAddedAt(ctx context.Context, playlistID, videoID int64) (addedAt time.Time, found bool, err error)
+	// CountPlaylistItems menghitung semua baris isi playlist.
+	CountPlaylistItems(ctx context.Context, playlistID int64) (int64, error)
+	// AddPlaylistItem menambahkan videoID ke playlist dengan waktu now
+	// (kecuali sudah ada) dan memperbarui updated_at playlist. Mengembalikan
+	// added_at yang tersimpan.
+	AddPlaylistItem(ctx context.Context, playlistID, videoID int64, now time.Time) (time.Time, error)
+	// RemovePlaylistItem mengeluarkan videoID dari playlist (jika ada) dan
+	// memperbarui updated_at playlist.
+	RemovePlaylistItem(ctx context.Context, playlistID, videoID int64, now time.Time) error
+	// ListPlaylistItems mengambil isi playlist untuk video READY, added_at
+	// lalu video_id terkecil lebih dulu, hanya yang posisinya setelah after
+	// (nil = dari awal).
+	ListPlaylistItems(ctx context.Context, playlistID int64, after *PlaylistEntryCursor, limit int) ([]PlaylistEntry, error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -423,6 +467,9 @@ type VideoDetail struct {
 	// ViewerSaved bernilai true jika viewer sudah menyimpan video ini ke
 	// Tonton nanti.
 	ViewerSaved bool
+	// ViewerInPlaylist bernilai true jika video ini ada di salah satu
+	// playlist milik viewer. Selalu false tanpa login.
+	ViewerInPlaylist bool
 }
 
 // GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
@@ -446,6 +493,9 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 			return VideoDetail{}, err
 		}
 		if d.ViewerSaved, err = s.repo.IsInWatchLater(ctx, viewerID, v.ID); err != nil {
+			return VideoDetail{}, err
+		}
+		if d.ViewerInPlaylist, err = s.repo.IsInAnyPlaylist(ctx, viewerID, v.ID); err != nil {
 			return VideoDetail{}, err
 		}
 		pos, found, err := s.repo.GetProgress(ctx, viewerID, v.ID)
