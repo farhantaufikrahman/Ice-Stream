@@ -4,24 +4,28 @@ import { formatCount, formatDuration, timeAgo } from '../lib/format'
 import { Avatar } from './Avatar'
 import { Thumbnail } from './Thumbnail'
 
-/** Kartu video di grid (beranda, pencarian), mengikuti desain "Beranda". */
-export function VideoCard({ video }: { video: Video }) {
+/**
+ * Kartu video di grid (beranda, pencarian), mengikuti desain "Beranda".
+ * hideOwner: untuk halaman kanal (desain Channel.dc.html), semua video
+ * milik kanal yang sama, jadi avatar dan nama diganti jumlah tayangan.
+ */
+export function VideoCard({ video, hideOwner = false }: { video: Video; hideOwner?: boolean }) {
   const ownerName = video.owner?.display_name || video.owner?.username || 'Channel'
   return (
     <Link to={`/watch/${video.id}`} className="video-card">
       <div className="video-card-thumb">
         <Thumbnail url={video.thumbnail_url} title={video.title} />
-        <span className="thumb-views">▶ {formatCount(video.view_count)}</span>
+        {!hideOwner && <span className="thumb-views">▶ {formatCount(video.view_count)}</span>}
         {video.duration_ms ? <span className="duration">{formatDuration(video.duration_ms)}</span> : null}
       </div>
       <div className="video-card-body">
-        <Avatar name={ownerName} url={video.owner?.avatar_url} size={34} />
+        {!hideOwner && <Avatar name={ownerName} url={video.owner?.avatar_url} size={34} />}
         <div className="video-card-text">
           <span className="video-card-title" title={video.title}>
             {video.title}
           </span>
           <span className="muted">
-            {ownerName} · {timeAgo(video.created_at)}
+            {hideOwner ? `${formatCount(video.view_count)} tayangan` : ownerName} · {timeAgo(video.created_at)}
           </span>
         </div>
       </div>

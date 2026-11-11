@@ -61,7 +61,7 @@ function Header() {
         )}
         <ThemeToggle />
         {status === 'authenticated' && user ? (
-          <UserMenu name={user.display_name || user.username} avatarUrl={user.avatar_url} onLogout={logout} />
+          <UserMenu name={user.display_name || user.username} username={user.username} avatarUrl={user.avatar_url} onLogout={logout} />
         ) : status === 'anonymous' ? (
           <>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
@@ -86,7 +86,7 @@ function SearchIcon() {
   )
 }
 
-function UserMenu({ name, avatarUrl, onLogout }: { name: string; avatarUrl: string; onLogout: () => Promise<void> }) {
+function UserMenu({ name, username, avatarUrl, onLogout }: { name: string; username: string; avatarUrl: string; onLogout: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const navigate = useNavigate()
   const handleLogout = async () => {
@@ -100,7 +100,8 @@ function UserMenu({ name, avatarUrl, onLogout }: { name: string; avatarUrl: stri
   }
   return (
     <div className="user-menu">
-      <Link to="/studio" className="user-link" title="Creator Studio">
+      {/* Sesuai desain: avatar di header membuka kanal sendiri. Studio ada di tombol "Kelola video" di sana. */}
+      <Link to={`/channel/${encodeURIComponent(username)}`} className="user-link" title="Kanal saya">
         <Avatar name={name} url={avatarUrl} size={40} />
         <span className="user-name">{name}</span>
       </Link>

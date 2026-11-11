@@ -4,6 +4,8 @@
 import { API_BASE, apiRequest, setAccessToken } from './client'
 import type {
   AccessToken,
+  ChannelDetail,
+  ChannelPage,
   Comment,
   CommentPage,
   CreateUploadResult,
@@ -12,6 +14,7 @@ import type {
   DanmakuPage,
   LikeResult,
   Profile,
+  SubscriptionResult,
   Video,
   VideoDetail,
   VideoPage,
@@ -212,6 +215,36 @@ export async function sendDanmaku(videoId: string, input: NewDanmaku): Promise<D
 /** Alamat Server-Sent Events untuk danmaku live (dibuka dengan EventSource). */
 export function danmakuLiveUrl(videoId: string): string {
   return `${API_BASE}/videos/${encodeURIComponent(videoId)}/danmaku/live`
+}
+
+// ---------- Kanal dan langganan (langkah 17d) ----------
+
+/** Profil kanal + apakah penonton sudah mengikutinya (jika login). */
+export function getChannel(username: string, signal?: AbortSignal): Promise<ChannelDetail> {
+  return apiRequest<ChannelDetail>(`/users/${encodeURIComponent(username)}`, { auth: 'optional', signal })
+}
+
+/** Video READY milik kanal, terbaru dulu. */
+export function listChannelVideos(username: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
+  return apiRequest<VideoPage>(`/users/${encodeURIComponent(username)}/videos?${pageQuery(pageToken)}`, { signal })
+}
+
+/** Ikuti (true) atau berhenti mengikuti (false) sebuah kanal. Aman diulang. */
+export function setSubscription(username: string, subscribed: boolean): Promise<SubscriptionResult> {
+  return apiRequest<SubscriptionResult>(`/users/${encodeURIComponent(username)}/subscription`, {
+    method: subscribed ? 'PUT' : 'DELETE',
+    auth: 'required',
+  })
+}
+
+/** Video terbaru dari semua kanal yang saya ikuti. */
+export function listFeed(pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
+  return apiRequest<VideoPage>(`/me/feed?${pageQuery(pageToken)}`, { auth: 'required', signal })
+}
+
+/** Kanal yang saya ikuti, yang terakhir diikuti lebih dulu. */
+export function listSubscriptions(pageToken: string, signal?: AbortSignal): Promise<ChannelPage> {
+  return apiRequest<ChannelPage>(`/me/subscriptions?${pageQuery(pageToken)}`, { auth: 'required', signal })
 }
 
 const PAGE_SIZE = 24

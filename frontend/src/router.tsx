@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router'
 import { AuthLayout } from './components/AuthLayout'
 import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
+import { ChannelPage } from './pages/ChannelPage'
 import { ErrorPage } from './pages/ErrorPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
           { path: '/', element: <HomePage /> },
           { path: '/search', element: <SearchPage /> },
           { path: '/watch/:id', element: <WatchPage /> },
+          { path: '/channel/:username', element: <ChannelPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },
