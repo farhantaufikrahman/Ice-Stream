@@ -105,6 +105,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	v1.DELETE("/me/history", requireAuth, videos.clearHistory)
 	v1.PUT("/me/history/:id", requireAuth, limitBody(maxHistoryBodyBytes), videos.saveProgress)
 	v1.DELETE("/me/history/:id", requireAuth, videos.deleteHistory)
+	v1.GET("/me/watch-later", requireAuth, videos.watchLater)
+	v1.PUT("/me/watch-later/:id", requireAuth, videos.addWatchLater)
+	v1.DELETE("/me/watch-later/:id", requireAuth, videos.removeWatchLater)
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)

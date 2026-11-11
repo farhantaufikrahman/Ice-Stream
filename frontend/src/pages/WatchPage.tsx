@@ -14,6 +14,7 @@ import { CommentSection } from '../components/watch/CommentSection'
 import { DanmakuComposer } from '../components/watch/DanmakuComposer'
 import { DanmakuLayer, type DanmakuLayerHandle } from '../components/watch/DanmakuLayer'
 import { DanmakuList } from '../components/watch/DanmakuList'
+import { SaveButton } from '../components/watch/SaveButton'
 import { useChannel } from '../hooks/useChannel'
 import { useDanmaku } from '../hooks/useDanmaku'
 
@@ -236,6 +237,7 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
               <HeartIcon filled={false} /> {formatCount(like.count)}
             </Link>
           )}
+          <SaveButton videoId={video.id} saved={detail.viewer_saved ?? false} loggedIn={loggedIn} disabled={video.status !== 'READY'} />
         </div>
         {likeError && <ErrorBox message={likeError} />}
 

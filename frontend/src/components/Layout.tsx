@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from './Avatar'
-import { HistoryLink, NotificationBell } from './HeaderIcons'
+import { HistoryLink, NotificationBell, WatchLaterLink } from './HeaderIcons'
 import { UploadIcon } from './studio/StudioLayout'
 import { LogoMark, Wordmark } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
@@ -64,6 +64,7 @@ function Header() {
         {status === 'authenticated' && (
           <>
             <HistoryLink />
+            <WatchLaterLink />
             <NotificationBell />
           </>
         )}

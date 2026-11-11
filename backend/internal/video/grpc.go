@@ -61,6 +61,7 @@ func (s *GRPCServer) GetVideo(ctx context.Context, req *videov1.GetVideoRequest)
 		Video:            s.toProtoVideo(d.Video),
 		ViewerLiked:      d.ViewerLiked,
 		ResumePositionMs: d.ResumePositionMs,
+		ViewerSaved:      d.ViewerSaved,
 	}
 	if d.Original.URL != "" {
 		resp.OriginalUrl = d.Original.URL
@@ -323,4 +324,34 @@ func toProtoStatus(s string) videov1.VideoStatus {
 		return videov1.VideoStatus_VIDEO_STATUS_FAILED
 	}
 	return videov1.VideoStatus_VIDEO_STATUS_UNSPECIFIED
+}
+
+func (s *GRPCServer) AddToWatchLater(ctx context.Context, req *videov1.AddToWatchLaterRequest) (*videov1.AddToWatchLaterResponse, error) {
+	addedAt, err := s.svc.AddToWatchLater(ctx, req.GetRequesterId(), req.GetVideoId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.AddToWatchLaterResponse{AddedAt: timestamppb.New(addedAt)}, nil
+}
+
+func (s *GRPCServer) RemoveFromWatchLater(ctx context.Context, req *videov1.RemoveFromWatchLaterRequest) (*videov1.RemoveFromWatchLaterResponse, error) {
+	if err := s.svc.RemoveFromWatchLater(ctx, req.GetRequesterId(), req.GetVideoId()); err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.RemoveFromWatchLaterResponse{}, nil
+}
+
+func (s *GRPCServer) ListWatchLater(ctx context.Context, req *videov1.ListWatchLaterRequest) (*videov1.ListWatchLaterResponse, error) {
+	entries, next, err := s.svc.ListWatchLater(ctx, req.GetRequesterId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.ListWatchLaterResponse{NextPageToken: next}
+	for _, e := range entries {
+		resp.Entries = append(resp.Entries, &videov1.WatchLaterEntry{
+			Video:   s.toProtoVideo(e.Video),
+			AddedAt: timestamppb.New(e.AddedAt),
+		})
+	}
+	return resp, nil
 }

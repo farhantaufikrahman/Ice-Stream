@@ -23,6 +23,8 @@ import type {
   VideoDetail,
   VideoPage,
   ViewResult,
+  WatchLaterPage,
+  WatchLaterResult,
 } from './types'
 
 // ---------- Auth ----------
@@ -315,6 +317,21 @@ export async function deleteHistoryEntry(videoId: string): Promise<void> {
 export async function clearHistory(): Promise<number> {
   const body = await apiRequest<{ deleted: number }>('/me/history', { method: 'DELETE', auth: 'required' })
   return body.deleted
+}
+
+// ---------- Tonton nanti (langkah 21b) ----------
+
+/** Menyimpan (PUT) atau mengeluarkan (DELETE) video dari Tonton nanti. Aman diulang. */
+export function setWatchLater(id: string, saved: boolean): Promise<WatchLaterResult> {
+  return apiRequest<WatchLaterResult>(`/me/watch-later/${encodeURIComponent(id)}`, {
+    method: saved ? 'PUT' : 'DELETE',
+    auth: 'required',
+  })
+}
+
+/** Tonton nanti: video yang terakhir disimpan lebih dulu. */
+export function listWatchLater(pageToken: string, signal?: AbortSignal): Promise<WatchLaterPage> {
+  return apiRequest<WatchLaterPage>(`/me/watch-later?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
 }
 
 const PAGE_SIZE = 24

@@ -41,6 +41,9 @@ const (
 	VideoService_ListNotifications_FullMethodName        = "/video.v1.VideoService/ListNotifications"
 	VideoService_CountUnreadNotifications_FullMethodName = "/video.v1.VideoService/CountUnreadNotifications"
 	VideoService_MarkNotificationsRead_FullMethodName    = "/video.v1.VideoService/MarkNotificationsRead"
+	VideoService_AddToWatchLater_FullMethodName          = "/video.v1.VideoService/AddToWatchLater"
+	VideoService_RemoveFromWatchLater_FullMethodName     = "/video.v1.VideoService/RemoveFromWatchLater"
+	VideoService_ListWatchLater_FullMethodName           = "/video.v1.VideoService/ListWatchLater"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -119,6 +122,17 @@ type VideoServiceClient interface {
 	// MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
 	// sudah dibaca. Aman dipanggil berulang.
 	MarkNotificationsRead(ctx context.Context, in *MarkNotificationsReadRequest, opts ...grpc.CallOption) (*MarkNotificationsReadResponse, error)
+	// AddToWatchLater menyimpan video READY ke daftar Tonton nanti requester.
+	// Aman dipanggil ulang: video yang sudah tersimpan tidak berubah
+	// (added_at tetap waktu pertama disimpan). NOT_FOUND jika video tidak ada
+	// atau belum READY.
+	AddToWatchLater(ctx context.Context, in *AddToWatchLaterRequest, opts ...grpc.CallOption) (*AddToWatchLaterResponse, error)
+	// RemoveFromWatchLater mengeluarkan video dari daftar Tonton nanti. Aman
+	// dipanggil walau video itu tidak ada di daftar.
+	RemoveFromWatchLater(ctx context.Context, in *RemoveFromWatchLaterRequest, opts ...grpc.CallOption) (*RemoveFromWatchLaterResponse, error)
+	// ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
+	// disimpan lebih dulu. Hanya video READY.
+	ListWatchLater(ctx context.Context, in *ListWatchLaterRequest, opts ...grpc.CallOption) (*ListWatchLaterResponse, error)
 }
 
 type videoServiceClient struct {
@@ -309,6 +323,36 @@ func (c *videoServiceClient) MarkNotificationsRead(ctx context.Context, in *Mark
 	return out, nil
 }
 
+func (c *videoServiceClient) AddToWatchLater(ctx context.Context, in *AddToWatchLaterRequest, opts ...grpc.CallOption) (*AddToWatchLaterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddToWatchLaterResponse)
+	err := c.cc.Invoke(ctx, VideoService_AddToWatchLater_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) RemoveFromWatchLater(ctx context.Context, in *RemoveFromWatchLaterRequest, opts ...grpc.CallOption) (*RemoveFromWatchLaterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveFromWatchLaterResponse)
+	err := c.cc.Invoke(ctx, VideoService_RemoveFromWatchLater_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) ListWatchLater(ctx context.Context, in *ListWatchLaterRequest, opts ...grpc.CallOption) (*ListWatchLaterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWatchLaterResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListWatchLater_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -385,6 +429,17 @@ type VideoServiceServer interface {
 	// MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
 	// sudah dibaca. Aman dipanggil berulang.
 	MarkNotificationsRead(context.Context, *MarkNotificationsReadRequest) (*MarkNotificationsReadResponse, error)
+	// AddToWatchLater menyimpan video READY ke daftar Tonton nanti requester.
+	// Aman dipanggil ulang: video yang sudah tersimpan tidak berubah
+	// (added_at tetap waktu pertama disimpan). NOT_FOUND jika video tidak ada
+	// atau belum READY.
+	AddToWatchLater(context.Context, *AddToWatchLaterRequest) (*AddToWatchLaterResponse, error)
+	// RemoveFromWatchLater mengeluarkan video dari daftar Tonton nanti. Aman
+	// dipanggil walau video itu tidak ada di daftar.
+	RemoveFromWatchLater(context.Context, *RemoveFromWatchLaterRequest) (*RemoveFromWatchLaterResponse, error)
+	// ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
+	// disimpan lebih dulu. Hanya video READY.
+	ListWatchLater(context.Context, *ListWatchLaterRequest) (*ListWatchLaterResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -448,6 +503,15 @@ func (UnimplementedVideoServiceServer) CountUnreadNotifications(context.Context,
 }
 func (UnimplementedVideoServiceServer) MarkNotificationsRead(context.Context, *MarkNotificationsReadRequest) (*MarkNotificationsReadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkNotificationsRead not implemented")
+}
+func (UnimplementedVideoServiceServer) AddToWatchLater(context.Context, *AddToWatchLaterRequest) (*AddToWatchLaterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddToWatchLater not implemented")
+}
+func (UnimplementedVideoServiceServer) RemoveFromWatchLater(context.Context, *RemoveFromWatchLaterRequest) (*RemoveFromWatchLaterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveFromWatchLater not implemented")
+}
+func (UnimplementedVideoServiceServer) ListWatchLater(context.Context, *ListWatchLaterRequest) (*ListWatchLaterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWatchLater not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -794,6 +858,60 @@ func _VideoService_MarkNotificationsRead_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_AddToWatchLater_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddToWatchLaterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).AddToWatchLater(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_AddToWatchLater_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).AddToWatchLater(ctx, req.(*AddToWatchLaterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_RemoveFromWatchLater_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFromWatchLaterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).RemoveFromWatchLater(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_RemoveFromWatchLater_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).RemoveFromWatchLater(ctx, req.(*RemoveFromWatchLaterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_ListWatchLater_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWatchLaterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListWatchLater(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListWatchLater_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListWatchLater(ctx, req.(*ListWatchLaterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -872,6 +990,18 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkNotificationsRead",
 			Handler:    _VideoService_MarkNotificationsRead_Handler,
+		},
+		{
+			MethodName: "AddToWatchLater",
+			Handler:    _VideoService_AddToWatchLater_Handler,
+		},
+		{
+			MethodName: "RemoveFromWatchLater",
+			Handler:    _VideoService_RemoveFromWatchLater_Handler,
+		},
+		{
+			MethodName: "ListWatchLater",
+			Handler:    _VideoService_ListWatchLater_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
