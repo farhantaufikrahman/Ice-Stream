@@ -4,9 +4,11 @@ import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { ChannelPage } from './pages/ChannelPage'
 import { ErrorPage } from './pages/ErrorPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -29,6 +31,14 @@ export const router = createBrowserRouter([
           { path: '/search', element: <SearchPage /> },
           { path: '/watch/:id', element: <WatchPage /> },
           { path: '/channel/:username', element: <ChannelPage /> },
+          {
+            // Wajib login, tapi tetap memakai header dan footer biasa.
+            element: <RequireAuth />,
+            children: [
+              { path: '/notifications', element: <NotificationsPage /> },
+              { path: '/history', element: <HistoryPage /> },
+            ],
+          },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

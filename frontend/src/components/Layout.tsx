@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from './Avatar'
+import { HistoryLink, NotificationBell } from './HeaderIcons'
 import { UploadIcon } from './studio/StudioLayout'
 import { LogoMark, Wordmark } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
@@ -60,6 +61,12 @@ function Header() {
           </Link>
         )}
         <ThemeToggle />
+        {status === 'authenticated' && (
+          <>
+            <HistoryLink />
+            <NotificationBell />
+          </>
+        )}
         {status === 'authenticated' && user ? (
           <UserMenu name={user.display_name || user.username} username={user.username} avatarUrl={user.avatar_url} onLogout={logout} />
         ) : status === 'anonymous' ? (

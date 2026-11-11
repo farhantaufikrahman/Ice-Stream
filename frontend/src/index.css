@@ -1820,6 +1820,162 @@ a.channel-name:hover {
   margin-right: auto;
 }
 
+/* ---------- Notifikasi & riwayat (langkah 17f) ---------- */
+/* Tombol ikon di header (desain Home.dc.html: kotak 44px berlatar surface). */
+.header-icon {
+  position: relative;
+  border: 0;
+  background: var(--surface);
+}
+.header-icon:hover,
+.header-icon.active {
+  color: var(--accent-text);
+}
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--strawberry);
+  color: var(--night);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+.narrow-page {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.list-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 18px;
+}
+.list-page-head .page-title {
+  margin: 0;
+}
+.notif-list,
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notif {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px 14px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+.notif:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.notif.is-unread {
+  background: var(--raised);
+}
+.notif-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.notif.is-unread .notif-dot {
+  background: var(--strawberry);
+}
+.notif-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.9rem;
+}
+.notif-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif:hover .notif-title {
+  color: var(--accent-text);
+}
+.notif-thumb {
+  flex: none;
+  width: 120px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.history-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.history-thumb {
+  position: relative;
+  flex: none;
+  width: 240px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgb(232 238 248 / 0.35);
+}
+.progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--strawberry);
+}
+.history-thumb .duration {
+  bottom: 12px;
+}
+.history-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+.history-title {
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.history-title:hover {
+  color: var(--accent-text);
+}
+.history-remove {
+  width: 36px;
+  height: 36px;
+  border-color: transparent;
+  color: var(--muted);
+}
+.history-remove:hover:not(:disabled) {
+  color: var(--pink-text);
+  border-color: var(--line-strong);
+}
+
 /* ---------- Layar kecil (HP) ---------- */
 @media (max-width: 640px) {
   .search {
@@ -1881,5 +2037,14 @@ a.channel-name:hover {
   }
   .channel-latest-title {
     font-size: 1.3rem;
+  }
+  .notif-thumb {
+    display: none;
+  }
+  .history-thumb {
+    width: 136px;
+  }
+  .header-actions {
+    gap: 6px;
   }
 }

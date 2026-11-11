@@ -56,3 +56,8 @@ const dateFormat = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'sh
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso))
 }
+
+/** Angka di lencana lonceng: 7 -> "7", 100 -> "99+" (server berhenti menghitung di 100). */
+export function badgeText(count: number): string {
+  return count > 99 ? '99+' : String(count)
+}
