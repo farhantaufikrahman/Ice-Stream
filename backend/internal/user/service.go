@@ -42,6 +42,9 @@ type Repository interface {
 	// CountNewSubscribers menghitung subscription channelID yang dibuat
 	// dalam [currentStart, end) dan [previousStart, currentStart).
 	CountNewSubscribers(ctx context.Context, channelID int64, previousStart, currentStart, end time.Time) (current, previous int64, err error)
+	// SearchUsers: user yang tidak diblokir, username atau display_name
+	// berisi setiap kata di terms (huruf kecil), urut paling relevan.
+	SearchUsers(ctx context.Context, terms []string, offset, limit int) ([]Profile, error)
 }
 
 // ObjectStore adalah penyimpanan file foto profil. Implementasi S3 ada di

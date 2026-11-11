@@ -282,3 +282,14 @@ export interface ChannelStats {
   /** Periode sebelumnya dengan panjang yang sama, untuk persentase naik/turun. */
   previous: ChannelTotals
 }
+
+/** Satu kreator di hasil pencarian (GET /search/channels). */
+export interface ChannelResult extends Profile {
+  /** Hanya ada jika sudah login: true jika sudah mengikuti kreator ini. */
+  viewer_subscribed?: boolean
+}
+
+export interface ChannelSearchPage {
+  channels: ChannelResult[]
+  next_page_token: string
+}

@@ -25,6 +25,7 @@ type fakePlaylists struct {
 	add     *videov1.AddToPlaylistRequest
 	remove  *videov1.RemoveFromPlaylistRequest
 	entries *videov1.ListPlaylistVideosRequest
+	search  *videov1.SearchPlaylistsRequest
 }
 
 func testPlaylist() *videov1.Playlist {

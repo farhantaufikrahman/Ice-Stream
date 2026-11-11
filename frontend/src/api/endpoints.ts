@@ -7,6 +7,7 @@ import type {
   AppNotification,
   ChannelDetail,
   ChannelPage,
+  ChannelSearchPage,
   ChannelStats,
   Comment,
   CommentPage,
@@ -79,6 +80,18 @@ export function listVideos(pageToken: string, signal?: AbortSignal): Promise<Vid
 export function searchVideos(q: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
   const params = new URLSearchParams({ q })
   return apiRequest<VideoPage>(`/search/videos?${params}&${pageQuery(pageToken)}`, { signal })
+}
+
+/** Tab Kreator di halaman pencarian. Dengan login, setiap kreator membawa viewer_subscribed. */
+export function searchChannels(q: string, pageToken: string, signal?: AbortSignal, pageSize = PAGE_SIZE): Promise<ChannelSearchPage> {
+  const params = new URLSearchParams({ q })
+  return apiRequest<ChannelSearchPage>(`/search/channels?${params}&${pageQuery(pageToken, pageSize)}`, { auth: 'optional', signal })
+}
+
+/** Tab Playlist di halaman pencarian: hanya playlist publik yang berisi video. */
+export function searchPlaylists(q: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistPage> {
+  const params = new URLSearchParams({ q })
+  return apiRequest<PlaylistPage>(`/search/playlists?${params}&${pageQuery(pageToken)}`, { signal })
 }
 
 export function getVideo(id: string, signal?: AbortSignal): Promise<VideoDetail> {

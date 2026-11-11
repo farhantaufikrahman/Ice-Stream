@@ -125,6 +125,12 @@ service VideoService {
   // yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
   // INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
   rpc GetChannelStats(GetChannelStatsRequest) returns (GetChannelStatsResponse);
+
+  // SearchPlaylists mencari playlist PUBLIC yang judulnya berisi setiap
+  // kata di query (langkah 22c, tab Playlist di halaman pencarian).
+  // Playlist tanpa video READY tidak ikut. Urutan: judul yang diawali kata
+  // pertama lebih dulu, lalu yang paling baru diperbarui.
+  rpc SearchPlaylists(SearchPlaylistsRequest) returns (SearchPlaylistsResponse);
 }
 
 enum VideoStatus {
@@ -640,4 +646,19 @@ message GetChannelStatsResponse {
   google.protobuf.Timestamp previous_start = 4;
   google.protobuf.Timestamp current_start = 5;
   google.protobuf.Timestamp end = 6;
+}
+
+message SearchPlaylistsRequest {
+  // Sama dengan SearchVideosRequest: maksimal 100 karakter, 5 kata pertama.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message SearchPlaylistsResponse {
+  repeated Playlist playlists = 1;
+  // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
+  string next_page_token = 2;
 }
