@@ -52,6 +52,7 @@ const (
 	VideoService_AddToPlaylist_FullMethodName            = "/video.v1.VideoService/AddToPlaylist"
 	VideoService_RemoveFromPlaylist_FullMethodName       = "/video.v1.VideoService/RemoveFromPlaylist"
 	VideoService_ListPlaylistVideos_FullMethodName       = "/video.v1.VideoService/ListPlaylistVideos"
+	VideoService_GetChannelStats_FullMethodName          = "/video.v1.VideoService/GetChannelStats"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -163,6 +164,12 @@ type VideoServiceClient interface {
 	// ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
 	// Hanya video READY.
 	ListPlaylistVideos(ctx context.Context, in *ListPlaylistVideosRequest, opts ...grpc.CallOption) (*ListPlaylistVideosResponse, error)
+	// GetChannelStats mengambil statistik channel milik requester untuk
+	// dasbor Creator Studio (langkah 22b): tayangan per hari, jumlah danmaku
+	// dan komentar yang diterima, untuk periode ini dan periode sebelumnya
+	// yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
+	// INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
+	GetChannelStats(ctx context.Context, in *GetChannelStatsRequest, opts ...grpc.CallOption) (*GetChannelStatsResponse, error)
 }
 
 type videoServiceClient struct {
@@ -463,6 +470,16 @@ func (c *videoServiceClient) ListPlaylistVideos(ctx context.Context, in *ListPla
 	return out, nil
 }
 
+func (c *videoServiceClient) GetChannelStats(ctx context.Context, in *GetChannelStatsRequest, opts ...grpc.CallOption) (*GetChannelStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChannelStatsResponse)
+	err := c.cc.Invoke(ctx, VideoService_GetChannelStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -572,6 +589,12 @@ type VideoServiceServer interface {
 	// ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
 	// Hanya video READY.
 	ListPlaylistVideos(context.Context, *ListPlaylistVideosRequest) (*ListPlaylistVideosResponse, error)
+	// GetChannelStats mengambil statistik channel milik requester untuk
+	// dasbor Creator Studio (langkah 22b): tayangan per hari, jumlah danmaku
+	// dan komentar yang diterima, untuk periode ini dan periode sebelumnya
+	// yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
+	// INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
+	GetChannelStats(context.Context, *GetChannelStatsRequest) (*GetChannelStatsResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -668,6 +691,9 @@ func (UnimplementedVideoServiceServer) RemoveFromPlaylist(context.Context, *Remo
 }
 func (UnimplementedVideoServiceServer) ListPlaylistVideos(context.Context, *ListPlaylistVideosRequest) (*ListPlaylistVideosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPlaylistVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) GetChannelStats(context.Context, *GetChannelStatsRequest) (*GetChannelStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChannelStats not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -1212,6 +1238,24 @@ func _VideoService_ListPlaylistVideos_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_GetChannelStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChannelStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).GetChannelStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_GetChannelStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).GetChannelStats(ctx, req.(*GetChannelStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1334,6 +1378,10 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPlaylistVideos",
 			Handler:    _VideoService_ListPlaylistVideos_Handler,
+		},
+		{
+			MethodName: "GetChannelStats",
+			Handler:    _VideoService_GetChannelStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

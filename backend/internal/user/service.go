@@ -39,6 +39,9 @@ type Repository interface {
 	// ListSubscriberIDs: id subscriber channelID yang lebih besar dari
 	// afterID, urut naik.
 	ListSubscriberIDs(ctx context.Context, channelID, afterID int64, limit int) ([]int64, error)
+	// CountNewSubscribers menghitung subscription channelID yang dibuat
+	// dalam [currentStart, end) dan [previousStart, currentStart).
+	CountNewSubscribers(ctx context.Context, channelID int64, previousStart, currentStart, end time.Time) (current, previous int64, err error)
 }
 
 // ObjectStore adalah penyimpanan file foto profil. Implementasi S3 ada di
@@ -377,6 +380,20 @@ func (s *Service) ListSubscriberIDs(ctx context.Context, channelID, afterID int6
 		return nil, &ValidationError{"page_size", fmt.Sprintf("harus antara 1 dan %d", maxSubscriberPage)}
 	}
 	return s.repo.ListSubscriberIDs(ctx, channelID, afterID, pageSize)
+}
+
+// CountNewSubscribers menghitung subscriber baru channelID dalam dua
+// periode berurutan untuk dasbor Creator Studio. Batas waktunya ditentukan
+// VideoService (statistik tayangan), lalu gateway meneruskannya ke sini
+// supaya semua angka di dasbor memakai periode yang sama persis.
+func (s *Service) CountNewSubscribers(ctx context.Context, channelID int64, previousStart, currentStart, end time.Time) (current, previous int64, err error) {
+	if channelID <= 0 {
+		return 0, 0, ErrNotFound
+	}
+	if previousStart.IsZero() || !previousStart.Before(currentStart) || !currentStart.Before(end) {
+		return 0, 0, &ValidationError{"previous_start", "harus previous_start < current_start < end"}
+	}
+	return s.repo.CountNewSubscribers(ctx, channelID, previousStart, currentStart, end)
 }
 
 // encodeCursor dan decodeCursor: token halaman berikutnya berupa base64

@@ -35,6 +35,7 @@ const (
 	UserService_ListSubscriptions_FullMethodName        = "/user.v1.UserService/ListSubscriptions"
 	UserService_ListSubscribedChannelIds_FullMethodName = "/user.v1.UserService/ListSubscribedChannelIds"
 	UserService_ListSubscriberIds_FullMethodName        = "/user.v1.UserService/ListSubscriberIds"
+	UserService_CountNewSubscribers_FullMethodName      = "/user.v1.UserService/CountNewSubscribers"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -80,6 +81,11 @@ type UserServiceClient interface {
 	// terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
 	// mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
 	ListSubscriberIds(ctx context.Context, in *ListSubscriberIdsRequest, opts ...grpc.CallOption) (*ListSubscriberIdsResponse, error)
+	// CountNewSubscribers menghitung subscriber channel_id yang mulai
+	// mengikuti dalam dua periode berurutan (dasbor Creator Studio, langkah
+	// 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
+	// sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
+	CountNewSubscribers(ctx context.Context, in *CountNewSubscribersRequest, opts ...grpc.CallOption) (*CountNewSubscribersResponse, error)
 }
 
 type userServiceClient struct {
@@ -190,6 +196,16 @@ func (c *userServiceClient) ListSubscriberIds(ctx context.Context, in *ListSubsc
 	return out, nil
 }
 
+func (c *userServiceClient) CountNewSubscribers(ctx context.Context, in *CountNewSubscribersRequest, opts ...grpc.CallOption) (*CountNewSubscribersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CountNewSubscribersResponse)
+	err := c.cc.Invoke(ctx, UserService_CountNewSubscribers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -233,6 +249,11 @@ type UserServiceServer interface {
 	// terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
 	// mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
 	ListSubscriberIds(context.Context, *ListSubscriberIdsRequest) (*ListSubscriberIdsResponse, error)
+	// CountNewSubscribers menghitung subscriber channel_id yang mulai
+	// mengikuti dalam dua periode berurutan (dasbor Creator Studio, langkah
+	// 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
+	// sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
+	CountNewSubscribers(context.Context, *CountNewSubscribersRequest) (*CountNewSubscribersResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -272,6 +293,9 @@ func (UnimplementedUserServiceServer) ListSubscribedChannelIds(context.Context, 
 }
 func (UnimplementedUserServiceServer) ListSubscriberIds(context.Context, *ListSubscriberIdsRequest) (*ListSubscriberIdsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSubscriberIds not implemented")
+}
+func (UnimplementedUserServiceServer) CountNewSubscribers(context.Context, *CountNewSubscribersRequest) (*CountNewSubscribersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountNewSubscribers not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -474,6 +498,24 @@ func _UserService_ListSubscriberIds_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_CountNewSubscribers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountNewSubscribersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).CountNewSubscribers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_CountNewSubscribers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).CountNewSubscribers(ctx, req.(*CountNewSubscribersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -520,6 +562,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSubscriberIds",
 			Handler:    _UserService_ListSubscriberIds_Handler,
+		},
+		{
+			MethodName: "CountNewSubscribers",
+			Handler:    _UserService_CountNewSubscribers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

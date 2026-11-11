@@ -19,10 +19,9 @@ import { canDelete, isProcessing } from '../lib/upload'
 type Dialog = { kind: 'edit' | 'delete'; video: Video } | null
 
 /**
- * Creator Studio, menu Konten (tabel "Konten terbaru" di desain
- * Studio.dc.html): semua video milik user, termasuk yang belum READY.
- * Kartu statistik dan grafik di desain belum ditampilkan karena backend
- * belum punya data analitiknya.
+ * Creator Studio, menu Konten (/studio/content): semua video milik user,
+ * termasuk yang belum READY, dengan tombol Edit dan Hapus. Kartu statistik
+ * dan grafik desain Studio.dc.html ada di menu Dasbor (StudioDashboardPage).
  */
 export function StudioPage() {
   const { user } = useAuth()

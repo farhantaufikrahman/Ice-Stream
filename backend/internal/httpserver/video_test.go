@@ -48,6 +48,8 @@ type fakeVideoClient struct {
 	later fakeWatchLater
 	// pl berisi request playlist terakhir (playlist_test.go).
 	pl fakePlaylists
+	// lastStats berisi request dasbor terakhir (stats_test.go).
+	lastStats *videov1.GetChannelStatsRequest
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)

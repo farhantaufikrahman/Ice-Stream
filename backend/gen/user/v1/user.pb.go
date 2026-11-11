@@ -1177,6 +1177,128 @@ func (x *ListSubscriberIdsResponse) GetSubscriberIds() []int64 {
 	return nil
 }
 
+type CountNewSubscribersRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ChannelId int64                  `protobuf:"varint,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	// Periode sebelumnya = [previous_start, current_start),
+	// periode ini = [current_start, end).
+	PreviousStart *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=previous_start,json=previousStart,proto3" json:"previous_start,omitempty"`
+	CurrentStart  *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=current_start,json=currentStart,proto3" json:"current_start,omitempty"`
+	End           *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CountNewSubscribersRequest) Reset() {
+	*x = CountNewSubscribersRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CountNewSubscribersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CountNewSubscribersRequest) ProtoMessage() {}
+
+func (x *CountNewSubscribersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CountNewSubscribersRequest.ProtoReflect.Descriptor instead.
+func (*CountNewSubscribersRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CountNewSubscribersRequest) GetChannelId() int64 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+func (x *CountNewSubscribersRequest) GetPreviousStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PreviousStart
+	}
+	return nil
+}
+
+func (x *CountNewSubscribersRequest) GetCurrentStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CurrentStart
+	}
+	return nil
+}
+
+func (x *CountNewSubscribersRequest) GetEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.End
+	}
+	return nil
+}
+
+type CountNewSubscribersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Current       int64                  `protobuf:"varint,1,opt,name=current,proto3" json:"current,omitempty"`
+	Previous      int64                  `protobuf:"varint,2,opt,name=previous,proto3" json:"previous,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CountNewSubscribersResponse) Reset() {
+	*x = CountNewSubscribersResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CountNewSubscribersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CountNewSubscribersResponse) ProtoMessage() {}
+
+func (x *CountNewSubscribersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CountNewSubscribersResponse.ProtoReflect.Descriptor instead.
+func (*CountNewSubscribersResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CountNewSubscribersResponse) GetCurrent() int64 {
+	if x != nil {
+		return x.Current
+	}
+	return 0
+}
+
+func (x *CountNewSubscribersResponse) GetPrevious() int64 {
+	if x != nil {
+		return x.Previous
+	}
+	return 0
+}
+
 var File_user_v1_user_proto protoreflect.FileDescriptor
 
 const file_user_v1_user_proto_rawDesc = "" +
@@ -1259,7 +1381,16 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x13after_subscriber_id\x18\x02 \x01(\x03R\x11afterSubscriberId\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\"B\n" +
 	"\x19ListSubscriberIdsResponse\x12%\n" +
-	"\x0esubscriber_ids\x18\x01 \x03(\x03R\rsubscriberIds2\xce\x06\n" +
+	"\x0esubscriber_ids\x18\x01 \x03(\x03R\rsubscriberIds\"\xed\x01\n" +
+	"\x1aCountNewSubscribersRequest\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x01 \x01(\x03R\tchannelId\x12A\n" +
+	"\x0eprevious_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rpreviousStart\x12?\n" +
+	"\rcurrent_start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fcurrentStart\x12,\n" +
+	"\x03end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"S\n" +
+	"\x1bCountNewSubscribersResponse\x12\x18\n" +
+	"\acurrent\x18\x01 \x01(\x03R\acurrent\x12\x1a\n" +
+	"\bprevious\x18\x02 \x01(\x03R\bprevious2\xb0\a\n" +
 	"\vUserService\x12E\n" +
 	"\n" +
 	"GetProfile\x12\x1a.user.v1.GetProfileRequest\x1a\x1b.user.v1.GetProfileResponse\x12W\n" +
@@ -1271,7 +1402,8 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\vUnsubscribe\x12\x1b.user.v1.UnsubscribeRequest\x1a\x1c.user.v1.UnsubscribeResponse\x12Z\n" +
 	"\x11ListSubscriptions\x12!.user.v1.ListSubscriptionsRequest\x1a\".user.v1.ListSubscriptionsResponse\x12o\n" +
 	"\x18ListSubscribedChannelIds\x12(.user.v1.ListSubscribedChannelIdsRequest\x1a).user.v1.ListSubscribedChannelIdsResponse\x12Z\n" +
-	"\x11ListSubscriberIds\x12!.user.v1.ListSubscriberIdsRequest\x1a\".user.v1.ListSubscriberIdsResponseB\x9a\x01\n" +
+	"\x11ListSubscriberIds\x12!.user.v1.ListSubscriberIdsRequest\x1a\".user.v1.ListSubscriberIdsResponse\x12`\n" +
+	"\x13CountNewSubscribers\x12#.user.v1.CountNewSubscribersRequest\x1a$.user.v1.CountNewSubscribersResponseB\x9a\x01\n" +
 	"\vcom.user.v1B\tUserProtoP\x01ZCgithub.com/farhantaufikrahman/ice-stream/backend/gen/user/v1;userv1\xa2\x02\x03UXX\xaa\x02\aUser.V1\xca\x02\aUser\\V1\xe2\x02\x13User\\V1\\GPBMetadata\xea\x02\bUser::V1b\x06proto3"
 
 var (
@@ -1286,7 +1418,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Profile)(nil),                          // 0: user.v1.Profile
 	(*GetProfileRequest)(nil),                // 1: user.v1.GetProfileRequest
@@ -1309,41 +1441,48 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*ListSubscribedChannelIdsResponse)(nil), // 18: user.v1.ListSubscribedChannelIdsResponse
 	(*ListSubscriberIdsRequest)(nil),         // 19: user.v1.ListSubscriberIdsRequest
 	(*ListSubscriberIdsResponse)(nil),        // 20: user.v1.ListSubscriberIdsResponse
-	(*timestamppb.Timestamp)(nil),            // 21: google.protobuf.Timestamp
+	(*CountNewSubscribersRequest)(nil),       // 21: user.v1.CountNewSubscribersRequest
+	(*CountNewSubscribersResponse)(nil),      // 22: user.v1.CountNewSubscribersResponse
+	(*timestamppb.Timestamp)(nil),            // 23: google.protobuf.Timestamp
 }
 var file_user_v1_user_proto_depIdxs = []int32{
-	21, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
+	23, // 0: user.v1.Profile.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: user.v1.GetProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 2: user.v1.BatchGetProfilesResponse.profiles:type_name -> user.v1.Profile
 	0,  // 3: user.v1.UpdateProfileResponse.profile:type_name -> user.v1.Profile
 	0,  // 4: user.v1.UploadAvatarResponse.profile:type_name -> user.v1.Profile
 	0,  // 5: user.v1.RemoveAvatarResponse.profile:type_name -> user.v1.Profile
 	0,  // 6: user.v1.ListSubscriptionsResponse.channels:type_name -> user.v1.Profile
-	1,  // 7: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
-	3,  // 8: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
-	5,  // 9: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
-	7,  // 10: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
-	9,  // 11: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
-	11, // 12: user.v1.UserService.Subscribe:input_type -> user.v1.SubscribeRequest
-	13, // 13: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
-	15, // 14: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
-	17, // 15: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
-	19, // 16: user.v1.UserService.ListSubscriberIds:input_type -> user.v1.ListSubscriberIdsRequest
-	2,  // 17: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
-	4,  // 18: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
-	6,  // 19: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
-	8,  // 20: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
-	10, // 21: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
-	12, // 22: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
-	14, // 23: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
-	16, // 24: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
-	18, // 25: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
-	20, // 26: user.v1.UserService.ListSubscriberIds:output_type -> user.v1.ListSubscriberIdsResponse
-	17, // [17:27] is the sub-list for method output_type
-	7,  // [7:17] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	23, // 7: user.v1.CountNewSubscribersRequest.previous_start:type_name -> google.protobuf.Timestamp
+	23, // 8: user.v1.CountNewSubscribersRequest.current_start:type_name -> google.protobuf.Timestamp
+	23, // 9: user.v1.CountNewSubscribersRequest.end:type_name -> google.protobuf.Timestamp
+	1,  // 10: user.v1.UserService.GetProfile:input_type -> user.v1.GetProfileRequest
+	3,  // 11: user.v1.UserService.BatchGetProfiles:input_type -> user.v1.BatchGetProfilesRequest
+	5,  // 12: user.v1.UserService.UpdateProfile:input_type -> user.v1.UpdateProfileRequest
+	7,  // 13: user.v1.UserService.UploadAvatar:input_type -> user.v1.UploadAvatarRequest
+	9,  // 14: user.v1.UserService.RemoveAvatar:input_type -> user.v1.RemoveAvatarRequest
+	11, // 15: user.v1.UserService.Subscribe:input_type -> user.v1.SubscribeRequest
+	13, // 16: user.v1.UserService.Unsubscribe:input_type -> user.v1.UnsubscribeRequest
+	15, // 17: user.v1.UserService.ListSubscriptions:input_type -> user.v1.ListSubscriptionsRequest
+	17, // 18: user.v1.UserService.ListSubscribedChannelIds:input_type -> user.v1.ListSubscribedChannelIdsRequest
+	19, // 19: user.v1.UserService.ListSubscriberIds:input_type -> user.v1.ListSubscriberIdsRequest
+	21, // 20: user.v1.UserService.CountNewSubscribers:input_type -> user.v1.CountNewSubscribersRequest
+	2,  // 21: user.v1.UserService.GetProfile:output_type -> user.v1.GetProfileResponse
+	4,  // 22: user.v1.UserService.BatchGetProfiles:output_type -> user.v1.BatchGetProfilesResponse
+	6,  // 23: user.v1.UserService.UpdateProfile:output_type -> user.v1.UpdateProfileResponse
+	8,  // 24: user.v1.UserService.UploadAvatar:output_type -> user.v1.UploadAvatarResponse
+	10, // 25: user.v1.UserService.RemoveAvatar:output_type -> user.v1.RemoveAvatarResponse
+	12, // 26: user.v1.UserService.Subscribe:output_type -> user.v1.SubscribeResponse
+	14, // 27: user.v1.UserService.Unsubscribe:output_type -> user.v1.UnsubscribeResponse
+	16, // 28: user.v1.UserService.ListSubscriptions:output_type -> user.v1.ListSubscriptionsResponse
+	18, // 29: user.v1.UserService.ListSubscribedChannelIds:output_type -> user.v1.ListSubscribedChannelIdsResponse
+	20, // 30: user.v1.UserService.ListSubscriberIds:output_type -> user.v1.ListSubscriberIdsResponse
+	22, // 31: user.v1.UserService.CountNewSubscribers:output_type -> user.v1.CountNewSubscribersResponse
+	21, // [21:32] is the sub-list for method output_type
+	10, // [10:21] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_user_v1_user_proto_init() }
@@ -1362,7 +1501,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

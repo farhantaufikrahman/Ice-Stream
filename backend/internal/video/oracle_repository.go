@@ -234,21 +234,38 @@ func (r *OracleRepository) ListPublic(ctx context.Context, ownerIDs []int64, aft
 // Oracle sendiri dalam satu UPDATE, jadi tidak ada view yang hilang walau
 // banyak request datang bersamaan (berbeda dengan baca, tambah di Go, lalu
 // simpan).
-func (r *OracleRepository) IncrementViews(ctx context.Context, id int64) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&videoRow{}).
-		Where("id = ? AND status = ?", id, StatusReady).
-		UpdateColumn("view_count", gorm.Expr("view_count + 1"))
-	if res.Error != nil {
-		return 0, fmt.Errorf("update view_count: %w", res.Error)
+//
+// Dalam transaksi yang sama, tayangan per hari (video_daily_views, migrasi
+// V14) ikut ditambah, jadi total dan grafik per hari tidak pernah selisih.
+// UPDATE videos mengunci baris video itu sampai COMMIT, sehingga dua
+// tayangan video yang sama selalu bergiliran dan MERGE di bawah tidak
+// mungkin sama-sama mencoba INSERT baris tanggal yang sama.
+func (r *OracleRepository) IncrementViews(ctx context.Context, id int64, day string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&videoRow{}).
+			Where("id = ? AND status = ?", id, StatusReady).
+			UpdateColumn("view_count", gorm.Expr("view_count + 1"))
+		if res.Error != nil {
+			return fmt.Errorf("update view_count: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		if err := tx.Exec(incrementDailyViewsSQL, id, day).Error; err != nil {
+			return fmt.Errorf("merge video_daily_views: %w", err)
+		}
+		var row videoRow
+		if err := tx.Select("view_count").Where("id = ?", id).Take(&row).Error; err != nil {
+			return fmt.Errorf("select view_count: %w", err)
+		}
+		count = row.ViewCount
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
-	if res.RowsAffected == 0 {
-		return 0, ErrNotFound
-	}
-	var row videoRow
-	if err := r.db.WithContext(ctx).Select("view_count").Where("id = ?", id).Take(&row).Error; err != nil {
-		return 0, fmt.Errorf("select view_count: %w", err)
-	}
-	return row.ViewCount, nil
+	return count, nil
 }
 
 // MarkProcessing mengubah UPLOADED menjadi PROCESSING.

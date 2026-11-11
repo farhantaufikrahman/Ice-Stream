@@ -513,7 +513,7 @@ function PublishedNote({ video, onAnother }: { video: Video; onAnother: () => vo
             Tonton
           </Link>
         )}
-        <Link to="/studio" className="btn">
+        <Link to="/studio/content" className="btn">
           Buka Studio
         </Link>
         <button type="button" className="btn btn-ghost" onClick={onAnother}>

@@ -30,9 +30,10 @@ type Repository interface {
 	// dulu, hanya milik salah satu ownerIDs (kosong = semua user) dan hanya
 	// yang posisinya setelah after (nil = dari awal).
 	ListPublic(ctx context.Context, ownerIDs []int64, after *FeedCursor, limit int) ([]Video, error)
-	// IncrementViews menambah view_count video READY sebanyak 1 dan
-	// mengembalikan nilai barunya. ErrNotFound jika video tidak READY.
-	IncrementViews(ctx context.Context, id int64) (int64, error)
+	// IncrementViews menambah view_count video READY sebanyak 1, juga
+	// tayangan video itu pada tanggal day ("2006-01-02", WIB), lalu
+	// mengembalikan view_count barunya. ErrNotFound jika video tidak READY.
+	IncrementViews(ctx context.Context, id int64, day string) (int64, error)
 	// Like mencatat like userID untuk video READY dan mengembalikan
 	// like_count terbaru. Like kedua tidak menambah apa-apa.
 	// ErrNotFound jika video tidak READY.
@@ -160,6 +161,17 @@ type Repository interface {
 	// lalu video_id terkecil lebih dulu, hanya yang posisinya setelah after
 	// (nil = dari awal).
 	ListPlaylistItems(ctx context.Context, playlistID int64, after *PlaylistEntryCursor, limit int) ([]PlaylistEntry, error)
+
+	// Statistik channel (stats.go, migrasi V14).
+
+	// ChannelDailyViews menjumlahkan tayangan semua video ownerID per
+	// tanggal, dari tanggal from sampai to (keduanya ikut, "2006-01-02").
+	// Tanggal tanpa tayangan tidak ada di map.
+	ChannelDailyViews(ctx context.Context, ownerID int64, from, to string) (map[string]int64, error)
+	// ChannelActivity menghitung danmaku dan komentar (yang belum dihapus)
+	// di semua video ownerID: current = [currentStart, end), previous =
+	// [previousStart, currentStart). Field Views tidak diisi.
+	ChannelActivity(ctx context.Context, ownerID int64, previousStart, currentStart, end time.Time) (current, previous ChannelTotals, err error)
 }
 
 // Publisher mengirim event ke service lain. Implementasi NATS ada di
@@ -678,7 +690,7 @@ func (s *Service) RecordView(ctx context.Context, videoID int64, viewerKey strin
 	if !first {
 		return ViewResult{Counted: false, ViewCount: v.ViewCount}, nil
 	}
-	count, err := s.repo.IncrementViews(ctx, videoID)
+	count, err := s.repo.IncrementViews(ctx, videoID, statsDay(s.now()))
 	if err != nil {
 		// Pakai context baru: ctx mungkin sudah dibatalkan, tapi tanda di
 		// NATS tetap harus dihapus.

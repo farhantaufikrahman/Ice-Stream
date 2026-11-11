@@ -1173,6 +1173,142 @@ a:focus-visible {
 a.studio-video-title:hover {
   color: var(--accent-text);
 }
+
+/* ---------- Dasbor Creator Studio (desain Studio.dc.html) ---------- */
+.studio-thumb-small {
+  width: 88px;
+}
+.range-group {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.range-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.range-btn[aria-pressed='true'] {
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.kpi-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.kpi-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-delta {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.kpi-delta.is-up {
+  color: var(--accent-text);
+}
+.kpi-delta.is-down {
+  color: var(--pink-text);
+}
+.kpi-delta.is-flat {
+  color: var(--muted);
+}
+.stats-chart-head {
+  align-items: baseline;
+}
+.chart-scroll {
+  overflow-x: auto;
+}
+/* Dua kolom: angka sumbu Y | area batang. Baris kedua: tanggal awal dan
+   akhir, tepat di bawah area batang. */
+.chart {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 6px;
+  min-width: 520px;
+}
+.chart-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 200px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  text-align: right;
+}
+.chart-plot {
+  position: relative;
+  height: 200px;
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--line-soft);
+}
+.chart-bars {
+  position: absolute;
+  inset: 0 6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.chart-bars.is-dense {
+  gap: 3px;
+}
+/* Tinggi batang dikirim dari komponen lewat variabel --h (persen). */
+.chart-bar {
+  flex: 1;
+  height: var(--h);
+  border-radius: 4px 4px 0 0;
+  background: var(--mint);
+}
+.chart-bar.is-peak {
+  background: var(--amber);
+}
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+}
+.chart-dates {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+}
 .row-actions {
   display: flex;
   justify-content: flex-end;

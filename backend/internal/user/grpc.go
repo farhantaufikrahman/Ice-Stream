@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -116,6 +117,24 @@ func (s *GRPCServer) ListSubscriberIds(ctx context.Context, req *userv1.ListSubs
 		return nil, s.toStatus(ctx, err)
 	}
 	return &userv1.ListSubscriberIdsResponse{SubscriberIds: ids}, nil
+}
+
+func (s *GRPCServer) CountNewSubscribers(ctx context.Context, req *userv1.CountNewSubscribersRequest) (*userv1.CountNewSubscribersResponse, error) {
+	current, previous, err := s.svc.CountNewSubscribers(ctx, req.GetChannelId(),
+		protoTime(req.GetPreviousStart()), protoTime(req.GetCurrentStart()), protoTime(req.GetEnd()))
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &userv1.CountNewSubscribersResponse{Current: current, Previous: previous}, nil
+}
+
+// protoTime mengubah Timestamp kosong (nil) menjadi time.Time nol, bukan
+// 1 Januari 1970 seperti AsTime.
+func protoTime(ts *timestamppb.Timestamp) time.Time {
+	if ts == nil {
+		return time.Time{}
+	}
+	return ts.AsTime()
 }
 
 // toStatus memetakan error Service ke kode gRPC.

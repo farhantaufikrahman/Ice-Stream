@@ -49,6 +49,11 @@ service UserService {
   // terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
   // mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
   rpc ListSubscriberIds(ListSubscriberIdsRequest) returns (ListSubscriberIdsResponse);
+  // CountNewSubscribers menghitung subscriber channel_id yang mulai
+  // mengikuti dalam dua periode berurutan (dasbor Creator Studio, langkah
+  // 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
+  // sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
+  rpc CountNewSubscribers(CountNewSubscribersRequest) returns (CountNewSubscribersResponse);
 }
 
 message Profile {
@@ -175,4 +180,18 @@ message ListSubscriberIdsRequest {
 message ListSubscriberIdsResponse {
   // Kurang dari page_size berarti ini halaman terakhir.
   repeated int64 subscriber_ids = 1;
+}
+
+message CountNewSubscribersRequest {
+  int64 channel_id = 1;
+  // Periode sebelumnya = [previous_start, current_start),
+  // periode ini = [current_start, end).
+  google.protobuf.Timestamp previous_start = 2;
+  google.protobuf.Timestamp current_start = 3;
+  google.protobuf.Timestamp end = 4;
+}
+
+message CountNewSubscribersResponse {
+  int64 current = 1;
+  int64 previous = 2;
 }

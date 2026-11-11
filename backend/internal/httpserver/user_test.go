@@ -33,6 +33,9 @@ type fakeUserClient struct {
 	lastUnsub      *userv1.UnsubscribeRequest
 	lastListSubs   *userv1.ListSubscriptionsRequest
 	lastChannelIDs *userv1.ListSubscribedChannelIdsRequest
+	// Subscriber baru untuk dasbor (stats_test.go).
+	lastNewSubs *userv1.CountNewSubscribersRequest
+	newSubsErr  error
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)

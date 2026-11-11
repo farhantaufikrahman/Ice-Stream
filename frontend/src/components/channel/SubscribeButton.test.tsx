@@ -36,7 +36,7 @@ describe('SubscribeButton', () => {
 
   it('kanal sendiri menampilkan Kelola video', () => {
     renderButton({ isOwn: true })
-    expect(screen.getByRole('link', { name: 'Kelola video' })).toHaveAttribute('href', '/studio')
+    expect(screen.getByRole('link', { name: 'Kelola video' })).toHaveAttribute('href', '/studio/content')
   })
 
   it('langsung berubah (optimistic), lalu memakai jawaban server', async () => {
