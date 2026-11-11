@@ -1985,6 +1985,167 @@ a.channel-name:hover {
   border-color: var(--line-strong);
 }
 
+/* ---------- Playlist (langkah 21c) ---------- */
+.inline-icon {
+  vertical-align: -1px;
+}
+/* Dialog "Simpan ke..." */
+.save-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.save-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.save-option:hover {
+  background: var(--raised);
+}
+.save-option input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--mint);
+}
+.save-option-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.save-new {
+  align-self: flex-start;
+}
+.save-new-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+}
+/* Pilihan Privat / Publik */
+.visibility-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.visibility-field legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.radio-card.is-active {
+  border-color: var(--accent-text);
+  background: var(--chip-mint);
+}
+.radio-card input {
+  margin: 3px 0 0;
+  accent-color: var(--mint);
+}
+.radio-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.radio-card-label {
+  font-weight: 600;
+}
+/* Kartu dan kepala playlist: jumlah video di pojok thumbnail */
+.playlist-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: rgb(11 18 32 / 0.85);
+  color: #e8eef8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.channel-playlists .list-page-head .section-title {
+  margin: 0;
+}
+.playlist-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 20px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.playlist-head-thumb {
+  position: relative;
+  flex: 0 1 320px;
+  border-radius: 14px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+.playlist-head-text {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.playlist-title {
+  margin: 0;
+  font-size: 1.8rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.playlist-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-weight: 600;
+}
+.playlist-owner:hover {
+  color: var(--accent-text);
+}
+.playlist-actions {
+  justify-content: flex-start;
+  margin-top: 4px;
+}
+.playlist-index {
+  flex: none;
+  width: 24px;
+  padding-top: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
 /* ---------- Layar kecil (HP) ---------- */
 @media (max-width: 640px) {
   .search {
@@ -2055,5 +2216,14 @@ a.channel-name:hover {
   }
   .header-actions {
     gap: 6px;
+  }
+  .playlist-head {
+    padding: 14px;
+  }
+  .playlist-title {
+    font-size: 1.4rem;
+  }
+  .playlist-index {
+    display: none;
   }
 }

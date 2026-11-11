@@ -62,6 +62,7 @@ func (s *GRPCServer) GetVideo(ctx context.Context, req *videov1.GetVideoRequest)
 		ViewerLiked:      d.ViewerLiked,
 		ResumePositionMs: d.ResumePositionMs,
 		ViewerSaved:      d.ViewerSaved,
+		ViewerInPlaylist: d.ViewerInPlaylist,
 	}
 	if d.Original.URL != "" {
 		resp.OriginalUrl = d.Original.URL
@@ -255,7 +256,7 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	switch {
 	case errors.As(err, &verr):
 		return status.Error(codes.InvalidArgument, verr.Error())
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrPlaylistNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
 		return status.Error(codes.FailedPrecondition, err.Error())

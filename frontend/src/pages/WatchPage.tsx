@@ -237,7 +237,12 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
               <HeartIcon filled={false} /> {formatCount(like.count)}
             </Link>
           )}
-          <SaveButton videoId={video.id} saved={detail.viewer_saved ?? false} loggedIn={loggedIn} disabled={video.status !== 'READY'} />
+          <SaveButton
+            videoId={video.id}
+            saved={{ watchLater: detail.viewer_saved ?? false, inPlaylist: detail.viewer_in_playlist ?? false }}
+            loggedIn={loggedIn}
+            disabled={video.status !== 'READY'}
+          />
         </div>
         {likeError && <ErrorBox message={likeError} />}
 

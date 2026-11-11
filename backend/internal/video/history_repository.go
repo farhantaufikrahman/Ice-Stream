@@ -58,6 +58,13 @@ func isUniqueViolation(err error) bool {
 	return ok && oerr.Code() == 1
 }
 
+// isForeignKeyViolation mengenali ORA-02291 (baris induk tidak ditemukan),
+// misalnya menambah video ke playlist yang baru saja dihapus.
+func isForeignKeyViolation(err error) bool {
+	oerr, ok := godror.AsOraErr(err)
+	return ok && oerr.Code() == 2291
+}
+
 // GetProgress membaca satu baris riwayat lewat primary key.
 func (r *OracleRepository) GetProgress(ctx context.Context, userID, videoID int64) (int64, bool, error) {
 	var row historyRow

@@ -109,6 +109,18 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	v1.PUT("/me/watch-later/:id", requireAuth, videos.addWatchLater)
 	v1.DELETE("/me/watch-later/:id", requireAuth, videos.removeWatchLater)
 
+	// Playlist (langkah 21c). Daftar playlist satu kanal ada di bawah
+	// /users/:username/playlists (lihat bagian users).
+	playlistGroup := v1.Group("/playlists", limitBody(maxPlaylistBodyBytes))
+	playlistGroup.POST("", requireAuth, videos.createPlaylist)
+	playlistGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.getPlaylist)
+	playlistGroup.PATCH("/:id", requireAuth, videos.updatePlaylist)
+	playlistGroup.DELETE("/:id", requireAuth, videos.deletePlaylist)
+	playlistGroup.GET("/:id/videos", OptionalAuth(deps.Verifier), videos.playlistVideos)
+	playlistGroup.PUT("/:id/videos/:videoId", requireAuth, videos.addPlaylistVideo)
+	playlistGroup.DELETE("/:id/videos/:videoId", requireAuth, videos.removePlaylistVideo)
+	v1.GET("/me/playlists", requireAuth, videos.myPlaylists)
+
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)
 	videoGroup.POST("/:id/comments", requireAuth, comments.create)
@@ -133,6 +145,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	v1.GET("/me/subscriptions", requireAuth, users.subscriptions)
 	v1.GET("/me/feed", requireAuth, users.feed)
 	v1.GET("/users/:username/videos", users.listVideos)
+	v1.GET("/users/:username/playlists", OptionalAuth(deps.Verifier), users.listPlaylists)
 	v1.GET("/me/profile", requireAuth, users.me)
 	v1.PATCH("/me/profile", requireAuth, limitBody(maxProfileBodyBytes), users.update)
 	// Batas 2 MiB dicek di handler, supaya pesan errornya jelas.

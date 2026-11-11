@@ -9,6 +9,7 @@ import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { PlaylistPage } from './pages/PlaylistPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -32,6 +33,8 @@ export const router = createBrowserRouter([
           { path: '/search', element: <SearchPage /> },
           { path: '/watch/:id', element: <WatchPage /> },
           { path: '/channel/:username', element: <ChannelPage /> },
+          // Boleh tanpa login: playlist PUBLIC bisa dibuka siapa saja.
+          { path: '/playlist/:id', element: <PlaylistPage /> },
           {
             // Wajib login, tapi tetap memakai header dan footer biasa.
             element: <RequireAuth />,

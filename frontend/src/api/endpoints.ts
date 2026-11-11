@@ -17,6 +17,11 @@ import type {
   LikeResult,
   MarkReadResult,
   NotificationPage,
+  Playlist,
+  PlaylistPage,
+  PlaylistVideoPage,
+  PlaylistVideoResult,
+  PlaylistVisibility,
   Profile,
   SubscriptionResult,
   Video,
@@ -334,9 +339,76 @@ export function listWatchLater(pageToken: string, signal?: AbortSignal): Promise
   return apiRequest<WatchLaterPage>(`/me/watch-later?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
 }
 
+// ---------- Playlist (langkah 21c) ----------
+
+export interface PlaylistInput {
+  title: string
+  description: string
+  visibility: PlaylistVisibility
+}
+
+export async function createPlaylist(input: PlaylistInput): Promise<Playlist> {
+  const body = await apiRequest<{ playlist: Playlist }>('/playlists', { method: 'POST', body: input, auth: 'required' })
+  return body.playlist
+}
+
+/** Playlist PRIVATE hanya bisa dibuka pemiliknya; orang lain mendapat 404. */
+export async function getPlaylist(id: string, signal?: AbortSignal): Promise<Playlist> {
+  const body = await apiRequest<{ playlist: Playlist }>(`/playlists/${encodeURIComponent(id)}`, { auth: 'optional', signal })
+  return body.playlist
+}
+
+/** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */
+export async function updatePlaylist(id: string, changes: Partial<PlaylistInput>): Promise<Playlist> {
+  const body = await apiRequest<{ playlist: Playlist }>(`/playlists/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: changes,
+    auth: 'required',
+  })
+  return body.playlist
+}
+
+/** Menghapus playlist beserta isinya (videonya sendiri tidak terhapus). */
+export async function deletePlaylist(id: string): Promise<void> {
+  await apiRequest(`/playlists/${encodeURIComponent(id)}`, { method: 'DELETE', auth: 'required' })
+}
+
+/** Isi playlist sesuai urutan ditambahkan. */
+export function listPlaylistVideos(id: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistVideoPage> {
+  return apiRequest<PlaylistVideoPage>(`/playlists/${encodeURIComponent(id)}/videos?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, {
+    auth: 'optional',
+    signal,
+  })
+}
+
+/** Menambahkan (PUT) atau mengeluarkan (DELETE) video dari playlist. Aman diulang. */
+export function setPlaylistVideo(playlistId: string, videoId: string, saved: boolean): Promise<PlaylistVideoResult> {
+  return apiRequest<PlaylistVideoResult>(`/playlists/${encodeURIComponent(playlistId)}/videos/${encodeURIComponent(videoId)}`, {
+    method: saved ? 'PUT' : 'DELETE',
+    auth: 'required',
+  })
+}
+
+/** Playlist saya (termasuk PRIVATE). Dengan videoId, tiap playlist membawa contains_video. */
+export function listMyPlaylists(pageToken: string, videoId?: string, signal?: AbortSignal): Promise<PlaylistPage> {
+  const params = new URLSearchParams(pageQuery(pageToken, MAX_PAGE_SIZE))
+  if (videoId) params.set('video_id', videoId)
+  return apiRequest<PlaylistPage>(`/me/playlists?${params}`, { auth: 'required', signal })
+}
+
+/** Playlist sebuah kanal. PRIVATE hanya ikut jika kanal itu milik penonton. */
+export function listChannelPlaylists(username: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistPage> {
+  return apiRequest<PlaylistPage>(`/users/${encodeURIComponent(username)}/playlists?${pageQuery(pageToken)}`, {
+    auth: 'optional',
+    signal,
+  })
+}
+
 const PAGE_SIZE = 24
 /** Notifikasi dan riwayat: batas server 50, 20 per halaman cukup untuk satu layar. */
 const LIST_PAGE_SIZE = 20
+/** Batas page_size dari server. Dipakai dialog Simpan supaya biasanya semua playlist muat satu halaman. */
+const MAX_PAGE_SIZE = 50
 
 function pageQuery(pageToken: string, pageSize = PAGE_SIZE): string {
   const params = new URLSearchParams({ page_size: String(pageSize) })

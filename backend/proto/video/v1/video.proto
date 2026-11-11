@@ -91,6 +91,33 @@ service VideoService {
   // ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
   // disimpan lebih dulu. Hanya video READY.
   rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
+
+  // Playlist (langkah 21c). Playlist PRIVATE hanya terlihat oleh pemiliknya:
+  // bagi orang lain jawabannya NOT_FOUND, sama seperti playlist yang tidak
+  // ada. Mengubah playlist orang lain juga dijawab NOT_FOUND.
+
+  // CreatePlaylist membuat playlist kosong milik requester.
+  // INVALID_ARGUMENT jika judul/deskripsi/visibilitas tidak valid atau
+  // requester sudah mencapai batas jumlah playlist.
+  rpc CreatePlaylist(CreatePlaylistRequest) returns (CreatePlaylistResponse);
+  // UpdatePlaylist mengubah judul, deskripsi, dan/atau visibilitas.
+  rpc UpdatePlaylist(UpdatePlaylistRequest) returns (UpdatePlaylistResponse);
+  // DeletePlaylist menghapus playlist beserta isinya (videonya tidak).
+  rpc DeletePlaylist(DeletePlaylistRequest) returns (DeletePlaylistResponse);
+  // GetPlaylist mengambil satu playlist, termasuk jumlah video dan thumbnail.
+  rpc GetPlaylist(GetPlaylistRequest) returns (GetPlaylistResponse);
+  // ListPlaylists mengambil playlist milik owner_id, terbaru lebih dulu.
+  // PRIVATE hanya ikut jika viewer_id = owner_id.
+  rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
+  // AddToPlaylist menambahkan video READY ke akhir playlist. Aman dipanggil
+  // ulang: video yang sudah ada tidak berpindah posisi.
+  rpc AddToPlaylist(AddToPlaylistRequest) returns (AddToPlaylistResponse);
+  // RemoveFromPlaylist mengeluarkan video dari playlist. Aman dipanggil
+  // walau video itu tidak ada di playlist.
+  rpc RemoveFromPlaylist(RemoveFromPlaylistRequest) returns (RemoveFromPlaylistResponse);
+  // ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
+  // Hanya video READY.
+  rpc ListPlaylistVideos(ListPlaylistVideosRequest) returns (ListPlaylistVideosResponse);
 }
 
 enum VideoStatus {
@@ -192,6 +219,9 @@ message GetVideoResponse {
   // true jika viewer_id sudah menyimpan video ini ke Tonton nanti. Selalu
   // false tanpa login.
   bool viewer_saved = 6;
+  // true jika video ini ada di salah satu playlist milik viewer_id. Selalu
+  // false tanpa login.
+  bool viewer_in_playlist = 7;
 }
 
 message ListMyVideosRequest {
@@ -435,6 +465,138 @@ message ListWatchLaterRequest {
 
 message ListWatchLaterResponse {
   repeated WatchLaterEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+// ---------- Playlist (langkah 21c) ----------
+
+enum PlaylistVisibility {
+  PLAYLIST_VISIBILITY_UNSPECIFIED = 0;
+  // Terlihat di halaman kanal dan bisa dibuka siapa saja.
+  PLAYLIST_VISIBILITY_PUBLIC = 1;
+  // Hanya pemiliknya yang bisa melihat.
+  PLAYLIST_VISIBILITY_PRIVATE = 2;
+}
+
+message Playlist {
+  int64 id = 1;
+  int64 owner_id = 2;
+  string title = 3;
+  string description = 4;
+  PlaylistVisibility visibility = 5;
+  // Jumlah video READY di playlist.
+  int64 video_count = 6;
+  // Thumbnail video pertama. Kosong jika playlist belum berisi video READY.
+  string thumbnail_url = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  // Hanya diisi ListPlaylists yang memakai video_id: true jika video itu
+  // ada di playlist ini.
+  bool contains_video = 10;
+}
+
+message PlaylistEntry {
+  Video video = 1;
+  // Waktu video ditambahkan ke playlist.
+  google.protobuf.Timestamp added_at = 2;
+}
+
+message CreatePlaylistRequest {
+  int64 requester_id = 1;
+  // Wajib, maksimal 100 karakter.
+  string title = 2;
+  // Boleh kosong, maksimal 1000 karakter.
+  string description = 3;
+  // UNSPECIFIED = PRIVATE.
+  PlaylistVisibility visibility = 4;
+}
+
+message CreatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message UpdatePlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  // Tidak dikirim = tidak diubah (sama seperti UpdateVideoRequest).
+  optional string title = 3;
+  optional string description = 4;
+  // UNSPECIFIED = tidak diubah.
+  PlaylistVisibility visibility = 5;
+}
+
+message UpdatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message DeletePlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+}
+
+message DeletePlaylistResponse {}
+
+message GetPlaylistRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 playlist_id = 2;
+}
+
+message GetPlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message ListPlaylistsRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 owner_id = 2;
+  // Opsional, hanya untuk playlist milik viewer sendiri: isi id video untuk
+  // mengisi Playlist.contains_video (dialog Simpan di halaman tonton).
+  int64 video_id = 3;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 4;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 5;
+}
+
+message ListPlaylistsResponse {
+  repeated Playlist playlists = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message AddToPlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  int64 video_id = 3;
+}
+
+message AddToPlaylistResponse {
+  // Waktu video pertama kali ditambahkan (tidak berubah jika ditambah ulang).
+  google.protobuf.Timestamp added_at = 1;
+}
+
+message RemoveFromPlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  int64 video_id = 3;
+}
+
+message RemoveFromPlaylistResponse {}
+
+message ListPlaylistVideosRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 playlist_id = 2;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 3;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 4;
+}
+
+message ListPlaylistVideosResponse {
+  repeated PlaylistEntry entries = 1;
   // Kosong jika sudah halaman terakhir.
   string next_page_token = 2;
 }

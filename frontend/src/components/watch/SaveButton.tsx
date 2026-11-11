@@ -1,27 +1,25 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
-import { errorMessage } from '../../api/client'
-import { setWatchLater } from '../../api/endpoints'
-import { ErrorBox } from '../ErrorBox'
+import { SaveDialog, type SaveState } from './SaveDialog'
 
 interface Props {
   videoId: string
-  /** Dari GET /videos/:id (viewer_saved). */
-  saved: boolean
+  /** Dari GET /videos/:id: viewer_saved dan viewer_in_playlist. */
+  saved: SaveState
   loggedIn: boolean
   disabled?: boolean
 }
 
 /**
- * Tombol Simpan di bawah video (desain Watch.dc.html, ikon bookmark):
- * menyimpan atau mengeluarkan video dari Tonton nanti. Tamu diarahkan ke
- * halaman Masuk lalu kembali ke video ini.
+ * Tombol Simpan di bawah video (desain Watch.dc.html, ikon bookmark).
+ * Membuka dialog "Simpan ke..." berisi Tonton nanti dan playlist milik
+ * penonton, seperti tombol Save di YouTube. Tamu diarahkan ke halaman
+ * Masuk lalu kembali ke video ini.
  */
 export function SaveButton({ videoId, saved: initial, loggedIn, disabled = false }: Props) {
   const location = useLocation()
   const [saved, setSaved] = useState(initial)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
   if (!loggedIn) {
     return (
@@ -31,42 +29,25 @@ export function SaveButton({ videoId, saved: initial, loggedIn, disabled = false
     )
   }
 
-  const toggle = async () => {
-    const want = !saved
-    // Optimistic update, sama seperti tombol Suka: tampilan langsung
-    // berubah, lalu dikembalikan jika server menolak.
-    setSaved(want)
-    setBusy(true)
-    setError(null)
-    try {
-      const r = await setWatchLater(videoId, want)
-      setSaved(r.saved)
-    } catch (err) {
-      setSaved(!want)
-      setError(errorMessage(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  const isSaved = saved.watchLater || saved.inPlaylist
   return (
     <>
       <button
         type="button"
-        className={saved ? 'btn btn-like is-saved' : 'btn btn-like'}
-        onClick={toggle}
-        disabled={busy || disabled}
-        aria-pressed={saved}
-        title={saved ? 'Keluarkan dari Tonton nanti' : 'Simpan ke Tonton nanti'}
+        className={isSaved ? 'btn btn-like is-saved' : 'btn btn-like'}
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        title="Simpan ke Tonton nanti atau playlist"
       >
-        <BookmarkIcon filled={saved} /> {saved ? 'Tersimpan' : 'Simpan'}
+        <BookmarkIcon filled={isSaved} /> {isSaved ? 'Tersimpan' : 'Simpan'}
       </button>
-      {error && <ErrorBox message={error} />}
+      {open && <SaveDialog videoId={videoId} initial={saved} onChange={setSaved} onClose={() => setOpen(false)} />}
     </>
   )
 }
 
-function BookmarkIcon({ filled }: { filled: boolean }) {
+export function BookmarkIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />

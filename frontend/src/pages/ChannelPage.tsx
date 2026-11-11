@@ -1,34 +1,43 @@
+import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { listChannelVideos } from '../api/endpoints'
-import type { Profile, Video } from '../api/types'
+import { listChannelPlaylists, listChannelVideos } from '../api/endpoints'
+import type { Playlist, Profile, Video } from '../api/types'
 import { Avatar } from '../components/Avatar'
 import { SubscribeButton } from '../components/channel/SubscribeButton'
 import { ErrorBox } from '../components/ErrorBox'
+import { PlaylistCard } from '../components/playlist/PlaylistCard'
+import { PlaylistFormDialog } from '../components/playlist/PlaylistFormDialog'
 import { Thumbnail } from '../components/Thumbnail'
 import { VideoGrid } from '../components/VideoGrid'
 import { useChannel } from '../hooks/useChannel'
+import { usePagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
 import { formatCount, formatDate, formatDuration, timeAgo } from '../lib/format'
 
-type Tab = 'video' | 'tentang'
+type Tab = 'video' | 'playlist' | 'tentang'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'video', label: 'Video' },
+  { id: 'playlist', label: 'Playlist' },
   { id: 'tentang', label: 'Tentang' },
 ]
+
+function tabFromParam(value: string | null): Tab {
+  return TABS.find((t) => t.id === value)?.id ?? 'video'
+}
 
 /**
  * Halaman kanal /channel/:username (desain Channel.dc.html).
  *
  * Bagian desain yang belum punya data di backend sengaja tidak
  * ditampilkan: jumlah video, total tayangan, total suka, tombol Kirim
- * pesan, tab Playlist dan Live, urutan Terpopuler, dan "Video unggulan"
+ * pesan, tab Live, urutan Terpopuler, dan "Video unggulan"
  * (diganti video terbaru).
  */
 export function ChannelPage() {
   const { username = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const tab: Tab = params.get('tab') === 'tentang' ? 'tentang' : 'video'
+  const tab = tabFromParam(params.get('tab'))
   const { channel, loading, error, isOwn, retry, applySubscription } = useChannel(username)
 
   if (error?.notFound) {
@@ -96,7 +105,9 @@ export function ChannelPage() {
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'video' ? <ChannelVideos username={user.username} isOwn={isOwn} /> : <ChannelAbout user={user} />}
+        {tab === 'video' && <ChannelVideos username={user.username} isOwn={isOwn} />}
+        {tab === 'playlist' && <ChannelPlaylists key={`${user.username}|${isOwn}`} username={user.username} isOwn={isOwn} />}
+        {tab === 'tentang' && <ChannelAbout user={user} />}
       </div>
     </div>
   )
@@ -141,6 +152,61 @@ function LatestVideo({ video }: { video: Video }) {
         </span>
         {video.description && <p className="channel-latest-desc">{video.description}</p>}
       </div>
+    </section>
+  )
+}
+
+/**
+ * Tab Playlist: playlist kanal, terbaru dulu. Di kanal sendiri playlist
+ * PRIVATE ikut tampil (bertanda gembok) dan ada tombol Playlist baru.
+ */
+function ChannelPlaylists({ username, isOwn }: { username: string; isOwn: boolean }) {
+  const list = usePagedList<Playlist>((token, signal) =>
+    listChannelPlaylists(username, token, signal).then((p) => ({ items: p.playlists, next: p.next_page_token })),
+  )
+  const [creating, setCreating] = useState(false)
+
+  return (
+    <section className="channel-playlists">
+      {isOwn && (
+        <div className="list-page-head">
+          <h2 className="section-title">Playlist</h2>
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+            Playlist baru
+          </button>
+        </div>
+      )}
+      {list.items.length > 0 && (
+        <div className="video-grid">
+          {list.items.map((p) => (
+            <PlaylistCard key={p.id} playlist={p} />
+          ))}
+        </div>
+      )}
+      {!list.loading && !list.error && list.items.length === 0 && (
+        <div className="empty">
+          <p>{isOwn ? 'Kamu belum punya playlist.' : 'Kanal ini belum punya playlist publik.'}</p>
+          {isOwn && <p className="muted small">Buat playlist di sini, atau tekan Simpan di bawah video.</p>}
+        </div>
+      )}
+      {list.error && <ErrorBox message={list.error} onRetry={list.retry} />}
+      {list.loading && <p className="muted center">Memuat…</p>}
+      {!list.loading && !list.error && list.hasMore && (
+        <div className="center">
+          <button type="button" className="btn" onClick={list.loadMore}>
+            Muat lagi
+          </button>
+        </div>
+      )}
+      {creating && (
+        <PlaylistFormDialog
+          onClose={() => setCreating(false)}
+          onSaved={(p) => {
+            list.update((items) => [p, ...items])
+            setCreating(false)
+          }}
+        />
+      )}
     </section>
   )
 }

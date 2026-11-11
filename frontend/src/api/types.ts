@@ -50,6 +50,8 @@ export interface VideoDetail {
   resume_position_ms?: number
   /** Hanya ada jika penonton sudah login: true jika video ada di Tonton nanti. */
   viewer_saved?: boolean
+  /** Hanya ada jika penonton sudah login: true jika video ada di salah satu playlist miliknya. */
+  viewer_in_playlist?: boolean
 }
 
 export interface Profile {
@@ -212,3 +214,44 @@ export interface WatchLaterResult {
   /** Hanya ada jika saved = true. */
   added_at?: string
 }
+
+// ---------- Playlist (langkah 21c) ----------
+
+export type PlaylistVisibility = 'PUBLIC' | 'PRIVATE'
+
+export interface Playlist {
+  id: string
+  owner_id: string
+  title: string
+  description: string
+  visibility: PlaylistVisibility
+  /** Jumlah video yang bisa diputar (READY). */
+  video_count: number
+  /** Thumbnail video pertama, "" jika playlist masih kosong. */
+  thumbnail_url: string
+  created_at: string
+  updated_at: string
+  /** Hanya ada di GET /me/playlists?video_id=...: true jika video itu ada di playlist ini. */
+  contains_video?: boolean
+  /** Hanya ada di GET /playlists/:id. */
+  owner?: Owner
+}
+
+export interface PlaylistPage {
+  playlists: Playlist[]
+  next_page_token: string
+}
+
+export interface PlaylistEntry {
+  video: Video
+  /** Waktu video ditambahkan ke playlist. */
+  added_at: string
+}
+
+export interface PlaylistVideoPage {
+  entries: PlaylistEntry[]
+  next_page_token: string
+}
+
+/** Jawaban PUT dan DELETE /playlists/:id/videos/:videoId (bentuknya sama dengan Tonton nanti). */
+export type PlaylistVideoResult = WatchLaterResult
