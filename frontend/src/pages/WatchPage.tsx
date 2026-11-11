@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { ApiError, errorMessage, isAbortError } from '../api/client'
 import { getVideo, listVideos, recordView, saveWatchProgress, setLike } from '../api/endpoints'
 import type { Danmaku, Owner, Profile, Video, VideoDetail } from '../api/types'
@@ -14,9 +14,12 @@ import { CommentSection } from '../components/watch/CommentSection'
 import { DanmakuComposer } from '../components/watch/DanmakuComposer'
 import { DanmakuLayer, type DanmakuLayerHandle } from '../components/watch/DanmakuLayer'
 import { DanmakuList } from '../components/watch/DanmakuList'
+import { PlaylistPanel } from '../components/watch/PlaylistPanel'
 import { SaveButton } from '../components/watch/SaveButton'
 import { useChannel } from '../hooks/useChannel'
 import { useDanmaku } from '../hooks/useDanmaku'
+import { usePlaylistQueue, type PlaylistQueue } from '../hooks/usePlaylistQueue'
+import { watchInListPath } from '../lib/playlistQueue'
 
 /** Jumlah video di kolom "Berikutnya". */
 const UP_NEXT_COUNT = 8
@@ -41,6 +44,34 @@ function saveDanmakuPref(on: boolean): void {
   }
 }
 
+/** Pilihan "Putar otomatis" di panel playlist, juga diingat per browser. */
+const AUTONEXT_PREF_KEY = 'ice-autonext'
+
+function readAutoNextPref(): boolean {
+  try {
+    return localStorage.getItem(AUTONEXT_PREF_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+function saveAutoNextPref(on: boolean): void {
+  try {
+    localStorage.setItem(AUTONEXT_PREF_KEY, on ? 'on' : 'off')
+  } catch {
+    // Tidak tersimpan pun tidak apa-apa.
+  }
+}
+
+/**
+ * Dikirim lewat state navigasi saat pindah otomatis ke video berikutnya,
+ * supaya video itu langsung diputar. Membuka link biasa tidak memutar
+ * otomatis.
+ */
+interface WatchNavState {
+  autoplay?: boolean
+}
+
 const statusText: Record<string, string> = {
   PENDING_UPLOAD: 'File video belum selesai diunggah.',
   UPLOADED: 'Video sedang menunggu diproses.',
@@ -56,7 +87,17 @@ interface LoadResult {
 
 export function WatchPage() {
   const { id = '' } = useParams()
+  const [params] = useSearchParams()
+  const listId = params.get('list')
   const { status: authStatus, user } = useAuth()
+  // Antrean playlist ada di sini (bukan di WatchView) supaya tidak dimuat
+  // ulang setiap kali pindah ke video berikutnya.
+  const queue = usePlaylistQueue(listId, id)
+  const [autoNext, setAutoNext] = useState(readAutoNextPref)
+  const changeAutoNext = (on: boolean) => {
+    setAutoNext(on)
+    saveAutoNextPref(on)
+  }
   const [reloads, setReloads] = useState(0)
   // Hasil disimpan bersama key-nya. Jika key sudah berganti (pindah video,
   // login/logout), hasil lama diabaikan dan halaman tampil "Memuat…".
@@ -101,12 +142,37 @@ export function WatchPage() {
   }
   // key: state di dalam (jumlah like, dan lain-lain) diulang dari awal saat
   // pindah ke video lain.
-  return <WatchView key={detail.video.id} detail={detail} loggedIn={authStatus === 'authenticated'} user={user} />
+  return (
+    <WatchView
+      key={detail.video.id}
+      detail={detail}
+      loggedIn={authStatus === 'authenticated'}
+      user={user}
+      playlist={listId && queue ? { id: listId, queue, autoNext, onAutoNextChange: changeAutoNext } : null}
+    />
+  )
 }
 
-function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: boolean; user: Profile | null }) {
+interface PlaylistContext {
+  id: string
+  queue: PlaylistQueue
+  autoNext: boolean
+  onAutoNextChange: (on: boolean) => void
+}
+
+interface WatchViewProps {
+  detail: VideoDetail
+  loggedIn: boolean
+  user: Profile | null
+  /** Ada jika video dibuka dari playlist (?list=...). */
+  playlist: PlaylistContext | null
+}
+
+function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
   const { video } = detail
   const location = useLocation()
+  const navigate = useNavigate()
+  const autoplay = (location.state as WatchNavState | null)?.autoplay === true
   const playable = video.status === 'READY' && Boolean(video.hls_url)
   const videoRef = useRef<HTMLVideoElement>(null)
   const layerRef = useRef<DanmakuLayerHandle>(null)
@@ -155,6 +221,17 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
     [video.id, loggedIn],
   )
 
+  // Video selesai: lanjut ke video berikutnya di playlist jika Putar
+  // otomatis aktif. Dibaca dari ref supaya HlsPlayer tidak perlu dibuat ulang.
+  const nextPath = playlist?.autoNext && playlist.queue.next ? watchInListPath(playlist.queue.next.video.id, playlist.id) : null
+  const nextRef = useRef(nextPath)
+  useLayoutEffect(() => {
+    nextRef.current = nextPath
+  })
+  const onEnded = useCallback(() => {
+    if (nextRef.current) navigate(nextRef.current, { state: { autoplay: true } satisfies WatchNavState })
+  }, [navigate])
+
   const toggleLike = async () => {
     const want = !like.liked
     const before = like
@@ -178,6 +255,17 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
   const loginLink = `/login?next=${encodeURIComponent(location.pathname)}`
   const likeLabel = like.liked ? 'Batal suka' : 'Suka'
 
+  // Satu elemen dipasang di dua tempat; CSS menyembunyikan salah satunya
+  // sesuai lebar halaman tonton.
+  const playlistPanel = playlist && (
+    <PlaylistPanel
+      playlistId={playlist.id}
+      queue={playlist.queue}
+      autoNext={playlist.autoNext}
+      onAutoNextChange={playlist.onAutoNextChange}
+    />
+  )
+
   return (
     <div className="watch">
       <div className="watch-main">
@@ -189,6 +277,8 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
               startAt={startAt}
               onFirstPlay={onFirstPlay}
               onProgress={onProgress}
+              onEnded={onEnded}
+              autoPlay={autoplay}
               videoRef={videoRef}
             >
               <DanmakuLayer ref={layerRef} videoRef={videoRef} items={danmaku.list} visible={showDanmaku} />
@@ -260,10 +350,15 @@ function WatchView({ detail, loggedIn, user }: { detail: VideoDetail; loggedIn: 
           <p className="description">{video.description || 'Tidak ada deskripsi.'}</p>
         </section>
 
+        {/* Layar sempit: kolom kanan turun ke bawah komentar, jadi panel
+            playlist ditampilkan di sini (lihat .watch-playlist-* di CSS). */}
+        {playlistPanel && <div className="watch-playlist-inline">{playlistPanel}</div>}
+
         {playable && <CommentSection videoId={video.id} videoOwnerId={video.owner_id} initialCount={video.comment_count} user={user} />}
       </div>
 
       <aside className="watch-side">
+        {playlistPanel && <div className="watch-playlist-side">{playlistPanel}</div>}
         {playable && <DanmakuList items={danmaku.list} onSeek={seekTo} />}
         <h2 className="side-title">Berikutnya</h2>
         <UpNext currentId={video.id} />

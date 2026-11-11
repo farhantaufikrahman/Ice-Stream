@@ -12,6 +12,7 @@ import { PlaylistFormDialog } from '../components/playlist/PlaylistFormDialog'
 import { Thumbnail } from '../components/Thumbnail'
 import { usePagedList } from '../hooks/usePagedList'
 import { formatCount, formatDuration, timeAgo } from '../lib/format'
+import { watchInListPath } from '../lib/playlistQueue'
 
 interface Loaded {
   key: string
@@ -35,6 +36,8 @@ export function PlaylistPage() {
   const [reloads, setReloads] = useState(0)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [dialog, setDialog] = useState<'edit' | 'delete' | null>(null)
+  // Video pertama di daftar, untuk tombol "Putar semua".
+  const [firstVideoId, setFirstVideoId] = useState<string | null>(null)
   // Sama seperti useChannel: tunggu pengecekan login selesai supaya
   // playlist PRIVATE milik sendiri ikut membawa access token.
   const key = `${id}|${user?.id ?? ''}|${reloads}`
@@ -76,11 +79,18 @@ export function PlaylistPage() {
 
   return (
     <div className="narrow-page playlist-page">
-      <PlaylistHead playlist={playlist} isOwn={isOwn} onEdit={() => setDialog('edit')} onDelete={() => setDialog('delete')} />
+      <PlaylistHead
+        playlist={playlist}
+        isOwn={isOwn}
+        firstVideoId={firstVideoId}
+        onEdit={() => setDialog('edit')}
+        onDelete={() => setDialog('delete')}
+      />
       <PlaylistVideos
         key={key}
         playlistId={playlist.id}
         isOwn={isOwn}
+        onFirstChange={setFirstVideoId}
         onRemoved={() => setPlaylist((p) => ({ ...p, video_count: Math.max(0, p.video_count - 1) }))}
       />
 
@@ -109,11 +119,12 @@ export function PlaylistPage() {
 interface HeadProps {
   playlist: Playlist
   isOwn: boolean
+  firstVideoId: string | null
   onEdit: () => void
   onDelete: () => void
 }
 
-function PlaylistHead({ playlist, isOwn, onEdit, onDelete }: HeadProps) {
+function PlaylistHead({ playlist, isOwn, firstVideoId, onEdit, onDelete }: HeadProps) {
   const owner = playlist.owner
   const ownerName = owner?.display_name || owner?.username || 'Kanal'
   return (
@@ -145,16 +156,23 @@ function PlaylistHead({ playlist, isOwn, onEdit, onDelete }: HeadProps) {
           {formatCount(playlist.video_count)} video · Diperbarui {timeAgo(playlist.updated_at)}
         </span>
         {playlist.description && <p className="description">{playlist.description}</p>}
-        {isOwn && (
-          <div className="row-actions playlist-actions">
-            <button type="button" className="btn btn-small" onClick={onEdit}>
-              Edit
-            </button>
-            <button type="button" className="btn btn-small btn-danger-ghost" onClick={onDelete}>
-              Hapus
-            </button>
-          </div>
-        )}
+        <div className="row-actions playlist-actions">
+          {firstVideoId && (
+            <Link to={watchInListPath(firstVideoId, playlist.id)} className="btn btn-primary btn-small">
+              <PlayIcon /> Putar semua
+            </Link>
+          )}
+          {isOwn && (
+            <>
+              <button type="button" className="btn btn-small" onClick={onEdit}>
+                Edit
+              </button>
+              <button type="button" className="btn btn-small btn-danger-ghost" onClick={onDelete}>
+                Hapus
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </section>
   )
@@ -163,14 +181,20 @@ function PlaylistHead({ playlist, isOwn, onEdit, onDelete }: HeadProps) {
 interface VideosProps {
   playlistId: string
   isOwn: boolean
+  /** Melaporkan video pertama (null jika kosong) untuk tombol Putar semua. */
+  onFirstChange: (videoId: string | null) => void
   onRemoved: () => void
 }
 
-function PlaylistVideos({ playlistId, isOwn, onRemoved }: VideosProps) {
+function PlaylistVideos({ playlistId, isOwn, onFirstChange, onRemoved }: VideosProps) {
   const list = usePagedList<PlaylistEntry>((token, signal) =>
     listPlaylistVideos(playlistId, token, signal).then((p) => ({ items: p.entries, next: p.next_page_token })),
   )
   const [error, setError] = useState<string | null>(null)
+  const firstId = list.items[0]?.video.id ?? null
+  useEffect(() => {
+    onFirstChange(firstId)
+  }, [firstId, onFirstChange])
 
   const remove = async (videoId: string) => {
     setError(null)
@@ -190,7 +214,12 @@ function PlaylistVideos({ playlistId, isOwn, onRemoved }: VideosProps) {
         <ol className="history-list">
           {list.items.map((e, i) => (
             <li key={e.video.id}>
-              <PlaylistRow index={i + 1} entry={e} onRemove={isOwn ? () => remove(e.video.id) : undefined} />
+              <PlaylistRow
+                index={i + 1}
+                entry={e}
+                href={watchInListPath(e.video.id, playlistId)}
+                onRemove={isOwn ? () => remove(e.video.id) : undefined}
+              />
             </li>
           ))}
         </ol>
@@ -214,7 +243,15 @@ function PlaylistVideos({ playlistId, isOwn, onRemoved }: VideosProps) {
   )
 }
 
-function PlaylistRow({ index, entry, onRemove }: { index: number; entry: PlaylistEntry; onRemove?: () => Promise<void> }) {
+interface RowProps {
+  index: number
+  entry: PlaylistEntry
+  /** Membuka video di dalam playlist (/watch/:id?list=...). */
+  href: string
+  onRemove?: () => Promise<void>
+}
+
+function PlaylistRow({ index, entry, href, onRemove }: RowProps) {
   const [busy, setBusy] = useState(false)
   const { video } = entry
   const owner = video.owner?.display_name || video.owner?.username || 'Kanal'
@@ -232,12 +269,12 @@ function PlaylistRow({ index, entry, onRemove }: { index: number; entry: Playlis
       <span className="playlist-index" aria-hidden="true">
         {index}
       </span>
-      <Link to={`/watch/${video.id}`} className="history-thumb" aria-label={video.title}>
+      <Link to={href} className="history-thumb" aria-label={video.title}>
         <Thumbnail url={video.thumbnail_url} title={video.title} />
         {video.duration_ms ? <span className="duration">{formatDuration(video.duration_ms)}</span> : null}
       </Link>
       <div className="history-text">
-        <Link to={`/watch/${video.id}`} className="history-title">
+        <Link to={href} className="history-title">
           {video.title}
         </Link>
         <span className="muted small">
@@ -260,5 +297,13 @@ function PlaylistRow({ index, entry, onRemove }: { index: number; entry: Playlis
         </button>
       )}
     </div>
+  )
+}
+
+function PlayIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M7 4.5v15l13-7.5z" />
+    </svg>
   )
 }
