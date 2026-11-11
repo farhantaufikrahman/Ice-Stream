@@ -23,6 +23,7 @@ resources:
   - oracle/statefulset.yaml
   # Penyimpanan file video (RustFS, S3-compatible)
   - storage/service.yaml
+  - storage/service-public.yaml
   - storage/statefulset.yaml
   - storage/httproute.yaml
   # Antrean event antar service (NATS JetStream)

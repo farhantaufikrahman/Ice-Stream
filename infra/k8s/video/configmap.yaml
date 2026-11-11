@@ -21,7 +21,8 @@ data:
   # Dipakai VideoService sendiri (nama Service RustFS di dalam cluster).
   STORAGE_ENDPOINT: http://storage:9000
   # Dipakai di URL upload/putar yang dibuka browser. Untuk sekarang lewat
-  # port-forward (make k8s-forward-storage), jadi alamatnya localhost.
+  # Service storage-public (storage/service-public.yaml), yang dibuka Docker
+  # Desktop di localhost PC.
   STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
   STORAGE_REGION: us-east-1
   STORAGE_BUCKET: videos
