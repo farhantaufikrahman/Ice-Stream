@@ -4,6 +4,7 @@
 import { API_BASE, apiRequest, setAccessToken } from './client'
 import type {
   AccessToken,
+  AppNotification,
   ChannelDetail,
   ChannelPage,
   Comment,
@@ -12,7 +13,10 @@ import type {
   Danmaku,
   DanmakuMode,
   DanmakuPage,
+  HistoryPage,
   LikeResult,
+  MarkReadResult,
+  NotificationPage,
   Profile,
   SubscriptionResult,
   Video,
@@ -275,10 +279,50 @@ export async function removeAvatar(): Promise<Profile> {
   return body.user
 }
 
-const PAGE_SIZE = 24
+// ---------- Notifikasi dan riwayat tonton (langkah 17f) ----------
 
-function pageQuery(pageToken: string): string {
-  const params = new URLSearchParams({ page_size: String(PAGE_SIZE) })
+/** Jumlah notifikasi belum dibaca, 0 sampai 100 (server berhenti menghitung di 100). */
+export async function getUnreadCount(signal?: AbortSignal): Promise<number> {
+  const body = await apiRequest<{ unread_count: number }>('/me/notifications/unread-count', { auth: 'required', signal })
+  return body.unread_count
+}
+
+/** Notifikasi terbaru lebih dulu. */
+export function listNotifications(pageToken: string, signal?: AbortSignal): Promise<NotificationPage> {
+  return apiRequest<NotificationPage>(`/me/notifications?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
+}
+
+/** Tandai satu notifikasi sudah dibaca. Aman diulang. */
+export function markNotificationRead(id: AppNotification['id']): Promise<MarkReadResult> {
+  return apiRequest<MarkReadResult>(`/me/notifications/${encodeURIComponent(id)}/read`, { method: 'POST', auth: 'required' })
+}
+
+export function markAllNotificationsRead(): Promise<MarkReadResult> {
+  return apiRequest<MarkReadResult>('/me/notifications/read-all', { method: 'POST', auth: 'required' })
+}
+
+/** Riwayat tonton: video yang terakhir ditonton lebih dulu. */
+export function listHistory(pageToken: string, signal?: AbortSignal): Promise<HistoryPage> {
+  return apiRequest<HistoryPage>(`/me/history?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
+}
+
+/** Menghapus satu video dari riwayat (204, juga jika memang tidak ada). */
+export async function deleteHistoryEntry(videoId: string): Promise<void> {
+  await apiRequest(`/me/history/${encodeURIComponent(videoId)}`, { method: 'DELETE', auth: 'required' })
+}
+
+/** Menghapus seluruh riwayat, mengembalikan jumlah video yang dihapus. */
+export async function clearHistory(): Promise<number> {
+  const body = await apiRequest<{ deleted: number }>('/me/history', { method: 'DELETE', auth: 'required' })
+  return body.deleted
+}
+
+const PAGE_SIZE = 24
+/** Notifikasi dan riwayat: batas server 50, 20 per halaman cukup untuk satu layar. */
+const LIST_PAGE_SIZE = 20
+
+function pageQuery(pageToken: string, pageSize = PAGE_SIZE): string {
+  const params = new URLSearchParams({ page_size: String(pageSize) })
   if (pageToken) {
     params.set('page_token', pageToken)
   }

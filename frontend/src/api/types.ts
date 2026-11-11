@@ -155,3 +155,38 @@ export interface ChannelPage {
   channels: Profile[]
   next_page_token: string
 }
+
+// ---------- Notifikasi dan riwayat tonton (langkah 17f) ----------
+
+export interface AppNotification {
+  id: string
+  /** Untuk sekarang selalu "NEW_VIDEO": kanal yang diikuti mengunggah video. */
+  kind: string
+  video: Video
+  read: boolean
+  read_at?: string
+  created_at: string
+}
+
+export interface NotificationPage {
+  notifications: AppNotification[]
+  next_page_token: string
+}
+
+/** Jawaban POST .../read dan .../read-all. */
+export interface MarkReadResult {
+  updated: number
+  unread_count: number
+}
+
+export interface HistoryEntry {
+  video: Video
+  /** Posisi terakhir yang ditonton. Dibagi video.duration_ms = panjang garis progres. */
+  position_ms: number
+  watched_at: string
+}
+
+export interface HistoryPage {
+  entries: HistoryEntry[]
+  next_page_token: string
+}
