@@ -64,9 +64,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Hanya dipakai saat sudah login: tamu tidak punya profil untuk diganti.
+  const updateUser = useCallback((profile: Profile) => {
+    // Email hanya ada di beberapa jawaban server: jika kosong, pakai yang lama.
+    setUser((current) => (current && current.id === profile.id ? { ...profile, email: profile.email ?? current.email } : current))
+  }, [])
+
   const value = useMemo<AuthState>(
-    () => ({ status, user, login, register, logout }),
-    [status, user, login, register, logout],
+    () => ({ status, user, login, register, logout, updateUser }),
+    [status, user, login, register, logout, updateUser],
   )
   return <AuthContext value={value}>{children}</AuthContext>
 }

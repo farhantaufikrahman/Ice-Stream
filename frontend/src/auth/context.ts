@@ -15,6 +15,8 @@ export interface AuthState {
   login: (loginName: string, password: string) => Promise<void>
   register: (input: RegisterInput) => Promise<void>
   logout: () => Promise<void>
+  /** Mengganti profil yang tersimpan, misalnya setelah nama atau foto diubah. */
+  updateUser: (profile: Profile) => void
 }
 
 export const AuthContext = createContext<AuthState | null>(null)

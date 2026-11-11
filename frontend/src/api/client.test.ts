@@ -98,6 +98,19 @@ describe('apiRequest', () => {
   })
 })
 
+describe('apiRequest dengan file', () => {
+  it('mengirim Blob apa adanya dengan Content-Type file, bukan JSON', async () => {
+    setAccessToken('tok')
+    fetchMock.mockResolvedValue(json(200, { user: {} }))
+    const file = new Blob(['isi gambar'], { type: 'image/png' })
+    await apiRequest('/me/avatar', { method: 'PUT', body: file, auth: 'required' })
+    const init = fetchMock.mock.calls[0][1]
+    expect(init?.body).toBe(file)
+    expect(new Headers(init?.headers).get('Content-Type')).toBe('image/png')
+    expect(authHeader(0)).toBe('Bearer tok')
+  })
+})
+
 describe('errorMessage untuk unggahan', () => {
   it('memakai pesan UploadError apa adanya', async () => {
     const { UploadError } = await import('./upload')

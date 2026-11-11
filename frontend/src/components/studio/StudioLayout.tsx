@@ -24,6 +24,9 @@ export function StudioLayout({ children }: { children: ReactNode }) {
         <NavLink to="/studio" end className="studio-link">
           Konten
         </NavLink>
+        <NavLink to="/studio/settings" className="studio-link">
+          Pengaturan
+        </NavLink>
         <Link to="/" className="studio-link">
           Kembali ke beranda
         </Link>

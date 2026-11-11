@@ -1762,6 +1762,64 @@ a.channel-name:hover {
   white-space: nowrap;
 }
 
+/* ---------- Pengaturan profil (langkah 17e) ---------- */
+.settings-avatar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+}
+.settings-avatar-img {
+  display: flex;
+  border-radius: 50%;
+  transition: opacity 0.2s;
+}
+.settings-avatar-img.is-busy {
+  opacity: 0.55;
+}
+.settings-avatar-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-avatar-text p {
+  margin: 0;
+  line-height: 1.6;
+}
+.settings-avatar-actions {
+  justify-content: flex-start;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 720px;
+}
+.settings-form > p {
+  margin: -8px 0 0;
+}
+.settings-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.settings-facts dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.settings-facts dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+}
+.form-actions .accent {
+  align-self: center;
+  margin-right: auto;
+}
+
 /* ---------- Layar kecil (HP) ---------- */
 @media (max-width: 640px) {
   .search {

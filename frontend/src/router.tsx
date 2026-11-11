@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SearchPage } from './pages/SearchPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { StudioPage } from './pages/StudioPage'
 import { UploadPage } from './pages/UploadPage'
 import { WatchPage } from './pages/WatchPage'
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           { path: '/studio', element: <StudioPage /> },
+          { path: '/studio/settings', element: <SettingsPage /> },
           { path: '/upload', element: <UploadPage /> },
         ],
       },

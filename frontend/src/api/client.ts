@@ -111,7 +111,10 @@ export type AuthMode = 'none' | 'optional' | 'required'
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  /** Dikirim sebagai JSON. */
+  /**
+   * Dikirim sebagai JSON. Pengecualian: Blob/File (misalnya foto profil)
+   * dikirim apa adanya, dengan Content-Type dari file itu.
+   */
   body?: unknown
   auth?: AuthMode
   signal?: AbortSignal
@@ -159,7 +162,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
 function send(path: string, options: RequestOptions, token: string | null): Promise<Response> {
   const headers: Record<string, string> = {}
-  if (options.body !== undefined) {
+  const raw = options.body instanceof Blob ? options.body : null
+  if (raw) {
+    if (raw.type) headers['Content-Type'] = raw.type
+  } else if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
   if (token) {
@@ -168,7 +174,7 @@ function send(path: string, options: RequestOptions, token: string | null): Prom
   return fetch(`${API_BASE}${path}`, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: raw ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     signal: options.signal,
     credentials: options.withCredentials ? 'include' : 'same-origin',
     keepalive: options.keepalive,
