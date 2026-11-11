@@ -1,0 +1,141 @@
+# CI Ice-Stream: memeriksa setiap Pull Request (dan setiap push ke dev/main)
+# sebelum di-merge. Tidak ada yang di-push ke Docker Hub atau di-deploy;
+# workflow ini hanya menjawab "apakah kode ini aman di-merge?".
+#
+# Dokumentasi: https://docs.github.com/en/actions
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+# Push baru ke PR yang sama membatalkan run lama yang belum selesai.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Token bawaan hanya boleh membaca isi repo.
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          # Versi Go dibaca dari baris "go" di go.mod (sama dengan laptop).
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Format (gofmt)
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "File berikut belum dirapikan. Jalankan: make fmt"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go.mod dan go.sum rapi
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Vet
+        run: go vet ./...
+      - name: Test (dengan race detector)
+        run: go test -race -count=1 ./...
+      - name: Build semua command
+        run: go build ./...
+
+  proto:
+    name: Proto (buf)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      # Versi plugin sama dengan yang tertulis di kepala file gen/*.pb.go.
+      - name: Pasang buf dan plugin protoc
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@v1.75.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+      - name: Lint .proto
+        run: buf lint
+      - name: Kode gen/ sesuai dengan .proto
+        run: |
+          buf generate
+          if ! git diff --exit-code -- gen/ || [ -n "$(git status --porcelain -- gen/)" ]; then
+            echo "Folder gen/ tidak sesuai dengan file .proto. Jalankan: make proto, lalu commit hasilnya."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend (React)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          # Sama dengan image build di frontend/Dockerfile.
+          node-version: 22.22.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Lint (oxlint)
+        run: npm run lint
+      - name: Test (vitest)
+        run: npm test
+      - name: Build (tsc + vite)
+        run: npm run build
+
+  images:
+    name: Image ${{ matrix.name }}
+    # Build image hanya jika tes lolos, supaya menit CI tidak terbuang.
+    needs: [backend, proto, frontend]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, context: backend, target: api }
+          - { name: auth, context: backend, target: auth }
+          - { name: video, context: backend, target: video }
+          - { name: transcoder, context: backend, target: transcoder }
+          - { name: migrations, context: backend/migrations, target: "" }
+          - { name: web, context: frontend, target: "" }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          push: false
+          tags: ice-stream-${{ matrix.name }}:ci
+          # Cache layer di GitHub, satu scope per image supaya tidak saling
+          # menimpa (https://docs.docker.com/build/cache/backends/gha/).
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
