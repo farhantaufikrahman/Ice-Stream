@@ -37,16 +37,16 @@ run: ## Jalankan API gateway
 
 # Bucket dan MEDIA_PUBLIC_URL diisi khusus di sini, karena .env dipakai
 # bersama VideoService (bucket videos). Foto profil ada di bucket images.
-run-auth: ## Jalankan AuthService + UserService (gRPC) di port 50051; butuh make k8s-forward-db dan k8s-forward-storage
+run-auth: ## Jalankan AuthService + UserService (gRPC) di port 50051; butuh make k8s-forward-db
 	STORAGE_BUCKET=images MEDIA_PUBLIC_URL= go run ./cmd/auth
 
 # $$VIDEO_DB_PASSWORD (dua tanda $) dibaca oleh shell dari .env, bukan oleh
 # make, jadi password tidak ikut tercetak di terminal.
-run-video: ## Jalankan VideoService (gRPC) di port 50052; butuh make k8s-forward-db dan k8s-forward-storage
+run-video: ## Jalankan VideoService (gRPC) di port 50052; butuh make k8s-forward-db
 	DB_USER=video_svc DB_PASSWORD="$$VIDEO_DB_PASSWORD" GRPC_PORT=50052 go run ./cmd/video
 
 # HTTP_PORT=8081 supaya tidak bentrok dengan gateway (make run) di 8080.
-run-transcoder: ## Jalankan transcoder; butuh ffmpeg terpasang, make k8s-forward-nats, dan make k8s-forward-storage
+run-transcoder: ## Jalankan transcoder; butuh ffmpeg terpasang dan make k8s-forward-nats
 	HTTP_PORT=8081 go run ./cmd/transcoder
 
 proto: ## Buat ulang kode Go dari file .proto (folder gen/)
@@ -147,8 +147,10 @@ k8s-migrate-video: ## Buat user VIDEO_SVC + tabel videos di Kubernetes lalu tamp
 	kubectl -n ice-stream logs job/migrate-video -c bootstrap
 	kubectl -n ice-stream logs job/migrate-video -c video
 
-k8s-forward-storage: ## Buka RustFS di localhost:9000 (API S3) dan localhost:9001 (console)
-	kubectl -n ice-stream port-forward svc/storage 9000:9000 9001:9001
+# API S3 (localhost:9000) sudah selalu terbuka lewat Service storage-public,
+# jadi yang di-forward di sini hanya console.
+k8s-forward-storage: ## Buka console RustFS di localhost:9001 (API S3 sudah ada di localhost:9000)
+	kubectl -n ice-stream port-forward svc/storage 9001:9001
 
 k8s-forward-nats: ## Buka NATS di localhost:4222 (client) dan localhost:8222 (pemantauan)
 	kubectl -n ice-stream port-forward svc/nats 4222:4222 8222:8222
