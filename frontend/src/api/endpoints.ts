@@ -373,9 +373,12 @@ export async function deletePlaylist(id: string): Promise<void> {
   await apiRequest(`/playlists/${encodeURIComponent(id)}`, { method: 'DELETE', auth: 'required' })
 }
 
-/** Isi playlist sesuai urutan ditambahkan. */
-export function listPlaylistVideos(id: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistVideoPage> {
-  return apiRequest<PlaylistVideoPage>(`/playlists/${encodeURIComponent(id)}/videos?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, {
+/**
+ * Isi playlist sesuai urutan ditambahkan. pageSize besar (maksimal 50)
+ * dipakai panel playlist di halaman tonton, supaya lebih sedikit request.
+ */
+export function listPlaylistVideos(id: string, pageToken: string, signal?: AbortSignal, pageSize = LIST_PAGE_SIZE): Promise<PlaylistVideoPage> {
+  return apiRequest<PlaylistVideoPage>(`/playlists/${encodeURIComponent(id)}/videos?${pageQuery(pageToken, pageSize)}`, {
     auth: 'optional',
     signal,
   })
@@ -407,8 +410,8 @@ export function listChannelPlaylists(username: string, pageToken: string, signal
 const PAGE_SIZE = 24
 /** Notifikasi dan riwayat: batas server 50, 20 per halaman cukup untuk satu layar. */
 const LIST_PAGE_SIZE = 20
-/** Batas page_size dari server. Dipakai dialog Simpan supaya biasanya semua playlist muat satu halaman. */
-const MAX_PAGE_SIZE = 50
+/** Batas page_size dari server. Dipakai dialog Simpan dan panel playlist supaya request lebih sedikit. */
+export const MAX_PAGE_SIZE = 50
 
 function pageQuery(pageToken: string, pageSize = PAGE_SIZE): string {
   const params = new URLSearchParams({ page_size: String(pageSize) })

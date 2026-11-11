@@ -409,6 +409,22 @@ a:focus-visible {
   flex-wrap: wrap;
   gap: 28px;
   align-items: flex-start;
+  /* Dipakai @container watch di bawah untuk memindah panel playlist. */
+  container: watch / inline-size;
+}
+/* Panel playlist ada di dua tempat. Lebar lega: di kolom kanan.
+   Lebar sempit (kolom kanan turun ke bawah, yaitu saat .watch kurang
+   dari 640 + 340 + 28 = 1008px): di bawah info video, sebelum komentar. */
+.watch-playlist-inline {
+  display: none;
+}
+@container watch (max-width: 1007.98px) {
+  .watch-playlist-inline {
+    display: block;
+  }
+  .watch-playlist-side {
+    display: none;
+  }
 }
 .watch-main {
   flex: 999 1 640px;
@@ -2144,6 +2160,106 @@ a.channel-name:hover {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 0.85rem;
+}
+
+/* Panel playlist di halaman tonton (langkah 22a) */
+.playlist-panel {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.playlist-panel > .error-box,
+.playlist-panel > p {
+  margin: 14px 16px;
+}
+.playlist-panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.playlist-panel-title {
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.playlist-panel-title:hover {
+  color: var(--accent-text);
+}
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.toggle-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--mint);
+}
+.playlist-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.playlist-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 12px;
+  color: var(--fg);
+}
+.playlist-panel-row:hover {
+  color: var(--fg);
+  background: var(--raised);
+}
+.playlist-panel-row.is-current {
+  background: var(--chip-mint);
+}
+.playlist-panel-row.is-current .video-card-title {
+  color: var(--accent-text);
+}
+.playlist-panel-index {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.playlist-panel-row.is-current .playlist-panel-index {
+  color: var(--accent-text);
+}
+.playlist-panel-thumb {
+  position: relative;
+  flex: none;
+  width: 112px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.playlist-panel-thumb .duration {
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+}
+.playlist-panel-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.playlist-actions .btn svg {
+  margin-right: 2px;
 }
 
 /* ---------- Layar kecil (HP) ---------- */

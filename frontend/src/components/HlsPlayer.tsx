@@ -10,6 +10,14 @@ interface Props {
   onFirstPlay?: () => void
   /** Dipanggil berkala selama diputar, saat dijeda, dan saat player ditutup. */
   onProgress?: (seconds: number) => void
+  /** Dipanggil saat video selesai diputar sampai habis (putar playlist berurutan). */
+  onEnded?: () => void
+  /**
+   * Langsung putar begitu siap, misalnya video berikutnya di playlist.
+   * Browser bisa menolak autoplay (kebijakan autoplay); jika ditolak,
+   * video tetap tampil dan penonton cukup menekan tombol play.
+   */
+  autoPlay?: boolean
   /**
    * Ref dari luar untuk elemen <video>, misalnya untuk lapisan danmaku yang
    * perlu membaca posisi video. Jika kosong, player memakai ref sendiri.
@@ -35,16 +43,26 @@ const PROGRESS_INTERVAL_MS = 15_000
  * kita tidak butuh subtitle, multi-audio, atau DRM (ukurannya jauh lebih
  * kecil); H.264 + AAC hasil transcoder (langkah 6) tetap didukung.
  */
-export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress, videoRef: outerRef, children }: Props) {
+export function HlsPlayer({
+  src,
+  poster,
+  startAt = 0,
+  onFirstPlay,
+  onProgress,
+  onEnded,
+  autoPlay = false,
+  videoRef: outerRef,
+  children,
+}: Props) {
   const ownRef = useRef<HTMLVideoElement>(null)
   const videoRef = outerRef ?? ownRef
   const [error, setError] = useState<string | null>(null)
 
   // Callback terbaru disimpan di ref supaya player tidak dibuat ulang setiap
   // kali komponen induk render.
-  const callbacks = useRef({ onFirstPlay, onProgress })
+  const callbacks = useRef({ onFirstPlay, onProgress, onEnded })
   useLayoutEffect(() => {
-    callbacks.current = { onFirstPlay, onProgress }
+    callbacks.current = { onFirstPlay, onProgress, onEnded }
   })
 
   // startAt hanya dibaca saat src dimuat. Perubahan setelahnya (misalnya
@@ -91,14 +109,18 @@ export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress, v
       clearInterval(timer)
       report()
     }
+    const onEnd = () => {
+      onStop()
+      callbacks.current.onEnded?.()
+    }
 
     video.addEventListener('play', onPlay)
     video.addEventListener('pause', onStop)
-    video.addEventListener('ended', onStop)
+    video.addEventListener('ended', onEnd)
     return () => {
       video.removeEventListener('play', onPlay)
       video.removeEventListener('pause', onStop)
-      video.removeEventListener('ended', onStop)
+      video.removeEventListener('ended', onEnd)
       clearInterval(timer)
       // Pindah halaman saat video masih berjalan: simpan posisi terakhir.
       if (playing) report()
@@ -167,7 +189,7 @@ export function HlsPlayer({ src, poster, startAt = 0, onFirstPlay, onProgress, v
 
   return (
     <div className="player">
-      <video ref={videoRef} controls playsInline poster={poster} preload="metadata" />
+      <video ref={videoRef} controls playsInline poster={poster} preload="metadata" autoPlay={autoPlay} />
       {children}
       {error && <div className="player-error">{error}</div>}
     </div>
