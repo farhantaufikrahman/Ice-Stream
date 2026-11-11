@@ -2,7 +2,16 @@
 // Daftar lengkap route ada di backend/internal/httpserver/router.go.
 
 import { apiRequest, setAccessToken } from './client'
-import type { AccessToken, LikeResult, Profile, VideoDetail, VideoPage, ViewResult } from './types'
+import type {
+  AccessToken,
+  CreateUploadResult,
+  LikeResult,
+  Profile,
+  Video,
+  VideoDetail,
+  VideoPage,
+  ViewResult,
+} from './types'
 
 // ---------- Auth ----------
 
@@ -77,6 +86,52 @@ export function saveWatchProgress(id: string, positionMs: number, keepalive = fa
     auth: 'required',
     keepalive,
   })
+}
+
+// ---------- Unggah dan Studio (langkah 17b) ----------
+
+export interface NewVideoInput {
+  title: string
+  description: string
+  content_type: string
+  size_bytes: number
+}
+
+/**
+ * Langkah 1 unggah: mencatat video baru (status PENDING_UPLOAD) dan
+ * meminta URL presigned untuk mengirim file langsung ke storage.
+ */
+export function createUpload(input: NewVideoInput): Promise<CreateUploadResult> {
+  return apiRequest<CreateUploadResult>('/videos', { method: 'POST', body: input, auth: 'required' })
+}
+
+/** Langkah 3 unggah: memberi tahu server file sudah lengkap, lalu transcoding dimulai. */
+export async function completeUpload(id: string): Promise<Video> {
+  const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    auth: 'required',
+  })
+  return body.video
+}
+
+/** Semua video milik user yang login, termasuk yang belum READY. */
+export function listMyVideos(pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
+  return apiRequest<VideoPage>(`/me/videos?${pageQuery(pageToken)}`, { auth: 'required', signal })
+}
+
+/** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */
+export async function updateVideo(id: string, changes: { title?: string; description?: string }): Promise<Video> {
+  const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: changes,
+    auth: 'required',
+  })
+  return body.video
+}
+
+/** Server menjawab 409 jika video sedang menunggu atau menjalani transcoding. */
+export async function deleteVideo(id: string): Promise<void> {
+  await apiRequest(`/videos/${encodeURIComponent(id)}`, { method: 'DELETE', auth: 'required' })
 }
 
 const PAGE_SIZE = 24

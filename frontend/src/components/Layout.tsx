@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from './Avatar'
+import { UploadIcon } from './studio/StudioLayout'
 import { LogoMark, Wordmark } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -52,6 +53,12 @@ function Header() {
         </button>
       </form>
       <div className="header-actions">
+        {status === 'authenticated' && (
+          <Link to="/upload" className="btn btn-primary" aria-label="Unggah video">
+            <UploadIcon />
+            <span className="hide-narrow">Unggah</span>
+          </Link>
+        )}
         <ThemeToggle />
         {status === 'authenticated' && user ? (
           <UserMenu name={user.display_name || user.username} avatarUrl={user.avatar_url} onLogout={logout} />
@@ -93,8 +100,10 @@ function UserMenu({ name, avatarUrl, onLogout }: { name: string; avatarUrl: stri
   }
   return (
     <div className="user-menu">
-      <Avatar name={name} url={avatarUrl} size={40} />
-      <span className="user-name">{name}</span>
+      <Link to="/studio" className="user-link" title="Creator Studio">
+        <Avatar name={name} url={avatarUrl} size={40} />
+        <span className="user-name">{name}</span>
+      </Link>
       <button type="button" className="btn btn-ghost" onClick={handleLogout} disabled={busy}>
         Keluar
       </button>
