@@ -44,6 +44,9 @@ type fakeVideoClient struct {
 	lastDeleteV  *videov1.DeleteVideoRequest
 	lastTrending *videov1.ListTrendingVideosRequest
 	lastReport   *videov1.ReportVideoRequest
+	// Langkah 26 (studio_test.go).
+	lastFrame *videov1.ChooseThumbnailFrameRequest
+	lastThumb *videov1.UploadThumbnailRequest
 	// notif berisi request notifikasi terakhir (notification_test.go).
 	notif fakeNotifications
 	// later berisi request Tonton nanti terakhir (watchlater_test.go).
@@ -189,7 +192,7 @@ func TestCreateVideo(t *testing.T) {
 	assert.JSONEq(t, `{
 		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
 		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0,"comment_count":0,"like_count":0,"danmaku_count":0,
-		          "category":"","tags":[]},
+		          "category":"","tags":[],"visibility":"PUBLIC","draft":false,"language":"","custom_thumbnail":false},
 		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
 		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
 	}`, rec.Body.String())
@@ -241,7 +244,8 @@ func TestGetVideo(t *testing.T) {
 		          "hls_url":"http://media.ice-stream.localhost:4000/videos/hls/42/master.m3u8",
 		          "thumbnail_url":"http://media.ice-stream.localhost:4000/videos/hls/42/thumbnail.jpg",
 		          "processed_at":"2026-10-29T04:02:00Z","view_count":5,"comment_count":3,"like_count":0,"danmaku_count":0,
-		          "category":"","tags":[]}
+		          "category":"","tags":[],
+		          "visibility":"PUBLIC","draft":false,"language":"","custom_thumbnail":false}
 	}`, rec.Body.String())
 
 	// Dengan login, viewer_id diisi dari token. Pemilik juga mendapat URL

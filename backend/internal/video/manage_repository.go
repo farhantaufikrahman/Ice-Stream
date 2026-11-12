@@ -13,8 +13,9 @@ import (
 
 // UpdateDetails mengunci baris video (SELECT ... FOR UPDATE), lalu dalam
 // satu transaksi:
-//  1. mengganti title, description, category, tags, updated_at, dan
-//     search_indexed_at;
+//  1. mengganti title, description, category, tags, visibility, draft,
+//     language, updated_at, dan search_indexed_at, lalu mengisi
+//     published_at jika video READY baru pertama kali diterbitkan;
 //  2. menghapus semua kata pencarian lama video ini;
 //  3. menyimpan kata pencarian baru.
 //
@@ -36,10 +37,17 @@ func (r *OracleRepository) UpdateDetails(ctx context.Context, id, ownerID int64,
 		}
 		// Teks kosong disimpan sebagai NULL, sama seperti Create.
 		err = tx.Model(&videoRow{}).Where("id = ?", id).Updates(map[string]any{
-			"title":             d.Title,
-			"description":       nullIfEmpty(d.Description),
-			"category":          nullIfEmpty(d.Category),
-			"tags":              nullIfEmpty(joinTags(d.Tags)),
+			"title":       d.Title,
+			"description": nullIfEmpty(d.Description),
+			"category":    nullIfEmpty(d.Category),
+			"tags":        nullIfEmpty(joinTags(d.Tags)),
+			"visibility":  d.Visibility,
+			"draft":       boolToInt(d.Draft),
+			"language":    nullIfEmpty(d.Language),
+			// Waktu terbit diisi sekali saja: menyembunyikan lalu
+			// menerbitkan ulang tidak membuat video lama naik ke atas feed.
+			"published_at": gorm.Expr("CASE WHEN ? = 0 AND status = ? THEN COALESCE(published_at, ?) ELSE published_at END",
+				boolToInt(d.Draft), StatusReady, now),
 			"updated_at":        now,
 			"search_indexed_at": now,
 		}).Error
@@ -132,4 +140,19 @@ func (r *OracleRepository) MarkPurged(ctx context.Context, id int64, now time.Ti
 		return fmt.Errorf("video %d tidak ada atau belum dihapus", id)
 	}
 	return nil
+}
+
+// SetThumbnailKey mengganti thumbnail_key video milik ownerID. ErrNotFound
+// jika video tidak ada, sudah dihapus, atau bukan milik ownerID.
+func (r *OracleRepository) SetThumbnailKey(ctx context.Context, id, ownerID int64, key string, now time.Time) (Video, error) {
+	res := r.db.WithContext(ctx).Model(&videoRow{}).
+		Where("id = ? AND owner_id = ?", id, ownerID).
+		Updates(map[string]any{"thumbnail_key": key, "updated_at": now})
+	if res.Error != nil {
+		return Video{}, fmt.Errorf("update thumbnail_key: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return Video{}, ErrNotFound
+	}
+	return r.FindByID(ctx, id)
 }

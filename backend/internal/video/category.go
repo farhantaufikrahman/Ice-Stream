@@ -36,6 +36,10 @@ type Details struct {
 	// Category kosong = tanpa kategori.
 	Category string
 	Tags     []string
+	// Langkah 26 (visibility.go).
+	Visibility string
+	Draft      bool
+	Language   string
 }
 
 // FeedFilter membatasi isi feed publik (ListPublic). Field kosong = tidak

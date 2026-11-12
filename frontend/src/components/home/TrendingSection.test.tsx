@@ -24,6 +24,10 @@ function trending(id: string, title: string, recent: number): TrendingVideo {
     danmaku_count: id === '1' ? 1200 : 0,
     category: 'kuliner',
     tags: [],
+    visibility: 'PUBLIC',
+    draft: false,
+    language: '',
+    custom_thumbnail: false,
     owner: { id: '7', username: 'kyrie', display_name: 'Dapur Kyrie', avatar_url: '' },
     recent_views: recent,
   }

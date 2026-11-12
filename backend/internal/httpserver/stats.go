@@ -36,10 +36,18 @@ type channelStatsResponse struct {
 	Daily    []dailyViewsResponse  `json:"daily"`
 	Current  channelTotalsResponse `json:"current"`
 	Previous channelTotalsResponse `json:"previous"`
+	// Langkah 26: video_id yang diminta ("" = seluruh channel), dan
+	// maksimal 10 video dengan tayangan terbanyak dalam periode ini
+	// (selalu array; kosong jika video_id diisi).
+	VideoID   string             `json:"video_id"`
+	TopVideos []topVideoResponse `json:"top_videos"`
 }
 
-// channelStats: GET /api/v1/me/channel-stats?days=28. Wajib login.
-// days boleh 7, 28, atau 90 (VideoService yang memeriksanya).
+// channelStats: GET /api/v1/me/channel-stats?days=28&video_id=42. Wajib
+// login. days boleh 7, 28, atau 90 (VideoService yang memeriksanya).
+// video_id (opsional, langkah 26) membatasi angka ke satu video milik
+// user; 404 jika video itu bukan miliknya. Subscriber baru tetap untuk
+// seluruh channel, karena subscribe tidak terkait satu video.
 //
 // Tayangan, danmaku, dan komentar dari VideoService; subscriber baru dari
 // UserService, dengan batas periode yang dikirim VideoService supaya semua
@@ -58,19 +66,35 @@ func (h *videoHandler) channelStats(c *gin.Context) {
 		}
 		days = n
 	}
+	videoID, ok := videoIDQuery(c)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
-	resp, err := h.client.GetChannelStats(ctx, &videov1.GetChannelStatsRequest{RequesterId: userID, Days: int32(days)})
+	resp, err := h.client.GetChannelStats(ctx, &videov1.GetChannelStatsRequest{RequesterId: userID, Days: int32(days), VideoId: videoID})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
 	body := channelStatsResponse{
-		Days:     days,
-		Daily:    make([]dailyViewsResponse, len(resp.GetDaily())),
-		Current:  toTotalsResponse(resp.GetCurrent()),
-		Previous: toTotalsResponse(resp.GetPrevious()),
+		Days:      days,
+		Daily:     make([]dailyViewsResponse, len(resp.GetDaily())),
+		Current:   toTotalsResponse(resp.GetCurrent()),
+		Previous:  toTotalsResponse(resp.GetPrevious()),
+		TopVideos: make([]topVideoResponse, len(resp.GetTopVideos())),
+	}
+	if videoID > 0 {
+		body.VideoID = strconv.FormatInt(videoID, 10)
+	}
+	for i, v := range resp.GetTopVideos() {
+		body.TopVideos[i] = topVideoResponse{
+			VideoID:      strconv.FormatInt(v.GetVideoId(), 10),
+			Title:        v.GetTitle(),
+			ThumbnailURL: v.GetThumbnailUrl(),
+			Views:        v.GetViews(),
+		}
 	}
 	for i, d := range resp.GetDaily() {
 		body.Daily[i] = dailyViewsResponse{Date: d.GetDate(), Views: d.GetViews()}

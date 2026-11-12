@@ -14,6 +14,8 @@ export interface AuthState {
   user: Profile | null
   login: (loginName: string, password: string) => Promise<void>
   register: (input: RegisterInput) => Promise<void>
+  /** Akhir login Google/GitHub: menukar kode sekali pakai dengan sesi. */
+  loginWithCode: (code: string) => Promise<void>
   logout: () => Promise<void>
   /** Mengganti profil yang tersimpan, misalnya setelah nama atau foto diubah. */
   updateUser: (profile: Profile) => void

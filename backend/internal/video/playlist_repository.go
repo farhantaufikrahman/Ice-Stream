@@ -151,7 +151,7 @@ const playlistStatsSQL = `SELECT playlist_id AS "playlist_id", video_count AS "v
           FROM playlist_items pi
           JOIN videos v ON v.id = pi.video_id
          WHERE pi.playlist_id IN ?
-           AND v.status = ?
+           AND ` + watchableSQLv + `
            AND v.deleted_at IS NULL)
  WHERE rn = 1`
 
@@ -164,7 +164,7 @@ func (r *OracleRepository) PlaylistStats(ctx context.Context, playlistIDs []int6
 		VideoCount   int64   `gorm:"column:video_count"`
 		ThumbnailKey *string `gorm:"column:thumbnail_key"`
 	}
-	if err := r.db.WithContext(ctx).Raw(playlistStatsSQL, playlistIDs, StatusReady).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(playlistStatsSQL, playlistIDs).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("select playlist stats: %w", err)
 	}
 	out := make(map[int64]PlaylistStats, len(rows))
@@ -295,7 +295,7 @@ func (r *OracleRepository) ListPlaylistItems(ctx context.Context, playlistID int
 	q := r.db.WithContext(ctx).Table("playlist_items i").
 		Select(`i.video_id AS "video_id", i.added_at AS "added_at"`).
 		Joins("JOIN videos v ON v.id = i.video_id").
-		Where("i.playlist_id = ? AND v.status = ? AND v.deleted_at IS NULL", playlistID, StatusReady)
+		Where("i.playlist_id = ? AND "+watchableSQLv+" AND v.deleted_at IS NULL", playlistID)
 	if after != nil {
 		q = q.Where("(SYS_EXTRACT_UTC(i.added_at) > SYS_EXTRACT_UTC(?) OR "+
 			"(SYS_EXTRACT_UTC(i.added_at) = SYS_EXTRACT_UTC(?) AND i.video_id > ?))",

@@ -29,3 +29,9 @@ data:
   # (dan COOKIE_SAMESITE ke "none" untuk frontend Vercel) setelah memakai HTTPS.
   COOKIE_SECURE: "false"
   COOKIE_SAMESITE: lax
+  # Login Google/GitHub (langkah 26). Alamat aplikasi tujuan setelah login,
+  # dan alamat gateway yang didaftarkan sebagai callback di Google/GitHub
+  # (lihat httproute-oauth.yaml). Client id dan secret ada di Secret
+  # oauth-credentials (secrets/oauth.env).
+  APP_BASE_URL: http://ice-stream.localhost:4000
+  OAUTH_REDIRECT_BASE_URL: http://localhost:4000

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useAuth } from '../auth/useAuth'
+import { OAuthButtons } from '../components/auth/OAuthButtons'
 import { ErrorBox } from '../components/ErrorBox'
 import { safeNextPath } from '../lib/format'
 
@@ -50,6 +51,7 @@ export function LoginPage() {
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Memproses…' : 'Masuk'}
       </button>
+      <OAuthButtons next={next} />
       <p className="muted">
         Belum punya akun? <Link to="/register">Daftar</Link>
       </p>

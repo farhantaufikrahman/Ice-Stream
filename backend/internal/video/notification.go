@@ -77,7 +77,9 @@ func (n *Notifier) NotifyNewVideo(ctx context.Context, videoID int64, progress f
 	if err != nil {
 		return 0, err
 	}
-	if v.Status != StatusReady {
+	// Video draf, Tidak publik, dan Pribadi tidak diberitahukan. Jika
+	// nanti diubah menjadi Publik, UpdateVideo mengirim event lagi.
+	if !v.IsListed() {
 		return 0, nil
 	}
 	now := n.now()

@@ -117,6 +117,7 @@ func applyTranscodeEvent(ctx context.Context, svc *Service, subject string, data
 			ThumbnailKey: e.ThumbnailKey,
 			DurationMs:   e.DurationMs,
 			Renditions:   e.Renditions,
+			FrameTimesMs: e.FrameTimesMs,
 		})
 	case events.SubjectTranscodeFailed:
 		var e events.TranscodeFailed

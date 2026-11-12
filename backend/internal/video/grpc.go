@@ -34,6 +34,9 @@ func (s *GRPCServer) CreateUpload(ctx context.Context, req *videov1.CreateUpload
 		SizeBytes:   req.GetSizeBytes(),
 		Category:    req.GetCategory(),
 		Tags:        req.GetTags(),
+		Visibility:  fromProtoVideoVisibility(req.GetVisibility()),
+		Draft:       req.GetDraft(),
+		Language:    req.GetLanguage(),
 	})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
@@ -205,7 +208,7 @@ func (s *GRPCServer) ClearWatchHistory(ctx context.Context, req *videov1.ClearWa
 }
 
 func (s *GRPCServer) UpdateVideo(ctx context.Context, req *videov1.UpdateVideoRequest) (*videov1.UpdateVideoResponse, error) {
-	v, err := s.svc.UpdateVideo(ctx, UpdateInput{
+	in := UpdateInput{
 		RequesterID: req.GetRequesterId(),
 		VideoID:     req.GetVideoId(),
 		// Field "optional" di proto menjadi pointer di Go: nil = tidak dikirim.
@@ -213,9 +216,16 @@ func (s *GRPCServer) UpdateVideo(ctx context.Context, req *videov1.UpdateVideoRe
 		Description: req.Description,
 		Category:    req.Category,
 		// tags adalah message: nil = tidak dikirim (lihat TagList di proto).
-		Tags:    req.GetTags().GetTags(),
-		SetTags: req.GetTags() != nil,
-	})
+		Tags:     req.GetTags().GetTags(),
+		SetTags:  req.GetTags() != nil,
+		Draft:    req.Draft,
+		Language: req.Language,
+	}
+	if req.Visibility != nil {
+		vis := fromProtoVideoVisibility(req.GetVisibility())
+		in.Visibility = &vis
+	}
+	v, err := s.svc.UpdateVideo(ctx, in)
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -289,7 +299,7 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	switch {
 	case errors.As(err, &verr):
 		return status.Error(codes.InvalidArgument, verr.Error())
-	case errors.Is(err, ErrNotFound), errors.Is(err, ErrPlaylistNotFound):
+	case errors.Is(err, ErrNotFound), errors.Is(err, ErrPlaylistNotFound), errors.Is(err, ErrFrameNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
 		return status.Error(codes.FailedPrecondition, err.Error())
@@ -340,11 +350,77 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 	if v.ProcessedAt != nil {
 		pv.ProcessedAt = timestamppb.New(*v.ProcessedAt)
 	}
+	pv.Visibility = toProtoVideoVisibility(v.Visibility)
+	pv.Draft = v.Draft
+	if v.PublishedAt != nil {
+		pv.PublishedAt = timestamppb.New(*v.PublishedAt)
+	}
+	pv.Language = v.Language
+	pv.CustomThumbnail = isCustomThumbnail(v, v.ThumbnailKey)
 	if v.Status == StatusReady {
 		pv.HlsUrl = s.svc.MediaURL(v.PlaylistKey)
 		pv.ThumbnailUrl = s.svc.MediaURL(v.ThumbnailKey)
+		// Pilihan bingkai hanya berguna bagi pemilik. Gateway hanya
+		// meneruskannya di endpoint /me/videos (langkah 26).
+		for _, ms := range v.ThumbnailFrames {
+			key := FrameKey(v, ms)
+			pv.ThumbnailFrames = append(pv.ThumbnailFrames, &videov1.ThumbnailFrame{
+				PositionMs: ms,
+				Url:        s.svc.MediaURL(key),
+				Selected:   key == v.ThumbnailKey,
+			})
+		}
+	} else if pv.CustomThumbnail {
+		// Gambar kreator bisa diunggah sebelum video selesai diproses, jadi
+		// halaman Upload bisa langsung menampilkannya.
+		pv.ThumbnailUrl = s.svc.MediaURL(v.ThumbnailKey)
 	}
 	return pv
+}
+
+func toProtoVideoVisibility(v string) videov1.VideoVisibility {
+	switch v {
+	case VisibilityUnlisted:
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED
+	case VisibilityPrivate:
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE
+	default:
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC
+	}
+}
+
+// fromProtoVideoVisibility: UNSPECIFIED menjadi "" (= PUBLIC, lihat
+// cleanVideoVisibility). Angka yang tidak dikenal diteruskan apa adanya
+// supaya ditolak validasi Service, bukan diam-diam menjadi PUBLIC.
+func fromProtoVideoVisibility(v videov1.VideoVisibility) string {
+	switch v {
+	case videov1.VideoVisibility_VIDEO_VISIBILITY_UNSPECIFIED:
+		return ""
+	case videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC:
+		return VisibilityPublic
+	case videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED:
+		return VisibilityUnlisted
+	case videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE:
+		return VisibilityPrivate
+	default:
+		return v.String()
+	}
+}
+
+func (s *GRPCServer) ChooseThumbnailFrame(ctx context.Context, req *videov1.ChooseThumbnailFrameRequest) (*videov1.ChooseThumbnailFrameResponse, error) {
+	v, err := s.svc.ChooseThumbnailFrame(ctx, req.GetRequesterId(), req.GetVideoId(), req.GetPositionMs())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.ChooseThumbnailFrameResponse{Video: s.toProtoVideo(v)}, nil
+}
+
+func (s *GRPCServer) UploadThumbnail(ctx context.Context, req *videov1.UploadThumbnailRequest) (*videov1.UploadThumbnailResponse, error) {
+	v, err := s.svc.UploadThumbnail(ctx, req.GetRequesterId(), req.GetVideoId(), req.GetImage())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.UploadThumbnailResponse{Video: s.toProtoVideo(v)}, nil
 }
 
 func toProtoStatus(s string) videov1.VideoStatus {

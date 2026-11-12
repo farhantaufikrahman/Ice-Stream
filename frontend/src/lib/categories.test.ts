@@ -64,4 +64,13 @@ describe('detailsChanges', () => {
       tags: ['esKrim', 'kos'],
     })
   })
+  it('visibilitas, bahasa, dan draf (langkah 26) hanya jika diisi dan berubah', () => {
+    const v = { ...saved, visibility: 'PUBLIC' as const, language: '' as const, draft: true }
+    expect(detailsChanges(v, { ...saved })).toEqual({})
+    expect(detailsChanges(v, { ...v, visibility: 'PRIVATE', language: 'ja', draft: false })).toEqual({
+      visibility: 'PRIVATE',
+      language: 'ja',
+      draft: false,
+    })
+  })
 })

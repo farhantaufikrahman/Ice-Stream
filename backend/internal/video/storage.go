@@ -1,6 +1,7 @@
 package video
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -33,6 +34,11 @@ type ObjectStore interface {
 	// (misalnya "hls/42/") dan mengembalikan jumlah file yang dihapus.
 	// Aman dipanggil walau tidak ada file sama sekali.
 	DeletePrefix(ctx context.Context, prefix string) (int, error)
+	// Put menyimpan file kecil yang sudah ada di memori (thumbnail
+	// buatan kreator, langkah 26).
+	Put(ctx context.Context, key, contentType string, data []byte) error
+	// Delete menghapus satu file. File yang tidak ada bukan error.
+	Delete(ctx context.Context, key string) error
 }
 
 // PresignedRequest adalah URL presigned beserta header yang wajib dikirim.
@@ -223,4 +229,32 @@ func toPresigned(req *v4.PresignedHTTPRequest, ttl time.Duration) PresignedReque
 		Headers:   headers,
 		ExpiresAt: time.Now().Add(ttl),
 	}
+}
+
+// Put menyimpan file. Nama file thumbnail buatan kreator selalu baru (acak)
+// setiap kali diganti, jadi browser boleh menyimpannya di cache selamanya
+// (immutable). Sama dengan foto profil di UserService (internal/user).
+func (s *S3Store) Put(ctx context.Context, key, contentType string, data []byte) error {
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		Body:          bytes.NewReader(data),
+		ContentLength: aws.Int64(int64(len(data))),
+		ContentType:   aws.String(contentType),
+		CacheControl:  aws.String("public, max-age=31536000, immutable"),
+	})
+	if err != nil {
+		return fmt.Errorf("upload %s: %w", key, err)
+	}
+	return nil
+}
+
+// Delete menghapus satu file. Menghapus file yang tidak ada bukan error
+// (aturan API S3).
+func (s *S3Store) Delete(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return fmt.Errorf("hapus %s: %w", key, err)
+	}
+	return nil
 }

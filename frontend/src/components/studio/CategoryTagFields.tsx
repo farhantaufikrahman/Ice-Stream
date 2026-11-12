@@ -1,5 +1,7 @@
 import { useImperativeHandle, useState, type ClipboardEvent, type KeyboardEvent, type Ref } from 'react'
+import type { VideoLanguage } from '../../api/types'
 import { addTags, CATEGORIES, MAX_TAGS } from '../../lib/categories'
+import { LANGUAGES } from '../../lib/visibility'
 
 interface Props {
   /** Awalan id input, supaya <label htmlFor> tetap unik di satu halaman. */
@@ -15,6 +17,9 @@ interface Props {
   categoryError?: string | null
   /** Untuk mengambil tag terakhir saat form dikirim (lihat TagFieldHandle). */
   tagsRef?: Ref<TagFieldHandle>
+  /** Langkah 26: "Bahasa video". Jika diisi, baris pertama = Kategori + Bahasa, Tag di bawahnya (desain Upload). */
+  language?: VideoLanguage
+  onLanguageChange?: (value: VideoLanguage) => void
 }
 
 /**
@@ -30,8 +35,8 @@ export interface TagFieldHandle {
 
 /**
  * Kategori (select) dan tag (chip + input) untuk halaman Unggah dan dialog
- * Edit video, mengikuti desain Upload.dc.html. "Bahasa video" di desain
- * belum ditampilkan karena backend belum menyimpannya.
+ * Edit video, mengikuti desain Upload.dc.html, beserta "Bahasa video"
+ * (langkah 26) jika language diisi.
  */
 export function CategoryTagFields({
   idPrefix,
@@ -43,8 +48,13 @@ export function CategoryTagFields({
   emptyCategoryLabel,
   categoryError,
   tagsRef,
+  language,
+  onLanguageChange,
 }: Props) {
+  const tagInput = <TagInput idPrefix={idPrefix} tags={tags} onChange={onTagsChange} disabled={disabled} handleRef={tagsRef} />
+  const withLanguage = language !== undefined && onLanguageChange !== undefined
   return (
+    <>
     <div className="field-row">
       <div className="field">
         <label htmlFor={`${idPrefix}-cat`}>Kategori</label>
@@ -69,8 +79,29 @@ export function CategoryTagFields({
           </span>
         )}
       </div>
-      <TagInput idPrefix={idPrefix} tags={tags} onChange={onTagsChange} disabled={disabled} handleRef={tagsRef} />
+      {withLanguage ? (
+        <div className="field">
+          <label htmlFor={`${idPrefix}-lang`}>Bahasa video</label>
+          <select
+            id={`${idPrefix}-lang`}
+            value={language}
+            onChange={(e) => onLanguageChange(e.target.value as VideoLanguage)}
+            disabled={disabled}
+          >
+            <option value="">Tidak diisi</option>
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        tagInput
+      )}
     </div>
+    {withLanguage && tagInput}
+    </>
   )
 }
 

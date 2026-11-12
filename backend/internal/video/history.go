@@ -70,7 +70,7 @@ func (s *Service) SaveWatchProgress(ctx context.Context, requesterID, videoID, p
 	if err != nil {
 		return WatchProgress{}, err
 	}
-	if v.Status != StatusReady {
+	if !v.CanView(requesterID) {
 		return WatchProgress{}, ErrNotFound
 	}
 	// Player kadang melaporkan posisi sedikit melewati durasi (pembulatan

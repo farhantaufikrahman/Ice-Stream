@@ -26,7 +26,7 @@ type Repository interface {
 	// ListByOwner mengambil video milik ownerID, id terbesar lebih dulu,
 	// hanya yang id-nya lebih kecil dari beforeID (0 = tanpa batas).
 	ListByOwner(ctx context.Context, ownerID, beforeID int64, limit int) ([]Video, error)
-	// ListPublic mengambil video READY, processed_at lalu id terbesar lebih
+	// ListPublic mengambil video publik (IsListed), published_at lalu id terbesar lebih
 	// dulu, hanya yang cocok dengan filter dan hanya yang posisinya setelah
 	// after (nil = dari awal).
 	ListPublic(ctx context.Context, filter FeedFilter, after *FeedCursor, limit int) ([]Video, error)
@@ -63,9 +63,9 @@ type Repository interface {
 	// ("2006-01-02", WIB) untuk video READY (kategori category jika diisi),
 	// terbanyak lebih dulu. Video tanpa tayangan tidak ikut.
 	TrendingVideos(ctx context.Context, fromDay, category string, limit int) ([]TrendingHit, error)
-	// FindReadyByIDs mengambil video READY dengan id ini, urutan bebas.
-	// Id yang tidak ada atau bukan READY dilewati.
-	FindReadyByIDs(ctx context.Context, ids []int64) ([]Video, error)
+	// FindListedByIDs mengambil video publik (lihat IsListed) dengan id
+	// ini, urutan bebas. Id yang tidak ada atau tidak publik dilewati.
+	FindListedByIDs(ctx context.Context, ids []int64) ([]Video, error)
 	// ListUnindexed mengambil video yang kata-katanya belum disimpan
 	// (dibuat sebelum fitur pencarian ada), id terkecil lebih dulu.
 	ListUnindexed(ctx context.Context, limit int) ([]Video, error)
@@ -101,6 +101,10 @@ type Repository interface {
 	ListUnpurged(ctx context.Context, limit int) ([]Video, error)
 	// MarkPurged mengisi media_purged_at video yang sudah dihapus.
 	MarkPurged(ctx context.Context, id int64, now time.Time) error
+	// SetThumbnailKey mengganti thumbnail video milik ownerID (langkah 26).
+	// ErrNotFound jika video tidak ada, sudah dihapus, atau bukan milik
+	// ownerID.
+	SetThumbnailKey(ctx context.Context, id, ownerID int64, key string, now time.Time) (Video, error)
 	// InsertNotifications menyimpan notifikasi kind untuk setiap userIDs,
 	// kecuali user yang sudah punya notifikasi kind untuk videoID.
 	// Mengembalikan jumlah baris baru.
@@ -181,12 +185,16 @@ type Repository interface {
 
 	// ChannelDailyViews menjumlahkan tayangan semua video ownerID per
 	// tanggal, dari tanggal from sampai to (keduanya ikut, "2006-01-02").
-	// Tanggal tanpa tayangan tidak ada di map.
-	ChannelDailyViews(ctx context.Context, ownerID int64, from, to string) (map[string]int64, error)
+	// Tanggal tanpa tayangan tidak ada di map. videoID > 0 = hanya video
+	// itu (langkah 26), 0 = semua video.
+	ChannelDailyViews(ctx context.Context, ownerID, videoID int64, from, to string) (map[string]int64, error)
 	// ChannelActivity menghitung danmaku dan komentar (yang belum dihapus)
 	// di semua video ownerID: current = [currentStart, end), previous =
 	// [previousStart, currentStart). Field Views tidak diisi.
-	ChannelActivity(ctx context.Context, ownerID int64, previousStart, currentStart, end time.Time) (current, previous ChannelTotals, err error)
+	ChannelActivity(ctx context.Context, ownerID, videoID int64, previousStart, currentStart, end time.Time) (current, previous ChannelTotals, err error)
+	// TopVideos: maksimal limit video ownerID (belum dihapus) dengan
+	// tayangan terbanyak antara tanggal from dan to (langkah 26).
+	TopVideos(ctx context.Context, ownerID int64, from, to string, limit int) ([]TopVideo, error)
 
 	// SearchPlaylists: playlist PUBLIC berisi video READY yang judulnya
 	// berisi setiap kata di terms, urut paling relevan (playlist_search.go).
@@ -283,6 +291,12 @@ type CreateUploadInput struct {
 	Category string
 	// Tags boleh kosong, maksimal 10 (lihat cleanTags).
 	Tags []string
+	// Visibility kosong = PUBLIC (lihat visibility.go).
+	Visibility string
+	// Draft: "Simpan draf". Video tidak terbit otomatis setelah READY.
+	Draft bool
+	// Language kosong = tidak diisi.
+	Language string
 }
 
 // Upload adalah hasil CreateUpload: video baru dan cara mengunggah filenya.
@@ -339,6 +353,14 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 	if err != nil {
 		return NewVideo{}, err
 	}
+	visibility, err := cleanVideoVisibility(in.Visibility)
+	if err != nil {
+		return NewVideo{}, err
+	}
+	language, err := cleanLanguage(in.Language)
+	if err != nil {
+		return NewVideo{}, err
+	}
 	contentType := strings.ToLower(strings.TrimSpace(in.ContentType))
 	if !allowedContentTypes[contentType] {
 		return NewVideo{}, &ValidationError{"content_type", "hanya video/mp4, video/webm, video/quicktime, atau video/x-matroska"}
@@ -354,6 +376,9 @@ func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
 		SizeBytes:   in.SizeBytes,
 		Category:    category,
 		Tags:        tags,
+		Visibility:  visibility,
+		Draft:       in.Draft,
+		Language:    language,
 	}, nil
 }
 
@@ -453,7 +478,8 @@ func (s *Service) MarkProcessing(ctx context.Context, videoID int64) error {
 
 // MarkReady dipanggil setelah transcoder selesai membuat file HLS. Setelah
 // status menjadi READY, event videos.published dikirim supaya subscriber
-// channel mendapat notifikasi.
+// channel mendapat notifikasi, tapi hanya untuk video publik (bukan draf,
+// bukan Tidak publik atau Pribadi).
 //
 // Event dikirim juga jika video ternyata SUDAH READY. Itu terjadi kalau
 // panggilan sebelumnya berhasil mengubah status tapi gagal mengirim event:
@@ -473,6 +499,9 @@ func (s *Service) MarkReady(ctx context.Context, videoID int64, r TranscodeResul
 	}
 	if !changed && v.Status != StatusReady {
 		// Misalnya sudah FAILED: video ini tidak dipublikasikan.
+		return nil
+	}
+	if v.Draft || v.Visibility != VisibilityPublic {
 		return nil
 	}
 	if err := s.events.PublishPublished(ctx, v); err != nil {
@@ -517,9 +546,10 @@ type VideoDetail struct {
 	ViewerInPlaylist bool
 }
 
-// GetVideo mengambil video. Video yang belum READY hanya terlihat oleh
-// pemiliknya; untuk orang lain hasilnya ErrNotFound. viewerID 0 berarti
-// pengunjung yang belum login.
+// GetVideo mengambil video. Video yang belum READY, draf, atau Pribadi
+// hanya terlihat oleh pemiliknya; untuk orang lain hasilnya ErrNotFound,
+// sama seperti video yang tidak ada. viewerID 0 berarti pengunjung yang
+// belum login.
 //
 // Video READY diputar lewat file HLS (lihat MediaURL), yang bisa dibuka
 // siapa saja. File asli (sebelum di-transcode) hanya untuk pemiliknya.
@@ -529,7 +559,7 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 		return VideoDetail{}, err
 	}
 	isOwner := viewerID != 0 && viewerID == v.OwnerID
-	if v.Status != StatusReady && !isOwner {
+	if !isOwner && !v.IsWatchable() {
 		return VideoDetail{}, ErrNotFound
 	}
 	d := VideoDetail{Video: v}
@@ -642,11 +672,12 @@ func (s *Service) ListVideos(ctx context.Context, filter FeedFilter, pageSize in
 	if len(videos) > pageSize {
 		videos = videos[:pageSize]
 		last := videos[pageSize-1]
-		if last.ProcessedAt == nil {
-			// Video READY selalu punya processed_at (lihat MarkReady).
-			return nil, "", fmt.Errorf("video %d READY tanpa processed_at", last.ID)
+		if last.PublishedAt == nil {
+			// Video publik selalu punya published_at (lihat MarkReady dan
+			// UpdateDetails).
+			return nil, "", fmt.Errorf("video %d publik tanpa published_at", last.ID)
 		}
-		next = encodeFeedCursor(FeedCursor{ProcessedAt: *last.ProcessedAt, ID: last.ID})
+		next = encodeFeedCursor(FeedCursor{PublishedAt: *last.PublishedAt, ID: last.ID})
 	}
 	return videos, next, nil
 }
@@ -665,10 +696,10 @@ func uniquePositive(ids []int64) []int64 {
 }
 
 // encodeFeedCursor mengubah cursor menjadi teks seperti "MTczMTIy...",
-// yaitu base64 dari "<processed_at dalam mikrodetik>.<id>". Mikrodetik
+// yaitu base64 dari "<published_at dalam mikrodetik>.<id>". Mikrodetik
 // adalah ketelitian TIMESTAMP bawaan Oracle.
 func encodeFeedCursor(c FeedCursor) string {
-	raw := strconv.FormatInt(c.ProcessedAt.UnixMicro(), 10) + "." + strconv.FormatInt(c.ID, 10)
+	raw := strconv.FormatInt(c.PublishedAt.UnixMicro(), 10) + "." + strconv.FormatInt(c.ID, 10)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -689,7 +720,7 @@ func decodeFeedCursor(token string) (FeedCursor, error) {
 	if err != nil || n <= 0 {
 		return FeedCursor{}, errors.New("id cursor salah")
 	}
-	return FeedCursor{ProcessedAt: time.UnixMicro(us).UTC(), ID: n}, nil
+	return FeedCursor{PublishedAt: time.UnixMicro(us).UTC(), ID: n}, nil
 }
 
 // ViewResult adalah hasil RecordView.
@@ -717,7 +748,7 @@ func (s *Service) RecordView(ctx context.Context, videoID int64, viewerKey strin
 	if err != nil {
 		return ViewResult{}, err
 	}
-	if v.Status != StatusReady {
+	if !v.IsWatchable() {
 		return ViewResult{}, ErrNotFound
 	}
 	claimCtx, cancel := context.WithTimeout(ctx, viewClaimTimeout)

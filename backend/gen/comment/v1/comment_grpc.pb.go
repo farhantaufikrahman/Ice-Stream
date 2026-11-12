@@ -28,10 +28,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CommentService_CreateComment_FullMethodName = "/comment.v1.CommentService/CreateComment"
-	CommentService_ListComments_FullMethodName  = "/comment.v1.CommentService/ListComments"
-	CommentService_ListReplies_FullMethodName   = "/comment.v1.CommentService/ListReplies"
-	CommentService_DeleteComment_FullMethodName = "/comment.v1.CommentService/DeleteComment"
+	CommentService_CreateComment_FullMethodName       = "/comment.v1.CommentService/CreateComment"
+	CommentService_ListComments_FullMethodName        = "/comment.v1.CommentService/ListComments"
+	CommentService_ListReplies_FullMethodName         = "/comment.v1.CommentService/ListReplies"
+	CommentService_DeleteComment_FullMethodName       = "/comment.v1.CommentService/DeleteComment"
+	CommentService_ListChannelComments_FullMethodName = "/comment.v1.CommentService/ListChannelComments"
 )
 
 // CommentServiceClient is the client API for CommentService service.
@@ -55,6 +56,11 @@ type CommentServiceClient interface {
 	// Error NOT_FOUND jika komentar tidak ada, PERMISSION_DENIED jika
 	// requester bukan penulis atau pemilik video.
 	DeleteComment(ctx context.Context, in *DeleteCommentRequest, opts ...grpc.CallOption) (*DeleteCommentResponse, error)
+	// ListChannelComments mengambil komentar dan balasan di semua video milik
+	// requester (atau satu video jika video_id diisi), terbaru lebih dulu.
+	// Untuk halaman Komentar di Creator Studio (langkah 26). Video draf dan
+	// Pribadi ikut, video yang sudah dihapus tidak.
+	ListChannelComments(ctx context.Context, in *ListChannelCommentsRequest, opts ...grpc.CallOption) (*ListChannelCommentsResponse, error)
 }
 
 type commentServiceClient struct {
@@ -105,6 +111,16 @@ func (c *commentServiceClient) DeleteComment(ctx context.Context, in *DeleteComm
 	return out, nil
 }
 
+func (c *commentServiceClient) ListChannelComments(ctx context.Context, in *ListChannelCommentsRequest, opts ...grpc.CallOption) (*ListChannelCommentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChannelCommentsResponse)
+	err := c.cc.Invoke(ctx, CommentService_ListChannelComments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommentServiceServer is the server API for CommentService service.
 // All implementations must embed UnimplementedCommentServiceServer
 // for forward compatibility.
@@ -126,6 +142,11 @@ type CommentServiceServer interface {
 	// Error NOT_FOUND jika komentar tidak ada, PERMISSION_DENIED jika
 	// requester bukan penulis atau pemilik video.
 	DeleteComment(context.Context, *DeleteCommentRequest) (*DeleteCommentResponse, error)
+	// ListChannelComments mengambil komentar dan balasan di semua video milik
+	// requester (atau satu video jika video_id diisi), terbaru lebih dulu.
+	// Untuk halaman Komentar di Creator Studio (langkah 26). Video draf dan
+	// Pribadi ikut, video yang sudah dihapus tidak.
+	ListChannelComments(context.Context, *ListChannelCommentsRequest) (*ListChannelCommentsResponse, error)
 	mustEmbedUnimplementedCommentServiceServer()
 }
 
@@ -147,6 +168,9 @@ func (UnimplementedCommentServiceServer) ListReplies(context.Context, *ListRepli
 }
 func (UnimplementedCommentServiceServer) DeleteComment(context.Context, *DeleteCommentRequest) (*DeleteCommentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteComment not implemented")
+}
+func (UnimplementedCommentServiceServer) ListChannelComments(context.Context, *ListChannelCommentsRequest) (*ListChannelCommentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListChannelComments not implemented")
 }
 func (UnimplementedCommentServiceServer) mustEmbedUnimplementedCommentServiceServer() {}
 func (UnimplementedCommentServiceServer) testEmbeddedByValue()                        {}
@@ -241,6 +265,24 @@ func _CommentService_DeleteComment_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommentService_ListChannelComments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChannelCommentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommentServiceServer).ListChannelComments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommentService_ListChannelComments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommentServiceServer).ListChannelComments(ctx, req.(*ListChannelCommentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommentService_ServiceDesc is the grpc.ServiceDesc for CommentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -263,6 +305,10 @@ var CommentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteComment",
 			Handler:    _CommentService_DeleteComment_Handler,
+		},
+		{
+			MethodName: "ListChannelComments",
+			Handler:    _CommentService_ListChannelComments_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

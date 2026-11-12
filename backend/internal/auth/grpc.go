@@ -5,11 +5,13 @@ import (
 	"errors"
 	"log/slog"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/autherr"
 )
 
 // GRPCServer menerjemahkan panggilan gRPC menjadi panggilan ke Service.
@@ -75,6 +77,29 @@ func (s *GRPCServer) ResetPassword(ctx context.Context, req *authv1.ResetPasswor
 	return &authv1.ResetPasswordResponse{}, nil
 }
 
+func (s *GRPCServer) LoginWithIdentity(ctx context.Context, req *authv1.LoginWithIdentityRequest) (*authv1.LoginWithIdentityResponse, error) {
+	code, err := s.svc.LoginWithIdentity(ctx, Identity{
+		Provider:      req.GetProvider(),
+		Subject:       req.GetSubject(),
+		Email:         req.GetEmail(),
+		EmailVerified: req.GetEmailVerified(),
+		Name:          req.GetName(),
+		UsernameHint:  req.GetUsernameHint(),
+	})
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &authv1.LoginWithIdentityResponse{LoginCode: code}, nil
+}
+
+func (s *GRPCServer) ExchangeLoginCode(ctx context.Context, req *authv1.ExchangeLoginCodeRequest) (*authv1.ExchangeLoginCodeResponse, error) {
+	u, pair, err := s.svc.ExchangeLoginCode(ctx, req.GetLoginCode(), clientInfo(req.GetClient()))
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &authv1.ExchangeLoginCodeResponse{User: toProtoUser(u), Tokens: toProtoTokens(pair)}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC. Kode gRPC ini nanti
 // diterjemahkan gateway menjadi kode HTTP (misalnya ALREADY_EXISTS -> 409).
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
@@ -84,10 +109,16 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.InvalidArgument, verr.Error())
 	case errors.Is(err, ErrUsernameTaken), errors.Is(err, ErrEmailTaken):
 		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidRefreshToken):
+	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidRefreshToken), errors.Is(err, ErrInvalidLoginCode):
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, ErrInvalidResetToken):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, ErrEmailNotVerified):
+		return withReason(codes.FailedPrecondition, err, autherr.ReasonEmailNotVerified)
+	case errors.Is(err, ErrEmailNeedsPassword):
+		return withReason(codes.FailedPrecondition, err, autherr.ReasonEmailNeedsPassword)
+	case errors.Is(err, ErrProviderAlreadyLinked):
+		return withReason(codes.FailedPrecondition, err, autherr.ReasonProviderAlreadyLinked)
 	case errors.Is(err, ErrUserBanned):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, context.Canceled):
@@ -100,6 +131,16 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		s.logger.ErrorContext(ctx, "auth internal error", slog.Any("error", err))
 		return status.Error(codes.Internal, "terjadi kesalahan internal")
 	}
+}
+
+// withReason membuat status gRPC dengan detail ErrorInfo (lihat package
+// autherr).
+func withReason(code codes.Code, err error, reason string) error {
+	st, derr := status.New(code, err.Error()).WithDetails(&errdetails.ErrorInfo{Reason: reason, Domain: autherr.Domain})
+	if derr != nil {
+		return status.Error(code, err.Error())
+	}
+	return st.Err()
 }
 
 func clientInfo(c *authv1.ClientInfo) ClientInfo {

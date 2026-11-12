@@ -2,6 +2,7 @@ package video
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,12 +26,12 @@ func (r *fakeRepo) ownerOf(videoID int64) int64 {
 	return r.trash[videoID].OwnerID
 }
 
-func (r *fakeRepo) ChannelDailyViews(_ context.Context, ownerID int64, from, to string) (map[string]int64, error) {
+func (r *fakeRepo) ChannelDailyViews(_ context.Context, ownerID, onlyID int64, from, to string) (map[string]int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := map[string]int64{}
 	for videoID, days := range r.daily {
-		if r.ownerOf(videoID) != ownerID {
+		if r.ownerOf(videoID) != ownerID || (onlyID != 0 && videoID != onlyID) {
 			continue
 		}
 		for day, n := range days {
@@ -43,12 +44,12 @@ func (r *fakeRepo) ChannelDailyViews(_ context.Context, ownerID int64, from, to 
 	return out, nil
 }
 
-func (r *fakeRepo) ChannelActivity(_ context.Context, ownerID int64, previousStart, currentStart, end time.Time) (ChannelTotals, ChannelTotals, error) {
+func (r *fakeRepo) ChannelActivity(_ context.Context, ownerID, onlyID int64, previousStart, currentStart, end time.Time) (ChannelTotals, ChannelTotals, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var current, previous ChannelTotals
 	for _, a := range r.activity {
-		if r.ownerOf(a.videoID) != ownerID || a.deleted || a.at.Before(previousStart) || !a.at.Before(end) {
+		if r.ownerOf(a.videoID) != ownerID || (onlyID != 0 && a.videoID != onlyID) || a.deleted || a.at.Before(previousStart) || !a.at.Before(end) {
 			continue
 		}
 		t := &previous
@@ -62,6 +63,31 @@ func (r *fakeRepo) ChannelActivity(_ context.Context, ownerID int64, previousSta
 		}
 	}
 	return current, previous, nil
+}
+
+func (r *fakeRepo) TopVideos(_ context.Context, ownerID int64, from, to string, limit int) ([]TopVideo, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []TopVideo
+	for videoID, days := range r.daily {
+		v, ok := r.videos[videoID] // video yang dihapus ada di r.trash
+		if !ok || v.OwnerID != ownerID {
+			continue
+		}
+		var sum int64
+		for day, n := range days {
+			if day >= from && day <= to {
+				sum += n
+			}
+		}
+		if sum > 0 {
+			out = append(out, TopVideo{VideoID: videoID, Title: v.Title, ThumbnailKey: v.ThumbnailKey, Views: sum})
+		}
+	}
+	slices.SortFunc(out, func(a, b TopVideo) int {
+		return slices.Compare([]int64{b.Views, b.VideoID}, []int64{a.Views, a.VideoID})
+	})
+	return out[:min(limit, len(out))], nil
 }
 
 func TestStatsDay(t *testing.T) {
@@ -127,7 +153,7 @@ func TestGetChannelStats(t *testing.T) {
 		{videoID: other.ID, kind: "D", at: wib(11, 8)},                                     // channel lain
 	}
 
-	st, err := svc.GetChannelStats(ctx, 7, 7)
+	st, err := svc.GetChannelStats(ctx, 7, 7, 0)
 	require.NoError(t, err)
 
 	require.Len(t, st.Daily, 7)
@@ -138,20 +164,36 @@ func TestGetChannelStats(t *testing.T) {
 	// 28 Okt di luar periode sebelumnya (29 Okt sampai 4 Nov).
 	assert.Equal(t, ChannelTotals{Views: 10, Danmaku: 1}, st.Previous)
 	assert.Equal(t, time.Date(2026, 11, 11, 17, 0, 0, 0, time.UTC), st.End)
+	// Video terpopuler: hanya periode ini, tanpa video yang sudah dihapus.
+	require.Len(t, st.TopVideos, 1)
+	assert.Equal(t, TopVideo{VideoID: mine.ID, Title: mine.Title, ThumbnailKey: mine.ThumbnailKey, Views: 8}, st.TopVideos[0])
+
+	// Satu video saja (langkah 26): yang dihapus dan komentarnya tidak ikut.
+	st, err = svc.GetChannelStats(ctx, 7, 7, mine.ID)
+	require.NoError(t, err)
+	assert.Equal(t, ChannelTotals{Views: 8, Danmaku: 2, Comments: 1}, st.Current)
+	assert.Equal(t, ChannelTotals{Views: 10}, st.Previous)
+	assert.Empty(t, st.TopVideos, "tabel video terpopuler hanya untuk seluruh channel")
+
+	// Video orang lain atau yang sudah dihapus seolah tidak ada.
+	for _, id := range []int64{other.ID, gone.ID, 999} {
+		_, err = svc.GetChannelStats(ctx, 7, 7, id)
+		assert.ErrorIs(t, err, ErrNotFound, "video %d", id)
+	}
 }
 
 func TestGetChannelStatsValidation(t *testing.T) {
 	svc, _, _ := newTestService()
 	var verr *ValidationError
 	for _, days := range []int{0, 1, 30, 365} {
-		_, err := svc.GetChannelStats(context.Background(), 7, days)
+		_, err := svc.GetChannelStats(context.Background(), 7, days, 0)
 		assert.ErrorAs(t, err, &verr, "days=%d", days)
 	}
-	_, err := svc.GetChannelStats(context.Background(), 0, 7)
+	_, err := svc.GetChannelStats(context.Background(), 0, 7, 0)
 	assert.ErrorIs(t, err, ErrNotFound)
 
 	// 90 hari menghasilkan 90 titik.
-	st, err := svc.GetChannelStats(context.Background(), 7, 90)
+	st, err := svc.GetChannelStats(context.Background(), 7, 90, 0)
 	require.NoError(t, err)
 	assert.Len(t, st.Daily, 90)
 }

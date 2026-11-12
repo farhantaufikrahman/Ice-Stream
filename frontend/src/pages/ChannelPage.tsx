@@ -14,6 +14,7 @@ import { usePagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
 import { CHANNEL_SORTS, channelSortFromParam, withParam, type ChannelSort } from '../lib/discover'
 import { formatCount, formatDate, formatDuration, timeAgo } from '../lib/format'
+import { videoDate } from '../lib/visibility'
 
 type Tab = 'video' | 'playlist' | 'tentang'
 
@@ -197,7 +198,7 @@ function LatestVideo({ video }: { video: Video }) {
           {video.title}
         </Link>
         <span className="muted small">
-          {formatCount(video.view_count)} tayangan · {timeAgo(video.created_at)}
+          {formatCount(video.view_count)} tayangan · {timeAgo(videoDate(video))}
         </span>
         {video.description && <p className="channel-latest-desc">{video.description}</p>}
       </div>

@@ -7,8 +7,7 @@ import { ThemeToggle } from '../ThemeToggle'
 
 /**
  * Kerangka Creator Studio (desain Studio.dc.html): menu di kiri, isi di
- * kanan. Menu desain yang lain (Analitik, Komentar, ...) baru ditambahkan
- * saat backend-nya ada.
+ * kanan, dengan urutan menu sama seperti desain.
  */
 export function StudioLayout({ children }: { children: ReactNode }) {
   return (
@@ -29,6 +28,15 @@ export function StudioLayout({ children }: { children: ReactNode }) {
         </NavLink>
         <NavLink to="/studio/live" className="studio-link">
           Siaran langsung
+        </NavLink>
+        <NavLink to="/studio/analytics" className="studio-link">
+          Analitik
+        </NavLink>
+        <NavLink to="/studio/comments" className="studio-link">
+          Komentar
+        </NavLink>
+        <NavLink to="/studio/danmaku" className="studio-link">
+          Danmaku
         </NavLink>
         <NavLink to="/studio/settings" className="studio-link">
           Pengaturan

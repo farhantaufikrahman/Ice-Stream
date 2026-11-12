@@ -21,6 +21,8 @@ type fakeRepo struct {
 	mu sync.Mutex
 	// videos: id video READY -> durasi (ms).
 	videos map[int64]int64
+	// owners: id video -> pemilik (langkah 26, Creator Studio).
+	owners map[int64]int64
 	items  []Danmaku
 	nextID int64
 	now    func() time.Time

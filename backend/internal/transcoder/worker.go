@@ -2,6 +2,8 @@ package transcoder
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,7 +41,8 @@ const (
 type Media interface {
 	Probe(ctx context.Context, path string) (ProbeResult, error)
 	TranscodeHLS(ctx context.Context, input, outDir string, renditions []Rendition, hasAudio bool) error
-	Thumbnail(ctx context.Context, input, output string, durationMs int64) error
+	// Frame membuat satu gambar JPEG dari posisi atMs (milidetik).
+	Frame(ctx context.Context, input, output string, atMs int64) error
 }
 
 // Publisher mengirim event hasil kerja transcoder.
@@ -201,11 +204,22 @@ func (w *Worker) Process(ctx context.Context, ev events.Uploaded) (events.Transc
 	if err := w.media.TranscodeHLS(ctx, source, out, renditions, probe.HasAudio); err != nil {
 		return events.TranscodeSucceeded{}, err
 	}
-	if err := w.media.Thumbnail(ctx, source, filepath.Join(out, "thumbnail.jpg"), probe.DurationMs); err != nil {
+	// Bingkai pilihan thumbnail (langkah 26). Bingkai pertama menjadi
+	// thumbnail bawaan.
+	frames := FramePositions(probe.DurationMs)
+	if err := os.MkdirAll(filepath.Join(out, "frames"), 0o755); err != nil {
 		return events.TranscodeSucceeded{}, err
 	}
+	for _, ms := range frames {
+		if err := w.media.Frame(ctx, source, filepath.Join(out, "frames", frameName(ms)), ms); err != nil {
+			return events.TranscodeSucceeded{}, err
+		}
+	}
 
-	prefix := "hls/" + strconv.FormatInt(ev.VideoID, 10) + "/"
+	prefix, err := outputPrefix(ev.VideoID)
+	if err != nil {
+		return events.TranscodeSucceeded{}, err
+	}
 	if err := w.storage.UploadDir(ctx, out, prefix); err != nil {
 		return events.TranscodeSucceeded{}, err
 	}
@@ -217,8 +231,31 @@ func (w *Worker) Process(ctx context.Context, ev events.Uploaded) (events.Transc
 	return events.TranscodeSucceeded{
 		VideoID:      ev.VideoID,
 		PlaylistKey:  prefix + "master.m3u8",
-		ThumbnailKey: prefix + "thumbnail.jpg",
+		ThumbnailKey: prefix + "frames/" + frameName(frames[0]),
 		DurationMs:   probe.DurationMs,
 		Renditions:   names,
+		FrameTimesMs: frames,
 	}, nil
+}
+
+// frameName: "64000.jpg". VideoService menyusun nama yang sama dari
+// posisinya (video.FrameKey), jadi keduanya harus tetap cocok.
+func frameName(ms int64) string {
+	return strconv.FormatInt(ms, 10) + ".jpg"
+}
+
+// outputPrefix membuat folder hasil transcoding, misalnya
+// "hls/42/9f2c4e.../". Folder hls/ bisa dibuka siapa saja tanpa login,
+// jadi bagian acak (langkah 26) membuat alamat video Tidak publik dan
+// Pribadi tidak bisa ditebak hanya dari id-nya. Semua file tetap di bawah
+// hls/<id>/, jadi PurgeMedia di VideoService tetap menghapus semuanya.
+//
+// Setiap percobaan memakai folder baru. Folder dari percobaan yang gagal
+// tidak dipakai dan ikut terhapus saat videonya dihapus.
+func outputPrefix(videoID int64) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "hls/" + strconv.FormatInt(videoID, 10) + "/" + hex.EncodeToString(b) + "/", nil
 }

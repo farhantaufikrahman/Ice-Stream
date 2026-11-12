@@ -101,7 +101,7 @@ func TestFFmpegIntegration(t *testing.T) {
 
 	hls := filepath.Join(dir, "hls")
 	require.NoError(t, f.TranscodeHLS(ctx, src, hls, Renditions(probe.Height), probe.HasAudio))
-	require.NoError(t, f.Thumbnail(ctx, src, filepath.Join(hls, "thumbnail.jpg"), probe.DurationMs))
+	require.NoError(t, f.Frame(ctx, src, filepath.Join(hls, "thumbnail.jpg"), FramePositions(probe.DurationMs)[1]))
 
 	master, err := os.ReadFile(filepath.Join(hls, "master.m3u8"))
 	require.NoError(t, err)

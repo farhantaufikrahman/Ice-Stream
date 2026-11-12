@@ -14,6 +14,11 @@ import (
 // package comment tidak bergantung pada package video.
 const statusReady = "READY"
 
+// watchableSQL: video boleh ditonton siapa saja yang punya tautannya, sama
+// dengan watchableSQL di package video (langkah 26). Video draf dan
+// Pribadi tidak bisa diberi komentar atau danmaku, juga oleh pemiliknya.
+const watchableSQL = "status = 'READY' AND draft = 0 AND visibility IN ('PUBLIC', 'UNLISTED')"
+
 // commentRow memetakan tabel COMMENTS (schema VIDEO_SVC).
 type commentRow struct {
 	ID       int64  `gorm:"column:id;primaryKey;autoIncrement"`
@@ -74,7 +79,7 @@ var _ Repository = (*OracleRepository)(nil)
 func (r *OracleRepository) CheckVideo(ctx context.Context, videoID int64) error {
 	var v videoRef
 	err := r.db.WithContext(ctx).Select("id").
-		Where("id = ? AND status = ?", videoID, statusReady).
+		Where("id = ? AND "+watchableSQL, videoID).
 		Take(&v).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrVideoNotFound
@@ -99,7 +104,7 @@ func (r *OracleRepository) Create(ctx context.Context, nc NewComment) (Comment, 
 	var row commentRow
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&videoRef{}).
-			Where("id = ? AND status = ?", nc.VideoID, statusReady).
+			Where("id = ? AND "+watchableSQL, nc.VideoID).
 			UpdateColumn("comment_count", gorm.Expr("comment_count + 1"))
 		if res.Error != nil {
 			return fmt.Errorf("update comment_count: %w", res.Error)
@@ -257,4 +262,61 @@ func (r *OracleRepository) Delete(ctx context.Context, videoID, commentID int64,
 		}
 		return nil
 	})
+}
+
+// channelCommentRow adalah satu baris hasil ListByChannel. Aliasnya memakai
+// tanda kutip supaya Oracle mengembalikan nama kolom huruf kecil, sama
+// seperti searchHit di package video.
+type channelCommentRow struct {
+	ID         int64     `gorm:"column:id"`
+	VideoID    int64     `gorm:"column:video_id"`
+	AuthorID   int64     `gorm:"column:author_id"`
+	ParentID   *int64    `gorm:"column:parent_id"`
+	Body       string    `gorm:"column:body"`
+	ReplyCount int64     `gorm:"column:reply_count"`
+	CreatedAt  time.Time `gorm:"column:created_at"`
+	VideoTitle string    `gorm:"column:video_title"`
+}
+
+// ListByChannel:
+//
+//	SELECT c.id, ..., v.title AS video_title
+//	  FROM comments c JOIN videos v ON v.id = c.video_id
+//	 WHERE v.owner_id = 7 AND v.deleted_at IS NULL AND c.deleted_at IS NULL
+//	   [AND c.video_id = 42] [AND c.id < 900]
+//	 ORDER BY c.id DESC FETCH FIRST 21 ROWS ONLY
+//
+// Oracle mencari video milik channel lewat index videos_owner_id_ix, lalu
+// komentarnya lewat comments_video_ix. Untuk semua video, komentar dari
+// banyak video harus diurutkan dulu; cukup cepat untuk channel dengan
+// ribuan komentar. Channel yang jauh lebih besar butuh kolom owner_id di
+// tabel comments beserta index (owner_id, id).
+func (r *OracleRepository) ListByChannel(ctx context.Context, ownerID, videoID, beforeID int64, limit int) ([]ChannelComment, error) {
+	sql := `SELECT c.id AS "id", c.video_id AS "video_id", c.author_id AS "author_id", c.parent_id AS "parent_id",
+       c.body AS "body", c.reply_count AS "reply_count", c.created_at AS "created_at", v.title AS "video_title"
+  FROM comments c JOIN videos v ON v.id = c.video_id
+ WHERE v.owner_id = ? AND v.deleted_at IS NULL AND c.deleted_at IS NULL`
+	args := []any{ownerID}
+	if videoID > 0 {
+		sql += " AND c.video_id = ?"
+		args = append(args, videoID)
+	}
+	if beforeID > 0 {
+		sql += " AND c.id < ?"
+		args = append(args, beforeID)
+	}
+	sql += " ORDER BY c.id DESC FETCH FIRST ? ROWS ONLY"
+	args = append(args, limit)
+
+	var rows []channelCommentRow
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select channel comments: %w", err)
+	}
+	out := make([]ChannelComment, len(rows))
+	for i, row := range rows {
+		c := commentRow{ID: row.ID, VideoID: row.VideoID, AuthorID: row.AuthorID, ParentID: row.ParentID,
+			Body: row.Body, ReplyCount: row.ReplyCount, CreatedAt: row.CreatedAt}
+		out[i] = ChannelComment{Comment: c.toComment(), VideoTitle: row.VideoTitle}
+	}
+	return out, nil
 }

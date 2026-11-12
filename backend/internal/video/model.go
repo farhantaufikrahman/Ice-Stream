@@ -62,8 +62,8 @@ type Video struct {
 	Renditions   []string
 	// FailureReason terisi jika status FAILED.
 	FailureReason string
-	// ProcessedAt adalah waktu status menjadi READY atau FAILED. Untuk
-	// video READY, ini juga waktu video tampil di feed publik.
+	// ProcessedAt adalah waktu status menjadi READY atau FAILED. Waktu
+	// video tampil di feed publik adalah PublishedAt (langkah 26).
 	ProcessedAt *time.Time
 	// ViewCount adalah jumlah views (lihat Service.RecordView).
 	ViewCount int64
@@ -77,6 +77,22 @@ type Video struct {
 	Category string
 	// Tags sesuai urutan yang diketik kreator, tanpa "#".
 	Tags []string
+	// Visibility: VisibilityPublic, VisibilityUnlisted, atau
+	// VisibilityPrivate (langkah 26, lihat visibility.go).
+	Visibility string
+	// Draft bernilai true jika kreator menekan "Simpan draf" dan belum
+	// menerbitkannya. Video draf hanya terlihat oleh pemiliknya.
+	Draft bool
+	// PublishedAt adalah waktu video pertama kali bisa ditonton orang lain
+	// (READY dan bukan draf). Feed diurutkan dengan waktu ini.
+	PublishedAt *time.Time
+	// Language adalah kode bahasa video ("id", "en", "ja"), kosong jika
+	// tidak diisi.
+	Language string
+	// ThumbnailFrames adalah posisi (milidetik) bingkai pilihan thumbnail
+	// yang dibuat transcoder. Kosong untuk video lama dan video yang belum
+	// READY. Lokasi filenya lihat FrameKey.
+	ThumbnailFrames []int64
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
@@ -85,13 +101,16 @@ type TranscodeResult struct {
 	ThumbnailKey string
 	DurationMs   int64
 	Renditions   []string
+	// FrameTimesMs adalah posisi bingkai pilihan thumbnail (langkah 26).
+	// Boleh kosong (transcoder versi lama).
+	FrameTimesMs []int64
 }
 
 // FeedCursor menandai posisi terakhir di feed publik (keyset pagination).
-// Feed diurutkan processed_at lalu id, keduanya dari besar ke kecil, jadi
+// Feed diurutkan published_at lalu id, keduanya dari besar ke kecil, jadi
 // halaman berikutnya dimulai dari video yang "lebih kecil" dari cursor ini.
 type FeedCursor struct {
-	ProcessedAt time.Time
+	PublishedAt time.Time
 	ID          int64
 }
 
@@ -105,6 +124,9 @@ type NewVideo struct {
 	SizeBytes   int64
 	Category    string
 	Tags        []string
+	Visibility  string
+	Draft       bool
+	Language    string
 	// SearchTerms adalah kata dari judul dan deskripsi untuk pencarian
 	// (lihat BuildSearchTerms). Disimpan dalam transaksi yang sama dengan
 	// videonya.

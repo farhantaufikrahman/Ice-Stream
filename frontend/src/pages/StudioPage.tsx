@@ -15,6 +15,7 @@ import { usePagedVideos } from '../hooks/usePagedVideos'
 import { useVideoPoll } from '../hooks/useVideoPoll'
 import { formatCount, formatDate, formatDuration } from '../lib/format'
 import { canDelete, isProcessing } from '../lib/upload'
+import { videoDate, visibilityLabel } from '../lib/visibility'
 
 type Dialog = { kind: 'edit' | 'delete'; video: Video } | null
 
@@ -121,6 +122,7 @@ export function StudioPage() {
             update(v)
             setDialog(null)
           }}
+          onThumbnailChange={update}
         />
       )}
       {dialog?.kind === 'delete' && (
@@ -172,9 +174,12 @@ function StudioRow({ video: v, onUpdate, onEdit, onDelete }: RowProps) {
         </div>
       </td>
       <td>
-        <StatusChip status={v.status} />
+        <div className="chip-row">
+          <StatusChip status={v.status} />
+          <span className={v.draft ? 'chip chip-amber' : 'chip'}>{v.draft ? 'Draf' : visibilityLabel(v.visibility)}</span>
+        </div>
       </td>
-      <td className="nowrap muted">{formatDate(v.created_at)}</td>
+      <td className="nowrap muted">{formatDate(videoDate(v))}</td>
       <td className="num">{ready ? formatCount(v.view_count) : '—'}</td>
       <td className="num">{ready ? formatCount(v.like_count) : '—'}</td>
       <td className="num">{ready ? formatCount(v.comment_count) : '—'}</td>

@@ -237,12 +237,35 @@ func (f FFmpeg) ThumbnailArgs(input, output string, atSeconds float64) []string 
 	}
 }
 
-// Thumbnail membuat gambar thumbnail. Diambil di detik ke-3, atau di
-// sepertiga durasi untuk video yang lebih pendek dari 9 detik.
-func (f FFmpeg) Thumbnail(ctx context.Context, input, output string, durationMs int64) error {
-	at := math.Min(3, float64(durationMs)/1000/3)
-	_, err := run(ctx, "ffmpeg", f.ThumbnailArgs(input, output, at)...)
+// Frame membuat satu gambar dari detik ke-(atMs/1000).
+func (f FFmpeg) Frame(ctx context.Context, input, output string, atMs int64) error {
+	_, err := run(ctx, "ffmpeg", f.ThumbnailArgs(input, output, float64(atMs)/1000)...)
 	return err
+}
+
+// FramePositions memilih posisi (milidetik) bingkai pilihan thumbnail
+// (langkah 26, desain Upload menampilkan tiga bingkai):
+//   - bingkai pertama = thumbnail bawaan, di detik ke-3, atau di sepertiga
+//     durasi untuk video yang lebih pendek dari 9 detik (sama dengan
+//     sebelum langkah 26);
+//   - lalu di 40% dan 75% durasi, supaya kreator punya pilihan dari bagian
+//     tengah dan akhir video.
+//
+// Posisi yang sama dibuang, jadi video yang sangat pendek bisa punya
+// kurang dari tiga bingkai.
+func FramePositions(durationMs int64) []int64 {
+	if durationMs <= 0 {
+		return []int64{0}
+	}
+	first := int64(math.Min(3000, float64(durationMs)/3))
+	positions := []int64{first}
+	for _, pct := range []int64{40, 75} {
+		at := durationMs * pct / 100
+		if at > positions[len(positions)-1] {
+			positions = append(positions, at)
+		}
+	}
+	return positions
 }
 
 // run menjalankan program dan mengembalikan stdout-nya. Jika gagal, pesan

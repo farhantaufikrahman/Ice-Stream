@@ -47,7 +47,7 @@ func (s *Service) AddToWatchLater(ctx context.Context, requesterID, videoID int6
 	if err != nil {
 		return time.Time{}, err
 	}
-	if v.Status != StatusReady {
+	if !v.CanView(requesterID) {
 		return time.Time{}, ErrNotFound
 	}
 	// Dibulatkan ke mikrodetik, ketelitian TIMESTAMP bawaan Oracle, supaya

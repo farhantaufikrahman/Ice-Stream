@@ -23,6 +23,7 @@ type fakeCommentClient struct {
 	lastList    *commentv1.ListCommentsRequest
 	lastReplies *commentv1.ListRepliesRequest
 	lastDelete  *commentv1.DeleteCommentRequest
+	lastChannel *commentv1.ListChannelCommentsRequest
 }
 
 var _ commentv1.CommentServiceClient = (*fakeCommentClient)(nil)

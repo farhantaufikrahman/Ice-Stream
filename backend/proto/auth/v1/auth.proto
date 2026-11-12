@@ -18,6 +18,18 @@ service AuthService {
   // FAILED_PRECONDITION jika token tidak valid, kedaluwarsa, atau sudah
   // dipakai; INVALID_ARGUMENT jika password baru tidak memenuhi aturan.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+  // LoginWithIdentity dipanggil gateway setelah login Google/GitHub
+  // berhasil (langkah 26). Mencari atau membuat user, lalu mengembalikan
+  // kode login sekali pakai (berlaku 2 menit). INVALID_ARGUMENT jika
+  // provider/subject tidak valid; FAILED_PRECONDITION jika penyedia tidak
+  // memberi email terverifikasi, email sudah dipakai akun yang belum
+  // terverifikasi, atau akun sudah terhubung ke akun lain di penyedia itu;
+  // PERMISSION_DENIED jika akun diblokir.
+  rpc LoginWithIdentity(LoginWithIdentityRequest) returns (LoginWithIdentityResponse);
+  // ExchangeLoginCode menukar kode dari LoginWithIdentity dengan token,
+  // sama seperti Login. UNAUTHENTICATED jika kode tidak valid,
+  // kedaluwarsa, atau sudah dipakai.
+  rpc ExchangeLoginCode(ExchangeLoginCodeRequest) returns (ExchangeLoginCodeResponse);
 }
 
 message User {
@@ -92,3 +104,31 @@ message ResetPasswordRequest {
 }
 
 message ResetPasswordResponse {}
+
+message LoginWithIdentityRequest {
+  // "google" atau "github".
+  string provider = 1;
+  // Id user di penyedia ("sub" Google, "id" GitHub).
+  string subject = 2;
+  string email = 3;
+  // true hanya jika penyedia menyatakan email itu sudah diverifikasi.
+  bool email_verified = 4;
+  // Nama tampilan dari penyedia (boleh kosong).
+  string name = 5;
+  // Usulan username, misalnya login GitHub (boleh kosong).
+  string username_hint = 6;
+}
+
+message LoginWithIdentityResponse {
+  string login_code = 1;
+}
+
+message ExchangeLoginCodeRequest {
+  string login_code = 1;
+  ClientInfo client = 2;
+}
+
+message ExchangeLoginCodeResponse {
+  User user = 1;
+  TokenPair tokens = 2;
+}

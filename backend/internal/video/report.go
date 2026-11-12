@@ -83,7 +83,7 @@ func (s *Service) ReportVideo(ctx context.Context, requesterID, videoID int64, r
 	if err != nil {
 		return time.Time{}, err
 	}
-	if v.Status != StatusReady {
+	if !v.IsWatchable() {
 		return time.Time{}, ErrNotFound
 	}
 	if v.OwnerID == requesterID {

@@ -67,13 +67,19 @@ type TranscodeStarted struct {
 // thumbnail tersimpan di object storage.
 type TranscodeSucceeded struct {
 	VideoID int64 `json:"video_id"`
-	// PlaylistKey adalah lokasi master playlist, misalnya "hls/42/master.m3u8".
+	// PlaylistKey adalah lokasi master playlist, misalnya
+	// "hls/42/9f2c.../master.m3u8" (folder acak sejak langkah 26).
 	PlaylistKey string `json:"playlist_key"`
-	// ThumbnailKey adalah lokasi gambar thumbnail, misalnya "hls/42/thumbnail.jpg".
+	// ThumbnailKey adalah lokasi gambar thumbnail bawaan, misalnya
+	// "hls/42/9f2c.../frames/3000.jpg".
 	ThumbnailKey string `json:"thumbnail_key"`
 	DurationMs   int64  `json:"duration_ms"`
 	// Renditions berisi resolusi yang dibuat, misalnya ["360p", "720p"].
 	Renditions []string `json:"renditions"`
+	// FrameTimesMs adalah posisi (milidetik) bingkai pilihan thumbnail di
+	// folder "frames/" di samping master playlist (langkah 26). Kosong jika
+	// dikirim transcoder versi lama.
+	FrameTimesMs []int64 `json:"frame_times_ms,omitempty"`
 }
 
 // TranscodeFailed dikirim transcoder jika video tidak bisa diproses, baik

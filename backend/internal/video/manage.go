@@ -25,19 +25,33 @@ type UpdateInput struct {
 	// SetTags membedakan "tag tidak dikirim" dari "hapus semua tag": slice
 	// kosong dan nil sama-sama berarti tanpa tag di Go.
 	SetTags bool
+	// Visibility nil = tidak diubah.
+	Visibility *string
+	// Draft nil = tidak diubah. false = "Terbitkan" video draf. Video yang
+	// sudah terbit boleh dijadikan draf lagi (disembunyikan dari orang
+	// lain), seperti YouTube Studio.
+	Draft *bool
+	// Language nil = tidak diubah, "" = hapus bahasa.
+	Language *string
 }
 
-// UpdateVideo mengganti judul, deskripsi, kategori, dan/atau tag video
-// milik requester. Kata pencarian dibuat ulang dari data baru, dalam
-// transaksi yang sama, supaya pencarian langsung memakai teks terbaru.
-// Boleh untuk video dengan status apa pun.
+// UpdateVideo mengganti judul, deskripsi, kategori, tag, visibilitas,
+// status draf, dan/atau bahasa video milik requester. Kata pencarian dibuat
+// ulang dari data baru, dalam transaksi yang sama, supaya pencarian
+// langsung memakai teks terbaru. Boleh untuk video dengan status apa pun.
+//
+// Jika video READY baru saja menjadi publik (misalnya draf diterbitkan,
+// atau Pribadi diubah menjadi Publik), event videos.published dikirim
+// supaya subscriber mendapat notifikasi. Subscriber yang sudah pernah
+// diberi tahu tentang video ini tidak diberi tahu lagi (lihat Notifier).
 func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error) {
 	if in.RequesterID <= 0 {
 		// Gateway selalu mengisi requester dari access token, jadi ini bug.
 		return Video{}, errors.New("requester id kosong")
 	}
-	if in.Title == nil && in.Description == nil && in.Category == nil && !in.SetTags {
-		return Video{}, &ValidationError{"title", "isi minimal title, description, category, atau tags"}
+	if in.Title == nil && in.Description == nil && in.Category == nil && !in.SetTags &&
+		in.Visibility == nil && in.Draft == nil && in.Language == nil {
+		return Video{}, &ValidationError{"title", "isi minimal satu field yang diubah"}
 	}
 	if in.VideoID <= 0 {
 		return Video{}, ErrNotFound
@@ -51,7 +65,10 @@ func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error
 		// ini ada.
 		return Video{}, ErrNotFound
 	}
-	d := Details{Title: v.Title, Description: v.Description, Category: v.Category, Tags: v.Tags}
+	d := Details{
+		Title: v.Title, Description: v.Description, Category: v.Category, Tags: v.Tags,
+		Visibility: v.Visibility, Draft: v.Draft, Language: v.Language,
+	}
 	if in.Title != nil {
 		if d.Title, err = cleanTitle(*in.Title); err != nil {
 			return Video{}, err
@@ -72,7 +89,31 @@ func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error
 			return Video{}, err
 		}
 	}
-	return s.repo.UpdateDetails(ctx, v.ID, in.RequesterID, d, BuildSearchTerms(d.Title, d.Description, d.Tags), s.now())
+	if in.Visibility != nil {
+		if d.Visibility, err = cleanVideoVisibility(*in.Visibility); err != nil {
+			return Video{}, err
+		}
+	}
+	if in.Draft != nil {
+		d.Draft = *in.Draft
+	}
+	if in.Language != nil {
+		if d.Language, err = cleanLanguage(*in.Language); err != nil {
+			return Video{}, err
+		}
+	}
+	updated, err := s.repo.UpdateDetails(ctx, v.ID, in.RequesterID, d, BuildSearchTerms(d.Title, d.Description, d.Tags), s.now())
+	if err != nil {
+		return Video{}, err
+	}
+	if updated.IsListed() && !v.IsListed() {
+		// Perubahan sudah tersimpan; kalau event gagal, yang hilang hanya
+		// notifikasinya. Jangan gagalkan edit hanya karena NATS bermasalah.
+		if err := s.events.PublishPublished(ctx, updated); err != nil {
+			return updated, fmt.Errorf("%w: %w", ErrEventsUnavailable, err)
+		}
+	}
+	return updated, nil
 }
 
 // deletableStatuses adalah status yang boleh dihapus. UPLOADED dan

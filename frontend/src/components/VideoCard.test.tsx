@@ -21,6 +21,10 @@ const video: Video = {
   danmaku_count: 0,
   category: 'game',
   tags: [],
+  visibility: 'PUBLIC',
+  draft: false,
+  language: '',
+  custom_thumbnail: false,
   owner: { id: '7', username: 'budi', display_name: 'Budi', avatar_url: '' },
 }
 

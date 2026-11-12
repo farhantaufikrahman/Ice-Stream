@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,6 +46,20 @@ type createVideoRequest struct {
 	// Boleh tidak dikirim. Lihat CreateUploadRequest di video.proto.
 	Category string   `json:"category"`
 	Tags     []string `json:"tags"`
+	// Langkah 26 (desain Upload). visibility: "PUBLIC" (bawaan),
+	// "UNLISTED", atau "PRIVATE". draft: true = "Simpan draf" (belum
+	// terbit walau sudah selesai diproses). language: "id", "en", "ja",
+	// atau kosong.
+	Visibility string `json:"visibility"`
+	Draft      bool   `json:"draft"`
+	Language   string `json:"language"`
+}
+
+// thumbnailFrameResponse adalah satu pilihan "Bingkai" di desain Upload.
+type thumbnailFrameResponse struct {
+	PositionMs int64  `json:"position_ms"`
+	URL        string `json:"url"`
+	Selected   bool   `json:"selected"`
 }
 
 type videoResponse struct {
@@ -84,6 +99,18 @@ type videoResponse struct {
 	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
 	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
 	Owner *ownerResponse `json:"owner,omitempty"`
+	// Langkah 26. Visibility selalu ada: "PUBLIC", "UNLISTED", atau
+	// "PRIVATE". PublishedAt = waktu video pertama kali terbit (bukan
+	// draf dan selesai diproses); tanggal di kartu video memakai ini.
+	Visibility  string     `json:"visibility"`
+	Draft       bool       `json:"draft"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	Language    string     `json:"language"`
+	// CustomThumbnail: true jika thumbnail diunggah kreator.
+	CustomThumbnail bool `json:"custom_thumbnail"`
+	// ThumbnailFrames hanya untuk pemilik video (lihat
+	// toOwnerVideoResponse): pilihan bingkai buatan transcoder.
+	ThumbnailFrames []thumbnailFrameResponse `json:"thumbnail_frames,omitempty"`
 }
 
 // listVideosResponse dipakai GET /videos (feed publik) dan GET /me/videos.
@@ -158,6 +185,10 @@ func (h *videoHandler) create(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
+	visibility, ok := parseVideoVisibility(c, req.Visibility)
+	if !ok {
+		return
+	}
 	resp, err := h.client.CreateUpload(ctx, &videov1.CreateUploadRequest{
 		RequesterId: userID,
 		Title:       req.Title,
@@ -166,13 +197,16 @@ func (h *videoHandler) create(c *gin.Context) {
 		SizeBytes:   req.SizeBytes,
 		Category:    req.Category,
 		Tags:        req.Tags,
+		Visibility:  visibility,
+		Draft:       req.Draft,
+		Language:    req.Language,
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"video": toVideoResponse(resp.GetVideo()),
+		"video": toOwnerVideoResponse(resp.GetVideo()),
 		"upload": uploadResponse{
 			URL:       resp.GetUploadUrl(),
 			Method:    http.MethodPut,
@@ -199,7 +233,7 @@ func (h *videoHandler) complete(c *gin.Context) {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"video": toVideoResponse(resp.GetVideo())})
+	c.JSON(http.StatusOK, gin.H{"video": toOwnerVideoResponse(resp.GetVideo())})
 }
 
 func (h *videoHandler) get(c *gin.Context) {
@@ -217,6 +251,9 @@ func (h *videoHandler) get(c *gin.Context) {
 		return
 	}
 	body := getVideoResponse{Video: toVideoResponse(resp.GetVideo())}
+	if viewerID != 0 && viewerID == resp.GetVideo().GetOwnerId() {
+		body.Video = toOwnerVideoResponse(resp.GetVideo())
+	}
 	if viewerID != 0 {
 		liked := resp.GetViewerLiked()
 		body.ViewerLiked = &liked
@@ -259,7 +296,11 @@ func (h *videoHandler) listMine(c *gin.Context) {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	c.JSON(http.StatusOK, toListResponse(resp.GetVideos(), resp.GetNextPageToken()))
+	out := listVideosResponse{Videos: make([]videoResponse, 0, len(resp.GetVideos())), NextPageToken: resp.GetNextPageToken()}
+	for _, v := range resp.GetVideos() {
+		out.Videos = append(out.Videos, toOwnerVideoResponse(v))
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 // search: GET /api/v1/search/videos?q=belajar+golang&page_size=20&page_token=...
@@ -516,7 +557,53 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		// Selalu array, bukan null, supaya frontend bisa langsung
 		// video.tags.map(...).
 		Tags: append([]string{}, v.GetTags()...),
+
+		Visibility:      videoVisibilityNames[v.GetVisibility()],
+		Draft:           v.GetDraft(),
+		PublishedAt:     optionalTime(v.GetPublishedAt()),
+		Language:        v.GetLanguage(),
+		CustomThumbnail: v.GetCustomThumbnail(),
 	}
+}
+
+// toOwnerVideoResponse sama dengan toVideoResponse ditambah pilihan
+// bingkai thumbnail. Hanya untuk jawaban yang dilihat pemilik video.
+func toOwnerVideoResponse(v *videov1.Video) videoResponse {
+	out := toVideoResponse(v)
+	for _, f := range v.GetThumbnailFrames() {
+		out.ThumbnailFrames = append(out.ThumbnailFrames, thumbnailFrameResponse{
+			PositionMs: f.GetPositionMs(),
+			URL:        f.GetUrl(),
+			Selected:   f.GetSelected(),
+		})
+	}
+	return out
+}
+
+// videoVisibilityNames: enum gRPC -> teks di JSON. UNSPECIFIED (video lama
+// dari VideoService versi sebelumnya) berarti PUBLIC.
+var videoVisibilityNames = map[videov1.VideoVisibility]string{
+	videov1.VideoVisibility_VIDEO_VISIBILITY_UNSPECIFIED: "PUBLIC",
+	videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC:      "PUBLIC",
+	videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED:    "UNLISTED",
+	videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE:     "PRIVATE",
+}
+
+// parseVideoVisibility: "" = tidak dipilih (VideoService memakai PUBLIC).
+// Huruf besar/kecil tidak dibedakan. Selain itu dijawab 400.
+func parseVideoVisibility(c *gin.Context, raw string) (videov1.VideoVisibility, bool) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "":
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_UNSPECIFIED, true
+	case "PUBLIC":
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC, true
+	case "UNLISTED":
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED, true
+	case "PRIVATE":
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE, true
+	}
+	abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "visibility harus PUBLIC, UNLISTED, atau PRIVATE")
+	return 0, false
 }
 
 func optionalTime(ts *timestamppb.Timestamp) *time.Time {

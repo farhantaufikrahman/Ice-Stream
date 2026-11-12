@@ -72,7 +72,8 @@ func (r *OracleRepository) InsertNotifications(ctx context.Context, kind string,
 //
 //	SELECT n.id, n.kind, n.video_id, n.created_at, n.read_at
 //	  FROM notifications n JOIN videos v ON v.id = n.video_id
-//	 WHERE n.user_id = 7 AND v.status = 'READY' AND v.deleted_at IS NULL
+//	 WHERE n.user_id = 7 AND v.status = 'READY' AND v.draft = 0
+//	   AND v.visibility = 'PUBLIC' AND v.deleted_at IS NULL
 //	   AND n.id < :cursor
 //	 ORDER BY n.id DESC
 //	 FETCH NEXT 21 ROWS ONLY
@@ -87,7 +88,7 @@ func (r *OracleRepository) ListNotifications(ctx context.Context, userID, before
 	q := r.db.WithContext(ctx).Table("notifications n").
 		Select(`n.id AS "id", n.kind AS "kind", n.video_id AS "video_id", n.created_at AS "created_at", n.read_at AS "read_at"`).
 		Joins("JOIN videos v ON v.id = n.video_id").
-		Where("n.user_id = ? AND v.status = ? AND v.deleted_at IS NULL", userID, StatusReady)
+		Where("n.user_id = ? AND "+listedSQLv+" AND v.deleted_at IS NULL", userID)
 	if beforeID > 0 {
 		q = q.Where("n.id < ?", beforeID)
 	}
@@ -148,13 +149,13 @@ const countUnreadSQL = `SELECT COUNT(*) FROM (
   SELECT /*+ LEADING(n) USE_NL(v) */ 1
     FROM notifications n JOIN videos v ON v.id = n.video_id
    WHERE n.user_id = ? AND SYS_EXTRACT_UTC(n.read_at) IS NULL
-     AND v.status = ? AND v.deleted_at IS NULL
+     AND ` + listedSQLv + ` AND v.deleted_at IS NULL
    FETCH FIRST ? ROWS ONLY)`
 
 // CountUnreadNotifications menjalankan countUnreadSQL.
 func (r *OracleRepository) CountUnreadNotifications(ctx context.Context, userID int64, limit int) (int64, error) {
 	var n int64
-	if err := r.db.WithContext(ctx).Raw(countUnreadSQL, userID, StatusReady, limit).Scan(&n).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(countUnreadSQL, userID, limit).Scan(&n).Error; err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
 	return n, nil

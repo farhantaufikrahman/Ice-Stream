@@ -20,6 +20,7 @@ func readyVideo(repo *fakeRepo, ownerID int64, processedAt time.Time) Video {
 	v := Video{
 		ID: repo.nextID, OwnerID: ownerID, Title: "Video", Status: StatusReady,
 		PlaylistKey: "hls/x/master.m3u8", ProcessedAt: &processedAt,
+		Visibility: VisibilityPublic, PublishedAt: &processedAt,
 	}
 	repo.videos[v.ID] = v
 	return v
@@ -85,10 +86,10 @@ func TestListVideosValidation(t *testing.T) {
 }
 
 func TestFeedCursorRoundTrip(t *testing.T) {
-	c := FeedCursor{ProcessedAt: time.Date(2026, 11, 10, 8, 0, 0, 123456000, time.UTC), ID: 42}
+	c := FeedCursor{PublishedAt: time.Date(2026, 11, 10, 8, 0, 0, 123456000, time.UTC), ID: 42}
 	got, err := decodeFeedCursor(encodeFeedCursor(c))
 	require.NoError(t, err)
-	assert.True(t, c.ProcessedAt.Equal(got.ProcessedAt))
+	assert.True(t, c.PublishedAt.Equal(got.PublishedAt))
 	assert.Equal(t, c.ID, got.ID)
 }
 

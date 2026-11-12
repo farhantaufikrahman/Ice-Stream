@@ -33,6 +33,13 @@ type Comment struct {
 	CreatedAt  time.Time
 }
 
+// ChannelComment adalah komentar di video milik sebuah channel, beserta
+// judul videonya (halaman Komentar di Creator Studio, langkah 26).
+type ChannelComment struct {
+	Comment
+	VideoTitle string
+}
+
 // IsRoot mengembalikan true untuk komentar utama (bukan balasan).
 func (c Comment) IsRoot() bool { return c.ParentID == 0 }
 

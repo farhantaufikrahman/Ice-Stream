@@ -2,16 +2,19 @@ import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEven
 import { Link, useBlocker } from 'react-router'
 import { errorMessage, isAbortError } from '../api/client'
 import { completeUpload, createUpload, deleteVideo, updateVideo } from '../api/endpoints'
-import type { Video } from '../api/types'
+import type { Video, VideoLanguage, VideoVisibility } from '../api/types'
 import { putFile } from '../api/upload'
 import { ErrorBox } from '../components/ErrorBox'
 import { StatusChip } from '../components/studio/StatusChip'
 import { StudioHeader, UploadIcon } from '../components/studio/StudioLayout'
 import { CategoryTagFields, type TagFieldHandle } from '../components/studio/CategoryTagFields'
+import { ThumbnailPicker } from '../components/studio/ThumbnailPicker'
+import { VisibilityFields } from '../components/studio/VisibilityFields'
 import { VideoDetailsFields } from '../components/studio/VideoDetailsFields'
 import { useVideoPoll } from '../hooks/useVideoPoll'
 import { detailsChanges } from '../lib/categories'
 import { formatDuration } from '../lib/format'
+import { visibilityLabel } from '../lib/visibility'
 import {
   ACCEPT_VIDEO,
   checkVideoFile,
@@ -28,8 +31,8 @@ import {
  *   pick       belum ada file
  *   creating   POST /videos (mencatat video + minta URL presigned)
  *   uploading  PUT file langsung ke RustFS, dengan progres
- *   uploaded   file lengkap di storage, menunggu user menekan Terbitkan
- *   publishing PATCH judul/deskripsi (jika diubah) lalu POST /complete
+ *   uploaded   file lengkap di storage, menunggu Terbitkan atau Simpan draf
+ *   publishing PATCH detail (jika diubah) lalu POST /complete
  *   published  transcoding berjalan; status dicek berkala sampai READY/FAILED
  *   failed     salah satu langkah di atas gagal (lihat error.at)
  */
@@ -52,9 +55,11 @@ interface UploadErr {
  * setelah dipilih, sambil user mengisi judul dan deskripsi, seperti di
  * desain (progres 64% sambil mengisi detail).
  *
- * Bagian desain yang belum didukung backend (bahasa, pilihan thumbnail,
- * visibilitas, draf) sengaja belum ditampilkan. Kategori dan tag ada sejak
- * langkah 23.
+ * Langkah 26: bahasa video, pilihan thumbnail, visibilitas, dan tombol
+ * "Simpan draf". Video dicatat sebagai draf sejak file dipilih, jadi video
+ * yang ditinggalkan di tengah jalan tidak pernah muncul di beranda. Panel
+ * progres per kualitas di desain belum ditampilkan karena transcoder
+ * belum mengirim progres per kualitas.
  */
 export function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -67,6 +72,10 @@ export function UploadPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  const [language, setLanguage] = useState<VideoLanguage>('')
+  const [visibility, setVisibility] = useState<VideoVisibility>('PUBLIC')
+  // Tombol yang terakhir ditekan: Terbitkan (false) atau Simpan draf (true).
+  const [asDraft, setAsDraft] = useState(false)
   // Pesan "Pilih kategori." baru muncul setelah Terbitkan ditekan.
   const [triedPublish, setTriedPublish] = useState(false)
   const tagsRef = useRef<TagFieldHandle>(null)
@@ -112,6 +121,8 @@ export function UploadPage() {
           description: initialDescription,
           content_type: contentType,
           size_bytes: f.size,
+          // Draf sampai user menekan Terbitkan (lihat komentar komponen).
+          draft: true,
         })
       } catch (err) {
         if (ctrl.signal.aborted) return
@@ -160,6 +171,9 @@ export function UploadPage() {
     setDescription('')
     setCategory('')
     setTags([])
+    setLanguage('')
+    setVisibility('PUBLIC')
+    setAsDraft(false)
     setTriedPublish(false)
     void startUpload(f, check.contentType, t, '')
   }
@@ -181,7 +195,7 @@ export function UploadPage() {
   const retry = () => {
     if (!file) return
     if (error?.at === 'publish') {
-      void publish()
+      void publish(asDraft)
       return
     }
     const check = checkVideoFile(file)
@@ -198,21 +212,23 @@ export function UploadPage() {
     void startUpload(file, check.contentType, t, d)
   }
 
-  const publish = async () => {
+  /** draft true = "Simpan draf": video tetap diproses, tapi belum terbit. */
+  const publish = async (draft: boolean) => {
     if (!video) return
+    setAsDraft(draft)
     setTriedPublish(true)
     // Kategori wajib dipilih saat menerbitkan (seperti YouTube Studio),
-    // supaya video muncul di chip beranda. Video lama boleh tanpa kategori.
+    // supaya video muncul di chip beranda. Draf boleh tanpa kategori.
     // Tag yang masih diketik ikut disimpan; null = teksnya salah.
     const finalTags = tagsRef.current ? tagsRef.current.flush() : tags
-    if (titleError(title) || descriptionError(description) || !category || !finalTags) return
+    if (titleError(title) || descriptionError(description) || (!draft && !category) || !finalTags) return
     setPhase('publishing')
     setError(null)
     try {
       let current = video
       // Video dicatat saat file dipilih (judul dari nama file), jadi detail
       // yang diisi sesudahnya dikirim sekarang lewat PATCH.
-      const changes = detailsChanges(current, { title, description, category, tags: finalTags })
+      const changes = detailsChanges(current, { title, description, category, tags: finalTags, visibility, language, draft })
       if (Object.keys(changes).length > 0) {
         current = await updateVideo(current.id, changes)
         // Disimpan sekarang: jika /complete gagal, Coba lagi tidak PATCH ulang.
@@ -228,7 +244,7 @@ export function UploadPage() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
-    void publish()
+    void publish(false)
   }
 
   const step = phase === 'pick' ? 1 : phase === 'published' ? 3 : 2
@@ -243,7 +259,7 @@ export function UploadPage() {
         <ol className="steps" aria-label="Langkah unggah">
           <Step n={1} label="Pilih berkas" step={step} done={step > 1} />
           <Step n={2} label="Detail video" step={step} done={step > 2} />
-          <Step n={3} label="Terbitkan" step={step} done={done} />
+          <Step n={3} label="Visibilitas & terbitkan" step={step} done={done} />
         </ol>
 
         {blocker.state === 'blocked' && (
@@ -272,9 +288,11 @@ export function UploadPage() {
         ) : (
           <div className="upload-grid">
             <form className="panel upload-form" onSubmit={onSubmit} noValidate>
-              <h1 className="panel-title">{phase === 'published' ? 'Video diterbitkan' : 'Detail video'}</h1>
+              <h1 className="panel-title">
+                {phase !== 'published' ? 'Detail video' : video?.draft ? 'Draf disimpan' : 'Video diterbitkan'}
+              </h1>
               {phase === 'published' && video ? (
-                <PublishedNote video={video} onAnother={resetFile} />
+                <PublishedNote video={video} onAnother={resetFile} onChange={setVideo} />
               ) : (
                 <>
                   <VideoDetailsFields
@@ -293,20 +311,27 @@ export function UploadPage() {
                     onTagsChange={setTags}
                     disabled={fieldsLocked}
                     emptyCategoryLabel="Pilih kategori"
-                    categoryError={triedPublish && !category ? 'Pilih kategori.' : null}
+                    categoryError={triedPublish && !asDraft && !category ? 'Pilih kategori.' : null}
                     tagsRef={tagsRef}
+                    language={language}
+                    onLanguageChange={setLanguage}
                   />
+                  {video && <ThumbnailPicker video={video} onChange={setVideo} disabled={fieldsLocked} />}
+                  <VisibilityFields idPrefix="up" value={visibility} onChange={setVisibility} disabled={fieldsLocked} />
                   {error && <ErrorBox message={errorText(error)} onRetry={retry} />}
                   <div className="form-actions">
-                    <button type="button" className="btn" onClick={resetFile} disabled={phase === 'publishing'}>
+                    <button type="button" className="btn btn-ghost" onClick={resetFile} disabled={phase === 'publishing'}>
                       Ganti berkas
                     </button>
+                    <button type="button" className="btn" onClick={() => void publish(true)} disabled={!canPublish}>
+                      {phase === 'publishing' && asDraft ? 'Menyimpan…' : 'Simpan draf'}
+                    </button>
                     <button type="submit" className="btn btn-primary" disabled={!canPublish}>
-                      {phase === 'publishing' ? 'Menerbitkan…' : 'Terbitkan'}
+                      {phase === 'publishing' && !asDraft ? 'Menerbitkan…' : 'Terbitkan'}
                     </button>
                   </div>
                   {!canPublish && phase !== 'publishing' && (
-                    <p className="muted small form-hint">Tombol Terbitkan aktif setelah unggahan selesai.</p>
+                    <p className="muted small form-hint">Tombol Simpan draf dan Terbitkan aktif setelah unggahan selesai.</p>
                   )}
                 </>
               )}
@@ -324,6 +349,20 @@ export function UploadPage() {
       </main>
     </div>
   )
+}
+
+/** Penjelasan di bawah status setelah Terbitkan / Simpan draf. */
+function publishedHint(v: Video): string {
+  if (v.draft) return 'Draf hanya terlihat olehmu. Terbitkan kapan saja dari menu Konten di Studio.'
+  const where =
+    v.visibility === 'PUBLIC'
+      ? 'video muncul di beranda dan subscriber diberi tahu.'
+      : v.visibility === 'UNLISTED'
+        ? 'video bisa ditonton siapa saja yang punya tautannya.'
+        : 'hanya kamu yang bisa menontonnya.'
+  if (isProcessing(v.status)) return `Video sedang diubah ke format HLS. Setelah statusnya Siap, ${where}`
+  if (v.status === 'READY') return `Sudah siap: ${where}`
+  return ''
 }
 
 function errorText(err: UploadErr): string {
@@ -517,23 +556,23 @@ function TranscodeCard({ phase, video }: { phase: Phase; video: Video | null }) 
 }
 
 function transcodeNote(status: Video['status'] | null): string {
-  if (!status) return 'Transcoding dimulai setelah kamu menekan Terbitkan.'
+  if (!status) return 'Transcoding dimulai setelah kamu menekan Terbitkan atau Simpan draf.'
   if (status === 'READY') return 'Selesai. Video sudah bisa ditonton.'
   if (status === 'FAILED') return 'Transcoding gagal. Hapus video ini di Studio lalu unggah ulang.'
   return 'Halaman ini mengecek status secara otomatis. Boleh ditutup, prosesnya tetap berjalan di server.'
 }
 
-function PublishedNote({ video, onAnother }: { video: Video; onAnother: () => void }) {
+function PublishedNote({ video, onAnother, onChange }: { video: Video; onAnother: () => void; onChange: (v: Video) => void }) {
   return (
     <div className="published">
       <p className="published-title">{video.title}</p>
-      <p>
-        Status: <StatusChip status={video.status} />
-      </p>
+      <div className="chip-row">
+        <StatusChip status={video.status} />
+        <span className="chip">{video.draft ? 'Draf' : visibilityLabel(video.visibility)}</span>
+      </div>
       {video.status === 'FAILED' && video.failure_reason && <p className="muted small">{video.failure_reason}</p>}
-      {isProcessing(video.status) && (
-        <p className="muted">Video sedang diubah ke format HLS. Setelah statusnya Siap, video muncul di beranda.</p>
-      )}
+      <p className="muted">{publishedHint(video)}</p>
+      {video.status !== 'FAILED' && <ThumbnailPicker video={video} onChange={onChange} />}
       <div className="form-actions form-actions-start">
         {video.status === 'READY' && (
           <Link to={`/watch/${video.id}`} className="btn btn-primary">

@@ -16,7 +16,18 @@ var (
 	ErrVideoNotFound = errors.New("video tidak ditemukan")
 	// ErrRateLimited: user mengirim danmaku terlalu cepat.
 	ErrRateLimited = errors.New("terlalu banyak danmaku, tunggu beberapa detik")
+	// ErrNotFound: danmaku tidak ada (atau sudah dihapus).
+	ErrNotFound = errors.New("danmaku tidak ditemukan")
+	// ErrForbidden: requester bukan pengirim danmaku dan bukan pemilik video.
+	ErrForbidden = errors.New("kamu tidak boleh menghapus danmaku ini")
 )
+
+// ChannelDanmaku adalah danmaku di video milik sebuah channel, beserta
+// judul videonya (halaman Danmaku di Creator Studio, langkah 26).
+type ChannelDanmaku struct {
+	Danmaku
+	VideoTitle string
+}
 
 // Mode menentukan cara danmaku tampil di layar.
 type Mode string

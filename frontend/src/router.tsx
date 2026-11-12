@@ -12,11 +12,15 @@ import { LiveWatchRoute } from './pages/LiveWatchPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { OAuthDonePage } from './pages/OAuthDonePage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { StudioAnalyticsPage } from './pages/StudioAnalyticsPage'
+import { StudioCommentsPage } from './pages/StudioCommentsPage'
+import { StudioDanmakuPage } from './pages/StudioDanmakuPage'
 import { StudioDashboardPage } from './pages/StudioDashboardPage'
 import { StudioLivePage } from './pages/StudioLivePage'
 import { StudioPage } from './pages/StudioPage'
@@ -67,6 +71,8 @@ export const router = createBrowserRouter([
           // Lupa kata sandi (langkah 24c): tanpa login.
           { path: '/forgot-password', element: <ForgotPasswordPage /> },
           { path: '/reset-password', element: <ResetPasswordPage /> },
+          // Akhir login Google/GitHub (langkah 26): menukar kode sekali pakai.
+          { path: '/oauth/selesai', element: <OAuthDonePage /> },
         ],
       },
       {
@@ -77,6 +83,10 @@ export const router = createBrowserRouter([
           { path: '/studio/content', element: <StudioPage /> },
           // Siaran langsung (langkah 25b).
           { path: '/studio/live', element: <StudioLivePage /> },
+          // Analitik, Komentar, dan Danmaku (langkah 26).
+          { path: '/studio/analytics', element: <StudioAnalyticsPage /> },
+          { path: '/studio/comments', element: <StudioCommentsPage /> },
+          { path: '/studio/danmaku', element: <StudioDanmakuPage /> },
           { path: '/studio/settings', element: <SettingsPage /> },
           { path: '/upload', element: <UploadPage /> },
         ],

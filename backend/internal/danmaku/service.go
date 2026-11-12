@@ -27,6 +27,15 @@ type Repository interface {
 	// (termasuk kedua ujung), urut (position_ms, id), hanya yang sesudah
 	// cursor after.
 	List(ctx context.Context, videoID, fromMs, toMs int64, after Cursor, limit int) ([]Danmaku, error)
+	// ListByChannel mengambil danmaku di video milik ownerID (hanya videoID
+	// jika > 0) yang belum dihapus, id terbesar lebih dulu, hanya yang
+	// id-nya lebih kecil dari beforeID (0 = dari yang terbaru).
+	ListByChannel(ctx context.Context, ownerID, videoID, beforeID int64, limit int) ([]ChannelDanmaku, error)
+	// Delete menghapus danmaku dan mengurangi danmaku_count videonya dalam
+	// satu transaksi. Sebelum menghapus, authorize dipanggil dengan danmaku
+	// dan id pemilik video; jika mengembalikan error, tidak ada yang
+	// dihapus. ErrNotFound jika danmaku tidak ada.
+	Delete(ctx context.Context, danmakuID int64, authorize func(d Danmaku, videoOwnerID int64) error) error
 }
 
 // Publisher menyiarkan danmaku yang baru tersimpan ke penonton lain.
@@ -43,6 +52,9 @@ const (
 	maxWindowMs     = 6 * 60 * 1000
 	defaultPageSize = 500
 	maxPageSize     = 1000
+	// Halaman Danmaku di Creator Studio.
+	defaultChannelPageSize = 50
+	maxChannelPageSize     = 100
 	// Batas spam: maksimal 3 danmaku per 10 detik per user.
 	rateLimitCount  = 3
 	rateLimitWindow = 10 * time.Second
@@ -221,4 +233,60 @@ func decodeCursor(token string) (Cursor, error) {
 		return Cursor{}, errors.New("isi cursor salah")
 	}
 	return Cursor{PositionMs: pos, ID: id}, nil
+}
+
+// ListChannelDanmaku mengambil danmaku di video milik requesterID untuk
+// Creator Studio. videoID 0 = semua video. Token halaman berikutnya adalah
+// id danmaku terakhir (base64), sama seperti komentar.
+func (s *Service) ListChannelDanmaku(ctx context.Context, requesterID, videoID int64, pageSize int, pageToken string) ([]ChannelDanmaku, string, error) {
+	if requesterID <= 0 {
+		return nil, "", errors.New("requester id kosong")
+	}
+	if videoID < 0 {
+		return nil, "", ErrVideoNotFound
+	}
+	if pageSize <= 0 {
+		pageSize = defaultChannelPageSize
+	}
+	if pageSize > maxChannelPageSize {
+		return nil, "", &ValidationError{"page_size", fmt.Sprintf("maksimal %d", maxChannelPageSize)}
+	}
+	var beforeID int64
+	if pageToken != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(pageToken)
+		id, perr := strconv.ParseInt(string(raw), 10, 64)
+		if err != nil || perr != nil || id <= 0 {
+			return nil, "", &ValidationError{"page_token", "tidak valid"}
+		}
+		beforeID = id
+	}
+	items, err := s.repo.ListByChannel(ctx, requesterID, videoID, beforeID, pageSize+1)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(items) <= pageSize {
+		return items, "", nil
+	}
+	items = items[:pageSize]
+	last := strconv.FormatInt(items[pageSize-1].ID, 10)
+	return items, base64.RawURLEncoding.EncodeToString([]byte(last)), nil
+}
+
+// DeleteDanmaku menghapus danmaku. Pengirim boleh menghapus danmakunya
+// sendiri, dan pemilik video boleh menghapus danmaku apa pun di videonya,
+// sama seperti komentar. Penonton yang sedang menonton tetap melihatnya
+// sampai halaman dibuka ulang.
+func (s *Service) DeleteDanmaku(ctx context.Context, requesterID, danmakuID int64) error {
+	if requesterID <= 0 {
+		return errors.New("requester id kosong")
+	}
+	if danmakuID <= 0 {
+		return ErrNotFound
+	}
+	return s.repo.Delete(ctx, danmakuID, func(d Danmaku, videoOwnerID int64) error {
+		if requesterID == d.UserID || requesterID == videoOwnerID {
+			return nil
+		}
+		return ErrForbidden
+	})
 }

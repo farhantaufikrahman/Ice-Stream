@@ -13,12 +13,12 @@ import (
 // Versi palsu method langkah 24a di Repository. Perilakunya meniru query
 // di oracle_repository.go.
 
-func (r *fakeRepo) FindReadyByIDs(_ context.Context, ids []int64) ([]Video, error) {
+func (r *fakeRepo) FindListedByIDs(_ context.Context, ids []int64) ([]Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []Video
 	for _, id := range ids {
-		if v, ok := r.videos[id]; ok && v.Status == StatusReady {
+		if v, ok := r.videos[id]; ok && v.IsListed() {
 			out = append(out, v)
 		}
 	}
@@ -30,7 +30,7 @@ func (r *fakeRepo) ListPopularByOwner(_ context.Context, ownerID int64, offset, 
 	defer r.mu.Unlock()
 	var all []Video
 	for _, v := range r.videos {
-		if v.OwnerID == ownerID && v.Status == StatusReady {
+		if v.OwnerID == ownerID && v.IsListed() {
 			all = append(all, v)
 		}
 	}
@@ -50,7 +50,7 @@ func (r *fakeRepo) TrendingVideos(_ context.Context, fromDay, category string, l
 	var hits []TrendingHit
 	for id, days := range r.daily {
 		v, ok := r.videos[id]
-		if !ok || v.Status != StatusReady || (category != "" && v.Category != category) {
+		if !ok || !v.IsListed() || (category != "" && v.Category != category) {
 			continue
 		}
 		var sum int64
