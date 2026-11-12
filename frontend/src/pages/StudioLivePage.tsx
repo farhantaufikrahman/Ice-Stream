@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { Link } from 'react-router'
 import { errorMessage } from '../api/client'
 import { getMyLive, resetStreamKey, updateMyLive } from '../api/endpoints'
-import type { LiveChannel } from '../api/types'
+import type { LiveChannel, LiveRecording } from '../api/types'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
 import { StudioLayout } from '../components/studio/StudioLayout'
@@ -373,14 +373,29 @@ function CopyField({ id, label, value, hidden = false, extra }: { id: string; la
   )
 }
 
+/** Tiga pilihan siaran di desain GoLive ("Detail siaran"), langkah 27. */
+type LiveOptions = Pick<LiveChannel, 'record_enabled' | 'slow_mode' | 'followers_only'>
+
+const OPTIONS: { key: keyof LiveOptions; id: string; label: string }[] = [
+  { key: 'record_enabled', id: 'gl-record', label: 'Simpan rekaman sebagai video setelah siaran selesai' },
+  { key: 'slow_mode', id: 'gl-slow', label: 'Mode lambat chat (3 detik per pesan)' },
+  { key: 'followers_only', id: 'gl-follow', label: 'Chat hanya untuk pengikut' },
+]
+
 function DetailsForm({ channel, onSaved }: { channel: LiveChannel; onSaved: (ch: LiveChannel) => void }) {
   const [title, setTitle] = useState(channel.title)
   const [category, setCategory] = useState(channel.category)
+  const [options, setOptions] = useState<LiveOptions>({
+    record_enabled: channel.record_enabled,
+    slow_mode: channel.slow_mode,
+    followers_only: channel.followers_only,
+  })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const count = charCount(title.trim())
   const invalid = count === 0 || count > MAX_TITLE
-  const dirty = title.trim() !== channel.title || category !== channel.category
+  const dirty =
+    title.trim() !== channel.title || category !== channel.category || OPTIONS.some((o) => options[o.key] !== channel[o.key])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -388,11 +403,12 @@ function DetailsForm({ channel, onSaved }: { channel: LiveChannel; onSaved: (ch:
     setBusy(true)
     setMsg(null)
     try {
-      const ch = await updateMyLive(title, category)
+      const ch = await updateMyLive({ title, category, ...options })
       setTitle(ch.title)
       setCategory(ch.category)
+      setOptions({ record_enabled: ch.record_enabled, slow_mode: ch.slow_mode, followers_only: ch.followers_only })
       onSaved(ch)
-      setMsg({ ok: true, text: ch.current ? 'Tersimpan. Penonton langsung melihat judul baru.' : 'Tersimpan.' })
+      setMsg({ ok: true, text: ch.current ? 'Tersimpan. Judul dan pilihan chat langsung berlaku untuk penonton.' : 'Tersimpan.' })
     } catch (err) {
       setMsg({ ok: false, text: errorMessage(err) })
     } finally {
@@ -423,6 +439,18 @@ function DetailsForm({ channel, onSaved }: { channel: LiveChannel; onSaved: (ch:
           ))}
         </select>
       </div>
+      {OPTIONS.map((o) => (
+        <label key={o.key} htmlFor={o.id} className="check-row golive-option">
+          <input
+            id={o.id}
+            type="checkbox"
+            checked={options[o.key]}
+            onChange={(e) => setOptions((prev) => ({ ...prev, [o.key]: e.target.checked }))}
+          />
+          {o.label}
+        </label>
+      ))}
+      {channel.last_recording && <RecordingStatus recording={channel.last_recording} />}
       {msg && (
         <p className={msg.ok ? 'muted small' : 'field-error'} role="status">
           {msg.text}
@@ -434,6 +462,38 @@ function DetailsForm({ channel, onSaved }: { channel: LiveChannel; onSaved: (ch:
         </button>
       </div>
     </form>
+  )
+}
+
+/**
+ * Rekaman siaran terakhir (langkah 27). Rekaman diproses beberapa detik
+ * setelah siaran selesai, lalu menjadi video DRAF yang bisa diedit dan
+ * diterbitkan dari menu Konten.
+ */
+function RecordingStatus({ recording }: { recording: LiveRecording }) {
+  const when = recording.ended_at ? ` (${formatDate(recording.ended_at)})` : ''
+  let text: ReactNode
+  switch (recording.status) {
+    case 'PENDING':
+    case 'IMPORTING':
+      text = `Rekaman siaran terakhir${when} sedang disimpan menjadi video…`
+      break
+    case 'DONE':
+      text = (
+        <>
+          Rekaman siaran terakhir{when} sudah menjadi video draf. <Link to="/studio/content">Buka di Konten</Link> untuk mengedit dan
+          menerbitkannya.
+        </>
+      )
+      break
+    case 'FAILED':
+      text = `Rekaman siaran terakhir${when} gagal disimpan: ${recording.error || 'alasan tidak diketahui'}.`
+      break
+  }
+  return (
+    <p className={recording.status === 'FAILED' ? 'field-error' : 'muted small'} role="status">
+      {text}
+    </p>
   )
 }
 

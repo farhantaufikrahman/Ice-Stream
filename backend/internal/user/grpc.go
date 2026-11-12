@@ -137,6 +137,12 @@ func (s *GRPCServer) SearchUsers(ctx context.Context, req *userv1.SearchUsersReq
 	for i, p := range found {
 		resp.Profiles[i] = s.toProto(p)
 	}
+	// Jumlah hasil hanya di halaman pertama (langkah 27).
+	if req.GetPageToken() == "" {
+		if resp.TotalSize, err = s.svc.CountSearchUsers(ctx, req.GetQuery(), len(found), next != ""); err != nil {
+			return nil, s.toStatus(ctx, err)
+		}
+	}
 	return resp, nil
 }
 

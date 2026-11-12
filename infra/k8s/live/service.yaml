@@ -2,6 +2,7 @@
 #   mediamtx:8888  HLS (diteruskan Gateway, lihat httproute.yaml)
 #   mediamtx:8889  WHIP untuk siaran dari browser (httproute-webrtc.yaml)
 #   mediamtx:9997  Control API (hanya untuk VideoService, tidak ada HTTPRoute)
+#   mediamtx:9996  Playback rekaman (langkah 27, hanya untuk VideoService)
 apiVersion: v1
 kind: Service
 metadata:
@@ -23,3 +24,6 @@ spec:
     - name: api
       port: 9997
       targetPort: api
+    - name: playback
+      port: 9996
+      targetPort: playback

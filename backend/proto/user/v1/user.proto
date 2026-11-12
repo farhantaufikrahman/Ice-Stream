@@ -215,4 +215,7 @@ message SearchUsersResponse {
   repeated Profile profiles = 1;
   // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
   string next_page_token = 2;
+  // Jumlah semua hasil (langkah 27), hanya diisi di halaman pertama.
+  // Dihitung paling banyak 1001: nilai 1001 berarti "lebih dari 1000".
+  int64 total_size = 3;
 }

@@ -35,6 +35,8 @@ type fakeLiveClient struct {
 	lastToken  *livev1.CreatePublishTokenRequest
 	lastSend   *livev1.SendChatMessageRequest
 	lastChat   *livev1.ListChatMessagesRequest
+	// followersOnly mengisi pilihan chat di GetLiveStream (langkah 27).
+	followersOnly bool
 }
 
 var _ livev1.LiveServiceClient = (*fakeLiveClient)(nil)
@@ -53,6 +55,8 @@ func testLiveChannel() *livev1.LiveChannel {
 	return &livev1.LiveChannel{
 		OwnerId: 7, Title: "Ngoding bareng", Category: "teknologi", IngestUrl: "rtmp://localhost:1935/live",
 		HasStreamKey: true, StreamKeyCreatedAt: timestamppb.New(testLiveStart), Current: testLiveStream(),
+		RecordEnabled: true, SlowMode: true,
+		LastRecording: &livev1.Recording{StreamId: 2, Status: "DONE", VideoId: 42, EndedAt: timestamppb.New(testLiveStart.Add(-time.Hour))},
 	}
 }
 
@@ -97,6 +101,7 @@ func (f *fakeLiveClient) GetLiveStream(_ context.Context, in *livev1.GetLiveStre
 	st.Status = livev1.LiveStatus_LIVE_STATUS_ENDED
 	st.EndedAt = timestamppb.New(testLiveStart.Add(time.Hour))
 	st.PlaybackUrl, st.ViewerCount = "", 0
+	st.SlowMode, st.FollowersOnly = true, f.followersOnly
 	return &livev1.GetLiveStreamResponse{Stream: st}, nil
 }
 
@@ -200,12 +205,23 @@ func TestMyLiveChannel(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), `"has_stream_key":true`)
 	assert.Contains(t, rec.Body.String(), `"current":{"id":"3"`)
 	assert.NotContains(t, rec.Body.String(), "isk_", "key tidak pernah ada di GET")
+	assert.Contains(t, rec.Body.String(), `"record_enabled":true,"slow_mode":true,"followers_only":false`)
+	assert.Contains(t, rec.Body.String(), `"last_recording":{"stream_id":"2","status":"DONE","video_id":"42","ended_at":"2026-11-12T06:00:00Z"}`)
 	assert.Equal(t, int64(7), fake.lastMine.GetRequesterId())
 
 	rec = do(r, http.MethodPatch, "/api/v1/me/live", `{"title":"Ngoding bareng","category":"teknologi"}`, as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "Ngoding bareng", fake.lastUpdate.GetTitle())
 	assert.Equal(t, "teknologi", fake.lastUpdate.GetCategory())
+	assert.Nil(t, fake.lastUpdate.RecordEnabled, "pilihan yang tidak dikirim tidak diubah")
+
+	rec = do(r, http.MethodPatch, "/api/v1/me/live", `{"title":"Ngoding bareng","record_enabled":true,"slow_mode":false,"followers_only":true}`, as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, fake.lastUpdate.RecordEnabled)
+	assert.True(t, fake.lastUpdate.GetRecordEnabled())
+	require.NotNil(t, fake.lastUpdate.SlowMode)
+	assert.False(t, fake.lastUpdate.GetSlowMode())
+	assert.True(t, fake.lastUpdate.GetFollowersOnly())
 
 	rec = do(r, http.MethodPost, "/api/v1/me/live/stream-key", "", as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -255,6 +271,7 @@ func TestLiveChat(t *testing.T) {
 	assert.Equal(t, int64(7), fake.lastSend.GetRequesterId())
 	assert.Equal(t, int64(3), fake.lastSend.GetStreamId())
 	assert.Equal(t, uint32(0x4FE3C1), fake.lastSend.GetColor())
+	assert.False(t, fake.lastSend.GetRequesterFollows(), "chat bebas: langganan tidak diperiksa")
 
 	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"x","color":"merah"}`, as(7))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -267,6 +284,32 @@ func TestLiveChat(t *testing.T) {
 	fake.err = status.Error(codes.FailedPrecondition, "siaran sudah selesai")
 	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"lagi"}`, as(7))
 	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
+func TestLiveChatFollowersOnly(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeLiveClient{followersOnly: true}
+	users := &fakeUserClient{channelIDs: []int64{5, 7}}
+	r := newTestRouter(t, Deps{LiveStreams: fake, Users: users, Verifier: verifier})
+
+	rec := do(r, http.MethodGet, "/api/v1/live/3", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"chat":{"slow_mode":true,"followers_only":true}`)
+
+	// Pemilik siaran (user 7) ada di daftar kanal yang diikuti user 9.
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"halo"}`, as(9))
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	assert.Equal(t, int64(9), users.lastChannelIDs.GetRequesterId())
+	assert.True(t, fake.lastSend.GetRequesterFollows())
+
+	users.channelIDs = []int64{5}
+	do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"halo"}`, as(9))
+	assert.False(t, fake.lastSend.GetRequesterFollows())
+
+	fake.err = status.Error(codes.PermissionDenied, "chat siaran ini hanya untuk pengikut kanal")
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"halo"}`, as(9))
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "hanya untuk pengikut")
 }
 
 func TestLiveChatStream(t *testing.T) {

@@ -63,6 +63,24 @@ type Repository interface {
 	// ("2006-01-02", WIB) untuk video READY (kategori category jika diisi),
 	// terbanyak lebih dulu. Video tanpa tayangan tidak ikut.
 	TrendingVideos(ctx context.Context, fromDay, category string, limit int) ([]TrendingHit, error)
+	// ListPopularPublic mengambil video publik (kategori category jika
+	// diisi), view_count lalu id terbesar lebih dulu (kandidat rekomendasi,
+	// langkah 27).
+	ListPopularPublic(ctx context.Context, category string, limit int) ([]Video, error)
+	// RecentWatchSignals mengambil riwayat tonton terakhir userID (video
+	// yang belum dihapus), watched_at terbaru lebih dulu.
+	RecentWatchSignals(ctx context.Context, userID int64, limit int) ([]WatchSignal, error)
+	// ChannelSummary menjumlah video publik ownerID dan membaca id Video
+	// unggulan (0 jika belum dipilih). Langkah 27.
+	ChannelSummary(ctx context.Context, ownerID int64) (ChannelCounts, int64, error)
+	// SetFeaturedVideo menyimpan Video unggulan ownerID (0 = tidak ada).
+	SetFeaturedVideo(ctx context.Context, ownerID, videoID int64, now time.Time) error
+	// CountSearch menghitung hasil Search (tanpa urutan), paling banyak
+	// limit.
+	CountSearch(ctx context.Context, terms []string, opts SearchOptions, limit int) (int64, error)
+	// CountSearchPlaylists menghitung hasil SearchPlaylists, paling banyak
+	// limit.
+	CountSearchPlaylists(ctx context.Context, terms []string, limit int) (int64, error)
 	// FindListedByIDs mengambil video publik (lihat IsListed) dengan id
 	// ini, urutan bebas. Id yang tidak ada atau tidak publik dilewati.
 	FindListedByIDs(ctx context.Context, ids []int64) ([]Video, error)

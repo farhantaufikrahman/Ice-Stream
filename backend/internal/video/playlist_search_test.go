@@ -105,3 +105,8 @@ func TestSearchPlaylists(t *testing.T) {
 		assert.ErrorAs(t, call(), &verr, name)
 	}
 }
+
+func (r *fakeRepo) CountSearchPlaylists(ctx context.Context, terms []string, limit int) (int64, error) {
+	hits, err := r.SearchPlaylists(ctx, terms, 0, limit)
+	return int64(len(hits)), err
+}

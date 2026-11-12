@@ -21,8 +21,12 @@ type channelRow struct {
 	// Kolom token siaran browser (migrasi V19).
 	PublishTokenHash      *string    `gorm:"column:publish_token_hash"`
 	PublishTokenExpiresAt *time.Time `gorm:"column:publish_token_expires_at"`
-	CreatedAt             time.Time  `gorm:"column:created_at"`
-	UpdatedAt             time.Time  `gorm:"column:updated_at"`
+	// Pilihan siaran (migrasi V21), NUMBER(1): 0 atau 1.
+	RecordEnabled int       `gorm:"column:record_enabled"`
+	SlowMode      int       `gorm:"column:slow_mode"`
+	FollowersOnly int       `gorm:"column:followers_only"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
+	UpdatedAt     time.Time `gorm:"column:updated_at"`
 }
 
 func (channelRow) TableName() string { return "live_channels" }
@@ -36,6 +40,7 @@ func (r channelRow) toChannel() Channel {
 	if r.PublishTokenExpiresAt != nil {
 		c.PublishTokenExpiresAt = r.PublishTokenExpiresAt.UTC()
 	}
+	c.RecordEnabled, c.SlowMode, c.FollowersOnly = r.RecordEnabled == 1, r.SlowMode == 1, r.FollowersOnly == 1
 	return c
 }
 
@@ -67,6 +72,10 @@ type streamRow struct {
 	EndedAt     *time.Time `gorm:"column:ended_at"`
 	ViewerCount int64      `gorm:"column:viewer_count"`
 	PeakViewers int64      `gorm:"column:peak_viewers"`
+	// Rekaman (migrasi V21).
+	RecordingStatus  *string `gorm:"column:recording_status"`
+	RecordingVideoID *int64  `gorm:"column:recording_video_id"`
+	RecordingError   *string `gorm:"column:recording_error"`
 }
 
 func (streamRow) TableName() string { return "live_streams" }
@@ -78,6 +87,9 @@ func (r streamRow) toStream() Stream {
 	}
 	if r.EndedAt != nil {
 		s.EndedAt = r.EndedAt.UTC()
+	}
+	if r.RecordingVideoID != nil {
+		s.RecordingVideoID = *r.RecordingVideoID
 	}
 	return s
 }
@@ -129,13 +141,18 @@ func (r *OracleRepository) FindChannel(ctx context.Context, ownerID int64) (Chan
 	return row.toChannel(), nil
 }
 
-// UpdateChannel mengubah judul dan kategori, termasuk siaran yang sedang
-// LIVE, dalam satu transaksi.
-func (r *OracleRepository) UpdateChannel(ctx context.Context, ownerID int64, title, category string, now time.Time) (Channel, error) {
-	cat := nilIfEmpty(category)
+// UpdateChannel mengubah judul, kategori, dan pilihan siaran, termasuk
+// judul siaran yang sedang LIVE, dalam satu transaksi.
+func (r *OracleRepository) UpdateChannel(ctx context.Context, ownerID int64, u ChannelUpdate, now time.Time) (Channel, error) {
+	title, cat := u.Title, nilIfEmpty(u.Category)
+	cols := map[string]any{"title": title, "category": cat, "updated_at": now}
+	for col, v := range map[string]*bool{"record_enabled": u.RecordEnabled, "slow_mode": u.SlowMode, "followers_only": u.FollowersOnly} {
+		if v != nil {
+			cols[col] = boolToInt(*v)
+		}
+	}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&channelRow{}).Where("owner_id = ?", ownerID).
-			Updates(map[string]any{"title": title, "category": cat, "updated_at": now})
+		res := tx.Model(&channelRow{}).Where("owner_id = ?", ownerID).Updates(cols)
 		if res.Error != nil {
 			return fmt.Errorf("update live channel: %w", res.Error)
 		}
@@ -228,6 +245,14 @@ INSERT INTO live_streams (owner_id, title, category, status, started_at, last_se
 SELECT ?, NVL(c.title, ?), c.category, 'LIVE', ?, ?, ?, ?
 FROM dual LEFT JOIN live_channels c ON c.owner_id = ?`
 
+// endStreamSetSQL menutup siaran (tabel live_streams diberi alias s).
+// Jika pilihan rekaman kanal aktif pada saat itu, rekamannya ditandai
+// PENDING untuk diimpor RecordingImporter (langkah 27). Subquery mengambil
+// record_enabled dari live_channels; NULL (tidak direkam) jika tidak aktif.
+const endStreamSetSQL = `s.status = 'ENDED', s.ended_at = s.last_seen_at, s.viewer_count = 0,
+	s.recording_status = (SELECT CASE WHEN c.record_enabled = 1 THEN 'PENDING' END
+	                        FROM live_channels c WHERE c.owner_id = s.owner_id)`
+
 // Sync menyamakan tabel live_streams dengan daftar stream dari MediaMTX
 // dalam satu transaksi.
 func (r *OracleRepository) Sync(ctx context.Context, online []Online, now, staleBefore time.Time) (int, int, error) {
@@ -247,8 +272,8 @@ func (r *OracleRepository) Sync(ctx context.Context, online []Online, now, stale
 			}
 			// Siaran lama yang sudah lewat batas tenggang (misalnya service
 			// sempat mati) ditutup dulu, baru siaran baru dibuat.
-			res = tx.Exec(`UPDATE live_streams SET status = 'ENDED', ended_at = last_seen_at, viewer_count = 0
-				WHERE owner_id = ? AND status = 'LIVE'`, o.OwnerID)
+			res = tx.Exec(`UPDATE live_streams s SET `+endStreamSetSQL+`
+				WHERE s.owner_id = ? AND s.status = 'LIVE'`, o.OwnerID)
 			if res.Error != nil {
 				return fmt.Errorf("tutup siaran lama: %w", res.Error)
 			}
@@ -269,8 +294,8 @@ func (r *OracleRepository) Sync(ctx context.Context, online []Online, now, stale
 				return fmt.Errorf("buat siaran live: %w", err)
 			}
 		}
-		res := tx.Exec(`UPDATE live_streams SET status = 'ENDED', ended_at = last_seen_at, viewer_count = 0
-			WHERE status = 'LIVE' AND last_seen_at < ?`, staleBefore)
+		res := tx.Exec(`UPDATE live_streams s SET `+endStreamSetSQL+`
+			WHERE s.status = 'LIVE' AND s.last_seen_at < ?`, staleBefore)
 		if res.Error != nil {
 			return fmt.Errorf("tutup siaran yang sudah berhenti: %w", res.Error)
 		}
@@ -330,6 +355,100 @@ func (r *OracleRepository) CountChatSince(ctx context.Context, userID int64, sin
 		return 0, fmt.Errorf("hitung chat: %w", err)
 	}
 	return n, nil
+}
+
+// LastRecording mengambil rekaman siaran terakhir milik ownerID (index
+// live_streams_owner_ix). ErrNotFound jika belum pernah ada.
+func (r *OracleRepository) LastRecording(ctx context.Context, ownerID int64) (Recording, error) {
+	var row streamRow
+	err := r.db.WithContext(ctx).Where("owner_id = ? AND recording_status IS NOT NULL", ownerID).
+		Order("started_at DESC, id DESC").Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return Recording{}, ErrNotFound
+	}
+	if err != nil {
+		return Recording{}, fmt.Errorf("select rekaman terakhir: %w", err)
+	}
+	rec := Recording{StreamID: row.ID, Status: deref(row.RecordingStatus), Error: deref(row.RecordingError)}
+	if row.RecordingVideoID != nil {
+		rec.VideoID = *row.RecordingVideoID
+	}
+	if row.EndedAt != nil {
+		rec.EndedAt = row.EndedAt.UTC()
+	}
+	return rec, nil
+}
+
+// ClaimRecording mengambil satu rekaman yang menunggu (PENDING), atau yang
+// macet di IMPORTING sejak sebelum staleBefore (pod mati di tengah impor),
+// lalu menandainya IMPORTING. ErrNotFound jika tidak ada.
+//
+// Dua langkah: SELECT kandidat, lalu UPDATE dengan syarat status yang sama.
+// Jika replika lain lebih dulu mengambilnya, UPDATE tidak mengubah baris
+// apa pun dan kandidat berikutnya dicoba. Cara ini mirip
+// SELECT ... FOR UPDATE SKIP LOCKED, tetapi tanpa transaksi yang lama.
+func (r *OracleRepository) ClaimRecording(ctx context.Context, now, staleBefore time.Time) (Stream, error) {
+	var rows []streamRow
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND (recording_status = ? OR (recording_status = ? AND recording_claimed_at < ?))",
+			string(StatusEnded), RecordingPending, RecordingImporting, staleBefore).
+		Order("ended_at, id").Limit(5).Find(&rows).Error
+	if err != nil {
+		return Stream{}, fmt.Errorf("cari rekaman: %w", err)
+	}
+	for _, row := range rows {
+		res := r.db.WithContext(ctx).Model(&streamRow{}).
+			Where("id = ? AND recording_status = ?", row.ID, deref(row.RecordingStatus)).
+			Updates(map[string]any{"recording_status": RecordingImporting, "recording_claimed_at": now, "recording_error": nil})
+		if res.Error != nil {
+			return Stream{}, fmt.Errorf("ambil rekaman: %w", res.Error)
+		}
+		if res.RowsAffected == 1 {
+			return row.toStream(), nil
+		}
+	}
+	return Stream{}, ErrNotFound
+}
+
+// SetRecordingVideo menyimpan id video hasil rekaman (status tetap
+// IMPORTING sampai event ke transcoder terkirim).
+func (r *OracleRepository) SetRecordingVideo(ctx context.Context, streamID, videoID int64) error {
+	err := r.db.WithContext(ctx).Model(&streamRow{}).Where("id = ?", streamID).
+		Update("recording_video_id", videoID).Error
+	if err != nil {
+		return fmt.Errorf("simpan video rekaman: %w", err)
+	}
+	return nil
+}
+
+// FinishRecording menandai rekaman selesai (DONE).
+func (r *OracleRepository) FinishRecording(ctx context.Context, streamID int64) error {
+	err := r.db.WithContext(ctx).Model(&streamRow{}).Where("id = ?", streamID).
+		Updates(map[string]any{"recording_status": RecordingDone, "recording_error": nil}).Error
+	if err != nil {
+		return fmt.Errorf("tandai rekaman selesai: %w", err)
+	}
+	return nil
+}
+
+// FailRecording menandai rekaman gagal beserta alasannya.
+func (r *OracleRepository) FailRecording(ctx context.Context, streamID int64, reason string) error {
+	if runes := []rune(reason); len(runes) > 200 {
+		reason = string(runes[:200])
+	}
+	err := r.db.WithContext(ctx).Model(&streamRow{}).Where("id = ?", streamID).
+		Updates(map[string]any{"recording_status": RecordingFailed, "recording_error": reason}).Error
+	if err != nil {
+		return fmt.Errorf("tandai rekaman gagal: %w", err)
+	}
+	return nil
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // escapeLike menandai \, %, dan _ supaya dibaca sebagai huruf biasa di LIKE.

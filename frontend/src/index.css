@@ -301,6 +301,44 @@ a:focus-visible {
   padding: 24px clamp(16px, 3vw, 32px);
   font-size: 0.8rem;
   color: var(--faint);
+  /* Hak cipta di kiri, tautan di kanan (desain Home.dc.html, langkah 27). */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  justify-content: space-between;
+}
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.footer-nav a {
+  color: var(--muted);
+}
+
+/* Tentang, Pedoman komunitas, Privasi, Bantuan (langkah 27). */
+.info-page {
+  max-width: 760px;
+  line-height: 1.65;
+}
+.info-page h2 {
+  font-size: 1.15rem;
+  margin: 28px 0 8px;
+}
+.info-page ul {
+  padding-left: 20px;
+}
+.info-page li + li {
+  margin-top: 6px;
+}
+.info-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 36px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
 }
 
 .error-box {
@@ -2985,6 +3023,17 @@ a.trending-title:hover {
   height: 18px;
   accent-color: var(--mint);
 }
+/* Pilihan siaran di Studio Live (desain GoLive, langkah 27). */
+.golive-option {
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+.golive-option input {
+  flex: none;
+  margin: 2px 0 0;
+}
 .report-reasons {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -3117,6 +3166,10 @@ a.trending-title:hover {
   font-weight: 600;
 }
 .live-section {
+  margin-bottom: 32px;
+}
+/* "Rekomendasi untukmu" di beranda (langkah 27). */
+.recommend-section {
   margin-bottom: 32px;
 }
 .live-section-head {
@@ -3609,4 +3662,19 @@ a.trending-title:hover {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+
+/* Halaman pencarian: angka di tab dan "Sekitar N hasil" (langkah 27). */
+.tab-count {
+  margin-left: 6px;
+  color: var(--faint);
+  font-weight: 500;
+}
+.search-summary {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.search-summary strong {
+  color: var(--fg);
 }

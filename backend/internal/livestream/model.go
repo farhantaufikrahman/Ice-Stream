@@ -36,6 +36,8 @@ var (
 	ErrStreamEnded = errors.New("siaran sudah selesai")
 	// ErrRateLimited: user mengirim chat lebih cepat dari mode lambat.
 	ErrRateLimited = errors.New("tunggu sebentar sebelum mengirim pesan lagi")
+	// ErrFollowersOnly: chat siaran ini hanya untuk pengikut (langkah 27).
+	ErrFollowersOnly = errors.New("chat siaran ini hanya untuk pengikut kanal")
 )
 
 // Status siaran, sama dengan CHECK constraint live_streams_status_ck.
@@ -61,6 +63,41 @@ type Channel struct {
 	// Kosong jika belum pernah dibuat.
 	PublishTokenHash      string
 	PublishTokenExpiresAt time.Time
+	// Pilihan siaran (langkah 27, desain GoLive "Detail siaran").
+	// RecordEnabled: "Simpan rekaman sebagai video setelah siaran selesai".
+	RecordEnabled bool
+	// SlowMode: "Mode lambat chat (3 detik per pesan)".
+	SlowMode bool
+	// FollowersOnly: "Chat hanya untuk pengikut".
+	FollowersOnly bool
+}
+
+// ChannelUpdate adalah isi UpdateMyChannel. Pilihan yang nil tidak diubah.
+type ChannelUpdate struct {
+	Title         string
+	Category      string
+	RecordEnabled *bool
+	SlowMode      *bool
+	FollowersOnly *bool
+}
+
+// Status rekaman, sama dengan CHECK constraint live_streams_recording_ck.
+const (
+	RecordingPending   = "PENDING"
+	RecordingImporting = "IMPORTING"
+	RecordingDone      = "DONE"
+	RecordingFailed    = "FAILED"
+)
+
+// Recording adalah status rekaman satu siaran (langkah 27).
+type Recording struct {
+	StreamID int64
+	Status   string
+	// VideoID diisi jika Status DONE.
+	VideoID int64
+	// Error diisi jika Status FAILED.
+	Error   string
+	EndedAt time.Time
 }
 
 // Stream adalah satu kali siaran (tabel live_streams).
@@ -74,6 +111,9 @@ type Stream struct {
 	EndedAt     time.Time
 	ViewerCount int64
 	PeakViewers int64
+	// RecordingVideoID adalah video hasil rekaman siaran ini, 0 jika belum
+	// ada (langkah 27).
+	RecordingVideoID int64
 }
 
 // Online adalah stream yang sedang diterima MediaMTX untuk satu kreator.

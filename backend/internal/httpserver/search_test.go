@@ -22,7 +22,7 @@ func (f *fakeUserClient) SearchUsers(_ context.Context, in *userv1.SearchUsersRe
 	}
 	other := testProfile(false)
 	other.Id, other.Username, other.DisplayName = 8, "budiman", "Budiman"
-	return &userv1.SearchUsersResponse{Profiles: []*userv1.Profile{testProfile(false), other}, NextPageToken: "czE"}, nil
+	return &userv1.SearchUsersResponse{Profiles: []*userv1.Profile{testProfile(false), other}, NextPageToken: "czE", TotalSize: 2}, nil
 }
 
 func (f *fakeVideoClient) SearchPlaylists(_ context.Context, in *videov1.SearchPlaylistsRequest, _ ...grpc.CallOption) (*videov1.SearchPlaylistsResponse, error) {
@@ -30,7 +30,7 @@ func (f *fakeVideoClient) SearchPlaylists(_ context.Context, in *videov1.SearchP
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &videov1.SearchPlaylistsResponse{Playlists: []*videov1.Playlist{testPlaylist()}, NextPageToken: "czE"}, nil
+	return &videov1.SearchPlaylistsResponse{Playlists: []*videov1.Playlist{testPlaylist()}, NextPageToken: "czE", TotalSize: 1}, nil
 }
 
 func TestSearchChannels(t *testing.T) {

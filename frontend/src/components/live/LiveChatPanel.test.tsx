@@ -29,6 +29,7 @@ function renderPanel(props: Partial<Parameters<typeof LiveChatPanel>[0]> = {}) {
         loaded
         messages={[msg('1', '7', 'Kreator', 'Halo semua'), msg('2', '9', 'Saya', 'hadir')]}
         onSent={onSent}
+        options={{ slow_mode: true, followers_only: false }}
         {...props}
       />
     </MemoryRouter>,
@@ -66,6 +67,24 @@ describe('LiveChatPanel', () => {
     fireEvent.change(screen.getByLabelText('Tulis pesan chat'), { target: { value: 'lagi' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Kirim' })))
     expect(screen.getByRole('alert')).toHaveTextContent('tunggu sebentar')
+  })
+
+  it('pilihan chat dari kreator: mode lambat mati, khusus pengikut', async () => {
+    renderPanel({ options: { slow_mode: false, followers_only: true } })
+    expect(screen.getByText('Khusus pengikut')).toBeInTheDocument()
+    expect(screen.queryByText(/Mode lambat/)).not.toBeInTheDocument()
+    expect(screen.getByText('Hanya pengikut kanal ini yang bisa mengirim pesan.')).toBeInTheDocument()
+
+    sendLiveChat.mockRejectedValue(new ApiError(403, 'PERMISSION_DENIED', 'chat siaran ini hanya untuk pengikut kanal'))
+    fireEvent.change(screen.getByLabelText('Tulis pesan chat'), { target: { value: 'halo' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Kirim' })))
+    expect(screen.getByRole('alert')).toHaveTextContent('hanya untuk pengikut')
+  })
+
+  it('kreator sendiri tidak melihat keterangan khusus pengikut di kotak kirim', () => {
+    renderPanel({ viewerId: '7', options: { slow_mode: true, followers_only: true } })
+    expect(screen.getByText('Mode lambat · 3 detik · Khusus pengikut')).toBeInTheDocument()
+    expect(screen.queryByText('Hanya pengikut kanal ini yang bisa mengirim pesan.')).not.toBeInTheDocument()
   })
 
   it('belum login: ajakan masuk', () => {

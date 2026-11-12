@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router'
 import { errorMessage } from '../../api/client'
 import { sendLiveChat } from '../../api/endpoints'
-import type { LiveChatMessage } from '../../api/types'
+import type { LiveChatMessage, LiveChatOptions } from '../../api/types'
 import { DANMAKU_COLORS, MAX_DANMAKU_CHARS } from '../../lib/danmaku'
 import { charCount } from '../../lib/upload'
 
@@ -16,6 +16,12 @@ interface Props {
   messages: LiveChatMessage[]
   loaded: boolean
   onSent: (m: LiveChatMessage) => void
+  /**
+   * Pilihan chat kanal saat ini (langkah 27): mode lambat dan khusus
+   * pengikut. Kreator bisa mengubahnya di tengah siaran; halaman membaca
+   * ulang siaran setiap 10 detik.
+   */
+  options?: LiveChatOptions
 }
 
 /** Warna nama pengirim, bergiliran seperti desain Live.dc.html. */
@@ -34,7 +40,7 @@ function nameColor(userId: string): string {
  * Daftar otomatis turun ke pesan terbaru, kecuali penonton sedang
  * menggulir ke atas membaca pesan lama.
  */
-export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loaded, onSent }: Props) {
+export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loaded, onSent, options }: Props) {
   const location = useLocation()
   const listRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
@@ -67,7 +73,8 @@ export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loa
       stickRef.current = true
       onSent(m)
     } catch (err) {
-      // Misalnya 429 (mode lambat) atau 409 (siaran baru saja selesai).
+      // Misalnya 429 (mode lambat), 403 (khusus pengikut), atau 409
+      // (siaran baru saja selesai).
       setError(errorMessage(err))
     } finally {
       setBusy(false)
@@ -80,7 +87,7 @@ export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loa
         <h2 id="live-chat-title" className="live-chat-title">
           Chat langsung
         </h2>
-        <span className="muted small">{live ? 'Mode lambat · 3 detik' : 'Siaran selesai'}</span>
+        <span className="muted small">{live ? chatRules(options) : 'Siaran selesai'}</span>
       </div>
       <div ref={listRef} className="live-chat-list" onScroll={onScroll} aria-live="polite" aria-relevant="additions">
         {!loaded && <p className="muted small">Memuat chat…</p>}
@@ -137,6 +144,9 @@ export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loa
               Kirim
             </button>
           </div>
+          {options?.followers_only && viewerId !== ownerId && (
+            <span className="muted small">Hanya pengikut kanal ini yang bisa mengirim pesan.</span>
+          )}
           {count > MAX_DANMAKU_CHARS - 20 && (
             <span className={tooLong ? 'counter is-over' : 'counter'}>
               {count}/{MAX_DANMAKU_CHARS}
@@ -155,4 +165,13 @@ export function LiveChatPanel({ streamId, ownerId, viewerId, live, messages, loa
       )}
     </aside>
   )
+}
+
+/** Keterangan di kepala panel, misalnya "Mode lambat · 3 detik · Khusus pengikut". */
+function chatRules(options: LiveChatOptions | undefined): string {
+  if (!options) return ''
+  const parts: string[] = []
+  if (options.slow_mode) parts.push('Mode lambat · 3 detik')
+  if (options.followers_only) parts.push('Khusus pengikut')
+  return parts.join(' · ')
 }

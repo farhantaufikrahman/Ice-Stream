@@ -6,6 +6,7 @@ import { HistoryLink, NotificationBell, WatchLaterLink } from './HeaderIcons'
 import { UploadIcon } from './studio/StudioLayout'
 import { LogoMark, Wordmark } from './Logo'
 import { ThemeToggle } from './ThemeToggle'
+import { INFO_LINKS } from '../lib/info'
 
 /** Kerangka halaman: header, isi halaman (<Outlet />), lalu footer. */
 export function Layout() {
@@ -17,6 +18,13 @@ export function Layout() {
       </main>
       <footer className="footer">
         <span>© 2026 Ice-Stream</span>
+        <nav className="footer-nav" aria-label="Tautan footer">
+          {INFO_LINKS.map((l) => (
+            <Link key={l.topic} to={l.path}>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
       </footer>
     </div>
   )

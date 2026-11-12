@@ -141,6 +141,12 @@ func (s *GRPCServer) SearchVideos(ctx context.Context, req *videov1.SearchVideos
 	for _, v := range videos {
 		resp.Videos = append(resp.Videos, s.toProtoVideo(v))
 	}
+	// Jumlah hasil hanya di halaman pertama (langkah 27).
+	if req.GetPageToken() == "" {
+		if resp.TotalSize, err = s.svc.CountSearchVideos(ctx, req.GetQuery(), opts, len(videos), next != ""); err != nil {
+			return nil, s.toStatus(ctx, err)
+		}
+	}
 	return resp, nil
 }
 

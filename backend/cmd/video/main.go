@@ -166,7 +166,8 @@ func run(logger *slog.Logger) error {
 	// sendiri diurus MediaMTX; di sini hanya hook auth dan pembacaan status.
 	// Langkah 25b-25c: token siaran browser dan chat (disiarkan lewat koneksi
 	// NATS yang sama dengan danmaku).
-	lives := livestream.NewService(livestream.NewOracleRepository(db), livestream.Options{
+	liveRepo := livestream.NewOracleRepository(db)
+	lives := livestream.NewService(liveRepo, livestream.Options{
 		IngestURL:       cfg.Live.IngestURL,
 		PlaybackBaseURL: cfg.Live.PlaybackURL,
 		Grace:           cfg.Live.Grace,
@@ -199,6 +200,16 @@ func run(logger *slog.Logger) error {
 		Interval: cfg.Live.PollInterval,
 		Logger:   logger,
 	}.Run(ctx)
+	// Langkah 27: rekaman siaran yang selesai (pilihan rekaman aktif)
+	// diimpor menjadi video draf. HTTP tanpa Timeout karena unduhan
+	// rekaman bisa lama; dibatalkan lewat ctx saat service berhenti.
+	go livestream.RecordingImporter{
+		Repo:     liveRepo,
+		Source:   livestream.PlaybackClient{BaseURL: cfg.Live.MediaMTXPlaybackURL, HTTP: &http.Client{}},
+		Sink:     svc,
+		Interval: 30 * time.Second,
+		Logger:   logger,
+	}.Run(ctx)
 
 	healthSrv := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthSrv)
@@ -219,6 +230,7 @@ func run(logger *slog.Logger) error {
 		slog.String("view_dedup_window", cfg.ViewDedupWindow.String()),
 		slog.String("auth_addr", cfg.AuthGRPCAddr),
 		slog.String("mediamtx_api", cfg.Live.MediaMTXAPIURL),
+		slog.String("mediamtx_playback", cfg.Live.MediaMTXPlaybackURL),
 		slog.String("live_hook_addr", cfg.Live.HookAddr),
 		slog.String("live_whip_url", cfg.Live.WHIPURL),
 	)

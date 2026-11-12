@@ -40,7 +40,9 @@ service LiveService {
   // "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
   // 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
   // FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
-  // user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+  // user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik,
+  // hanya jika mode lambat aktif). PERMISSION_DENIED jika chat khusus
+  // pengikut dan requester bukan pengikut (pemilik siaran selalu boleh).
   rpc SendChatMessage(SendChatMessageRequest) returns (SendChatMessageResponse);
   // ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
   // paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.
@@ -70,6 +72,10 @@ message LiveStream {
   int64 viewer_count = 9;
   // Jumlah penonton tertinggi selama siaran.
   int64 peak_viewers = 10;
+  // Pengaturan chat kanal ini saat ini (langkah 27). Hanya diisi oleh
+  // GetLiveStream.
+  bool slow_mode = 11;
+  bool followers_only = 12;
 }
 
 message LiveChannel {
@@ -84,6 +90,25 @@ message LiveChannel {
   google.protobuf.Timestamp stream_key_created_at = 6;
   // Siaran yang sedang LIVE milik kreator ini. Tidak diisi jika tidak live.
   LiveStream current = 7;
+  // Pilihan siaran (langkah 27, desain GoLive "Detail siaran").
+  bool record_enabled = 8;
+  bool slow_mode = 9;
+  bool followers_only = 10;
+  // Rekaman siaran terakhir yang selesai dengan pilihan rekaman aktif.
+  // Tidak diisi jika belum pernah ada.
+  Recording last_recording = 11;
+}
+
+// Status rekaman satu siaran (langkah 27).
+message Recording {
+  int64 stream_id = 1;
+  // PENDING, IMPORTING, DONE, atau FAILED.
+  string status = 2;
+  // Video hasil rekaman (draf), jika status DONE.
+  int64 video_id = 3;
+  // Alasan, jika status FAILED.
+  string error = 4;
+  google.protobuf.Timestamp ended_at = 5;
 }
 
 message GetMyChannelRequest {
@@ -99,6 +124,10 @@ message UpdateMyChannelRequest {
   string title = 2;
   // Kosong = tanpa kategori.
   string category = 3;
+  // Pilihan siaran (langkah 27). Tidak dikirim = tidak diubah.
+  optional bool record_enabled = 4;
+  optional bool slow_mode = 5;
+  optional bool followers_only = 6;
 }
 
 message UpdateMyChannelResponse {
@@ -169,6 +198,10 @@ message SendChatMessageRequest {
   string body = 3;
   // Opsional: tidak dikirim = putih (0xFFFFFF).
   optional uint32 color = 4;
+  // true jika requester mengikuti kanal pemilik siaran. Diisi gateway dari
+  // UserService (data langganan ada di schema AUTH_SVC). Dipakai untuk
+  // "Chat hanya untuk pengikut" (langkah 27).
+  bool requester_follows = 5;
 }
 
 message SendChatMessageResponse {

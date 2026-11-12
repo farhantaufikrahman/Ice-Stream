@@ -1,16 +1,16 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LiveChannel, StreamKeyResult } from '../api/types'
+import type { LiveChannel, LiveChannelChanges, StreamKeyResult } from '../api/types'
 import { StudioLivePage } from './StudioLivePage'
 
 const getMyLive = vi.fn<() => Promise<LiveChannel>>()
 const resetStreamKey = vi.fn<() => Promise<StreamKeyResult>>()
-const updateMyLive = vi.fn<(title: string, category: string) => Promise<LiveChannel>>()
+const updateMyLive = vi.fn<(changes: LiveChannelChanges) => Promise<LiveChannel>>()
 vi.mock('../api/endpoints', () => ({
   getMyLive: () => getMyLive(),
   resetStreamKey: () => resetStreamKey(),
-  updateMyLive: (t: string, c: string) => updateMyLive(t, c),
+  updateMyLive: (c: LiveChannelChanges) => updateMyLive(c),
   createPublishToken: vi.fn(),
 }))
 vi.mock('../auth/useAuth', () => ({ useAuth: () => ({ status: 'authenticated', user: null }) }))
@@ -21,6 +21,10 @@ const channel: LiveChannel = {
   ingest_url: 'rtmp://localhost:1935/live',
   has_stream_key: false,
   current: null,
+  record_enabled: false,
+  slow_mode: true,
+  followers_only: false,
+  last_recording: null,
 }
 
 async function renderPage() {
@@ -79,8 +83,52 @@ describe('StudioLivePage', () => {
     fireEvent.change(screen.getByLabelText('Judul'), { target: { value: 'Ngoding bareng' } })
     fireEvent.change(screen.getByLabelText('Kategori'), { target: { value: 'teknologi' } })
     await act(async () => fireEvent.click(save))
-    expect(updateMyLive).toHaveBeenCalledWith('Ngoding bareng', 'teknologi')
+    expect(updateMyLive).toHaveBeenCalledWith({
+      title: 'Ngoding bareng',
+      category: 'teknologi',
+      record_enabled: false,
+      slow_mode: true,
+      followers_only: false,
+    })
     expect(screen.getByText('Tersimpan.')).toBeInTheDocument()
+  })
+
+  it('pilihan siaran: rekaman, mode lambat, dan chat khusus pengikut', async () => {
+    updateMyLive.mockResolvedValue({ ...channel, record_enabled: true, slow_mode: false, followers_only: true })
+    await renderPage()
+    expect(screen.getByLabelText('Mode lambat chat (3 detik per pesan)')).toBeChecked()
+    expect(screen.getByLabelText('Simpan rekaman sebagai video setelah siaran selesai')).not.toBeChecked()
+    const save = screen.getByRole('button', { name: 'Simpan' })
+    fireEvent.click(screen.getByLabelText('Simpan rekaman sebagai video setelah siaran selesai'))
+    expect(save).toBeEnabled()
+    fireEvent.click(screen.getByLabelText('Mode lambat chat (3 detik per pesan)'))
+    fireEvent.click(screen.getByLabelText('Chat hanya untuk pengikut'))
+    await act(async () => fireEvent.click(save))
+    expect(updateMyLive).toHaveBeenCalledWith({
+      title: 'Siaran langsung',
+      category: '',
+      record_enabled: true,
+      slow_mode: false,
+      followers_only: true,
+    })
+    expect(screen.getByLabelText('Chat hanya untuk pengikut')).toBeChecked()
+  })
+
+  it('status rekaman siaran terakhir', async () => {
+    getMyLive.mockResolvedValue({
+      ...channel,
+      record_enabled: true,
+      last_recording: { stream_id: '20', status: 'DONE', video_id: '99', ended_at: '2026-11-12T08:00:00Z' },
+    })
+    await renderPage()
+    expect(screen.getByText(/sudah menjadi video draf/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Buka di Konten' })).toHaveAttribute('href', '/studio/content')
+  })
+
+  it('rekaman gagal: alasannya ditampilkan', async () => {
+    getMyLive.mockResolvedValue({ ...channel, last_recording: { stream_id: '21', status: 'FAILED', error: 'rekaman kosong' } })
+    await renderPage()
+    expect(screen.getByText(/gagal disimpan: rekaman kosong/)).toBeInTheDocument()
   })
 
   it('sedang live dari OBS: status, penonton, dan tautan halaman penonton', async () => {

@@ -162,6 +162,7 @@ function LiveView({ stream, viewerId }: { stream: LiveStream; viewerId: string }
           messages={chat.messages}
           loaded={chat.loaded}
           onSent={onSent}
+          options={stream.chat}
         />
       </div>
 

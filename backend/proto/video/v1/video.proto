@@ -154,6 +154,22 @@ service VideoService {
   // 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
   // selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
   rpc UploadThumbnail(UploadThumbnailRequest) returns (UploadThumbnailResponse);
+
+  // ListRecommendedVideos menyusun "Rekomendasi untukmu" di Beranda
+  // (langkah 27): video publik dengan skor dari tayangan, umur video,
+  // kategori yang sering ditonton viewer, kanal yang diikuti viewer, dan
+  // sedikit acak dari seed. Video milik viewer dan video yang sudah
+  // ditonton sampai hampir habis tidak ikut. Maksimal 2 video per kanal.
+  rpc ListRecommendedVideos(ListRecommendedVideosRequest) returns (ListRecommendedVideosResponse);
+
+  // GetChannelSummary mengambil angka di kepala halaman kanal (jumlah
+  // video publik, total tayangan, total suka) dan Video unggulan (langkah
+  // 27). Kanal tanpa video menghasilkan angka 0, bukan NOT_FOUND.
+  rpc GetChannelSummary(GetChannelSummaryRequest) returns (GetChannelSummaryResponse);
+  // SetFeaturedVideo memilih Video unggulan kanal requester. video_id 0 =
+  // tidak ada video unggulan. NOT_FOUND jika video tidak ada atau bukan
+  // milik requester; INVALID_ARGUMENT jika video bukan video publik.
+  rpc SetFeaturedVideo(SetFeaturedVideoRequest) returns (SetFeaturedVideoResponse);
 }
 
 // Visibilitas video (langkah 26, desain Upload).
@@ -450,6 +466,10 @@ message SearchVideosResponse {
   repeated Video videos = 1;
   // Kosong jika sudah halaman terakhir. Pencarian dibatasi 10 halaman.
   string next_page_token = 2;
+  // Jumlah semua hasil (langkah 27), hanya diisi di halaman pertama
+  // (page_token kosong). Dihitung paling banyak 1001: nilai 1001 berarti
+  // "lebih dari 1000".
+  int64 total_size = 3;
 }
 
 message RecordViewRequest {
@@ -862,6 +882,8 @@ message SearchPlaylistsResponse {
   repeated Playlist playlists = 1;
   // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
   string next_page_token = 2;
+  // Sama dengan SearchVideosResponse.total_size.
+  int64 total_size = 3;
 }
 
 message ListTrendingVideosRequest {
@@ -892,4 +914,46 @@ message ReportVideoRequest {
 message ReportVideoResponse {
   // Waktu laporan terakhir disimpan.
   google.protobuf.Timestamp reported_at = 1;
+}
+
+message ListRecommendedVideosRequest {
+  // 0 = tamu.
+  int64 viewer_id = 1;
+  // Kanal yang diikuti viewer (diambil gateway dari UserService).
+  repeated int64 followed_owner_ids = 2;
+  // Kosong = semua kategori.
+  string category = 3;
+  // Bagian acak. Seed yang sama menghasilkan urutan yang sama; tombol
+  // "Muat ulang" mengirim seed baru.
+  uint64 seed = 4;
+  // 1 sampai 24, default 12.
+  int32 limit = 5;
+}
+
+message ListRecommendedVideosResponse {
+  repeated Video videos = 1;
+}
+
+message GetChannelSummaryRequest {
+  int64 owner_id = 1;
+}
+
+message GetChannelSummaryResponse {
+  // Hanya video publik (yang tampil di halaman kanal).
+  int64 video_count = 1;
+  int64 total_views = 2;
+  int64 total_likes = 3;
+  // Kosong jika kreator belum memilih, atau video itu sudah tidak publik.
+  Video featured_video = 4;
+}
+
+message SetFeaturedVideoRequest {
+  int64 requester_id = 1;
+  // 0 = hapus pilihan.
+  int64 video_id = 2;
+}
+
+message SetFeaturedVideoResponse {
+  // Kosong jika pilihan dihapus.
+  Video featured_video = 1;
 }

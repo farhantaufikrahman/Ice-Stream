@@ -50,6 +50,9 @@ spec:
               containerPort: 8888
             - name: api
               containerPort: 9997
+            # Server playback rekaman (langkah 27).
+            - name: playback
+              containerPort: 9996
             # Siaran dari browser (langkah 25b): WHIP (HTTP) dan media ICE.
             - name: webrtc
               containerPort: 8889
@@ -87,7 +90,19 @@ spec:
               mountPath: /mediamtx.yml
               subPath: mediamtx.yml
               readOnly: true
+            # Rekaman siaran (langkah 27). Root filesystem read-only, jadi
+            # MediaMTX hanya bisa menulis di volume ini.
+            - name: recordings
+              mountPath: /recordings
       volumes:
         - name: config
           configMap:
             name: mediamtx-config
+        # emptyDir: rekaman hilang jika pod MediaMTX dibuat ulang (misalnya
+        # saat k8s-up mengganti config). Cukup untuk lokal, karena rekaman
+        # diimpor beberapa detik setelah siaran selesai. Di produksi
+        # gantilah dengan PersistentVolumeClaim. sizeLimit: jika rekaman
+        # melebihi ini, Kubernetes mengeluarkan (evict) pod MediaMTX.
+        - name: recordings
+          emptyDir:
+            sizeLimit: 10Gi

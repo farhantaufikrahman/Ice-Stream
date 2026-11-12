@@ -103,6 +103,12 @@ func (h *userHandler) getByUsername(c *gin.Context) {
 	if viewerID != 0 {
 		body["viewer_subscribed"] = resp.GetViewerSubscribed()
 	}
+	// Angka kanal dan Video unggulan (langkah 27). Jika VideoService gagal,
+	// keduanya tidak dikirim dan halaman kanal tampil tanpa bagian itu.
+	if stats, featured, ok := h.videos.channelSummary(c.Request.Context(), resp.GetProfile().GetId()); ok {
+		body["stats"] = stats
+		body["featured_video"] = featured
+	}
 	c.JSON(http.StatusOK, body)
 }
 

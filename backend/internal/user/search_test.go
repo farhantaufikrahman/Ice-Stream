@@ -64,6 +64,11 @@ func (f *fakeRepo) SearchUsers(_ context.Context, terms []string, offset, limit 
 	return out, nil
 }
 
+func (f *fakeRepo) CountSearchUsers(ctx context.Context, terms []string, limit int) (int64, error) {
+	found, err := f.SearchUsers(ctx, terms, 0, limit)
+	return int64(len(found)), err
+}
+
 func TestParseSearchTerms(t *testing.T) {
 	terms, err := parseSearchTerms("  Budi_Santoso budi  a 100%")
 	require.NoError(t, err)
@@ -97,6 +102,7 @@ func TestSearchUsers(t *testing.T) {
 	// Akun "spam" yang diblokir tidak ikut walau cocok.
 	assert.Equal(t, []string{"budi", "masak", "kebudidayaan", "dapurbudi"}, names)
 	assert.Empty(t, resp.GetNextPageToken())
+	assert.Equal(t, int64(4), resp.GetTotalSize())
 
 	// Dua kata: keduanya harus ada.
 	resp, err = srv.SearchUsers(ctx, &userv1.SearchUsersRequest{Query: "dapur budi"})
@@ -109,10 +115,12 @@ func TestSearchUsers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, resp.GetProfiles(), 3)
 	require.NotEmpty(t, resp.GetNextPageToken())
+	assert.Equal(t, int64(4), resp.GetTotalSize(), "halaman pertama belum memuat semua: dihitung di repo")
 	resp, err = srv.SearchUsers(ctx, &userv1.SearchUsersRequest{Query: "budi", PageSize: 3, PageToken: resp.GetNextPageToken()})
 	require.NoError(t, err)
 	require.Len(t, resp.GetProfiles(), 1)
 	assert.Equal(t, "dapurbudi", resp.GetProfiles()[0].GetUsername())
+	assert.Zero(t, resp.GetTotalSize(), "jumlah hanya di halaman pertama")
 
 	for name, req := range map[string]*userv1.SearchUsersRequest{
 		"query kosong":      {Query: " "},

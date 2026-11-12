@@ -238,3 +238,35 @@ func encodeSearchPage(page int) string { return encodeOffsetPage("s", page) }
 func decodeSearchPage(token string) (int, error) {
 	return decodeOffsetPage(token, "s", searchMaxPages)
 }
+
+// searchCountLimit: jumlah hasil dihitung sampai 1001 saja. 1001 berarti
+// "lebih dari 1000", dan halaman pencarian menampilkannya "1.000+".
+const searchCountLimit = 1001
+
+// CountSearchVideos menghitung semua hasil SearchVideos (langkah 27, angka
+// di tab pencarian). firstPage adalah jumlah video di halaman pertama, dan
+// hasMore false berarti tidak ada halaman berikutnya: halaman pertama
+// sudah memuat semua hasil, jadi Oracle tidak perlu ditanya lagi.
+func (s *Service) CountSearchVideos(ctx context.Context, query string, opts SearchOptions, firstPage int, hasMore bool) (int64, error) {
+	if !hasMore {
+		return int64(firstPage), nil
+	}
+	terms, err := ParseSearchQuery(query)
+	if err != nil {
+		return 0, err
+	}
+	return s.repo.CountSearch(ctx, terms, opts, searchCountLimit)
+}
+
+// CountSearchPlaylists sama dengan CountSearchVideos untuk playlist.
+// hasMore false berarti halaman pertama sudah memuat semua hasil.
+func (s *Service) CountSearchPlaylists(ctx context.Context, query string, firstPage int, hasMore bool) (int64, error) {
+	if !hasMore {
+		return int64(firstPage), nil
+	}
+	terms, err := ParseSearchQuery(query)
+	if err != nil {
+		return 0, err
+	}
+	return s.repo.CountSearchPlaylists(ctx, terms, searchCountLimit)
+}

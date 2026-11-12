@@ -102,6 +102,41 @@ func (r *OracleRepository) FindByIDs(ctx context.Context, ids []int64) ([]Profil
 	return out, nil
 }
 
+// searchUsersWhere menulis WHERE yang sama untuk SearchUsers dan
+// CountSearchUsers, lalu mengembalikan nilai untuk tanda ?-nya.
+func searchUsersWhere(sql *strings.Builder, terms []string) []any {
+	sql.WriteString("\n WHERE deleted_at IS NULL AND status <> ?")
+	args := []any{statusBanned}
+	for _, t := range terms {
+		sql.WriteString("\n   AND (username LIKE ? OR LOWER(display_name) LIKE ?)")
+		args = append(args, "%"+t+"%", "%"+t+"%")
+	}
+	return args
+}
+
+// CountSearchUsers menghitung hasil SearchUsers, paling banyak limit
+// (langkah 27, angka di tab "Kreator"):
+//
+//	SELECT COUNT(*) FROM (SELECT 1 FROM users WHERE ... FETCH FIRST ? ROWS ONLY)
+//
+// FETCH FIRST di dalam membuat Oracle berhenti membaca setelah limit
+// baris, jadi kata yang sangat umum tidak menghitung seluruh tabel.
+func (r *OracleRepository) CountSearchUsers(ctx context.Context, terms []string, limit int) (int64, error) {
+	if len(terms) == 0 {
+		return 0, nil
+	}
+	var sql strings.Builder
+	sql.WriteString("SELECT COUNT(*) FROM (SELECT 1 FROM users")
+	args := searchUsersWhere(&sql, terms)
+	sql.WriteString("\n FETCH FIRST ? ROWS ONLY)")
+	args = append(args, limit)
+	var n int64
+	if err := r.db.WithContext(ctx).Raw(sql.String(), args...).Scan(&n).Error; err != nil {
+		return 0, fmt.Errorf("count search users: %w", err)
+	}
+	return n, nil
+}
+
 // UpdateProfile mengubah field yang tidak nil. String kosong disimpan
 // sebagai NULL (Oracle memang menganggap ” = NULL).
 func (r *OracleRepository) UpdateProfile(ctx context.Context, id int64, u ProfileUpdate, now time.Time) (Profile, error) {
@@ -385,13 +420,8 @@ func (r *OracleRepository) SearchUsers(ctx context.Context, terms []string, offs
 	}
 	var sql strings.Builder
 	sql.WriteString(`SELECT id AS "id", username AS "username", email AS "email", display_name AS "display_name", bio AS "bio", avatar_key AS "avatar_key", status AS "status", created_at AS "created_at", updated_at AS "updated_at", subscriber_count AS "subscriber_count"
-  FROM users
- WHERE deleted_at IS NULL AND status <> ?`)
-	args := []any{statusBanned}
-	for _, t := range terms {
-		sql.WriteString("\n   AND (username LIKE ? OR LOWER(display_name) LIKE ?)")
-		args = append(args, "%"+t+"%", "%"+t+"%")
-	}
+  FROM users`)
+	args := searchUsersWhere(&sql, terms)
 	first := terms[0]
 	sql.WriteString(`
  ORDER BY CASE WHEN username = ? THEN 0

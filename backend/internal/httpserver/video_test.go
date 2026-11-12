@@ -55,6 +55,8 @@ type fakeVideoClient struct {
 	pl fakePlaylists
 	// lastStats berisi request dasbor terakhir (stats_test.go).
 	lastStats *videov1.GetChannelStatsRequest
+	// step27 berisi request langkah 27 terakhir (recommend_test.go).
+	step27 fakeStep27
 }
 
 var _ videov1.VideoServiceClient = (*fakeVideoClient)(nil)
@@ -357,7 +359,7 @@ func (f *fakeVideoClient) SearchVideos(_ context.Context, in *videov1.SearchVide
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &videov1.SearchVideosResponse{Videos: []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)}, NextPageToken: "czE"}, nil
+	return &videov1.SearchVideosResponse{Videos: []*videov1.Video{testVideo(videov1.VideoStatus_VIDEO_STATUS_READY)}, NextPageToken: "czE", TotalSize: 1001}, nil
 }
 
 func TestSearchVideos(t *testing.T) {

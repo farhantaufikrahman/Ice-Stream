@@ -85,6 +85,40 @@ func (r *OracleRepository) SearchPlaylists(ctx context.Context, terms []string, 
 	if len(terms) == 0 {
 		return nil, nil
 	}
+	base, args := playlistSearchSQL(terms)
+	sql := base + `
+ ORDER BY CASE WHEN LOWER(p.title) LIKE ? THEN 0 ELSE 1 END, p.updated_at DESC, p.id DESC
+OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`
+	args = append(args, terms[0]+"%", offset, limit)
+
+	var rows []playlistRow
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("search playlists: %w", err)
+	}
+	out := make([]Playlist, len(rows))
+	for i, row := range rows {
+		out[i] = row.toPlaylist()
+	}
+	return out, nil
+}
+
+// CountSearchPlaylists menghitung hasil SearchPlaylists (langkah 27),
+// paling banyak limit baris, sama seperti CountSearch.
+func (r *OracleRepository) CountSearchPlaylists(ctx context.Context, terms []string, limit int) (int64, error) {
+	if len(terms) == 0 {
+		return 0, nil
+	}
+	base, args := playlistSearchSQL(terms)
+	var n int64
+	err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM ("+base+"\nFETCH FIRST ? ROWS ONLY)", append(args, limit)...).Scan(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count search playlists: %w", err)
+	}
+	return n, nil
+}
+
+// playlistSearchSQL menyusun bagian query SearchPlaylists sebelum ORDER BY.
+func playlistSearchSQL(terms []string) (string, []any) {
 	var sql strings.Builder
 	sql.WriteString(`SELECT p.id AS "id", p.owner_id AS "owner_id", p.title AS "title", p.description AS "description", p.visibility AS "visibility", p.created_at AS "created_at", p.updated_at AS "updated_at"
   FROM playlists p
@@ -96,20 +130,8 @@ func (r *OracleRepository) SearchPlaylists(ctx context.Context, terms []string, 
 	}
 	sql.WriteString(`
    AND EXISTS (SELECT 1 FROM playlist_items pi JOIN videos v ON v.id = pi.video_id
-                WHERE pi.playlist_id = p.id AND ` + watchableSQLv + ` AND v.deleted_at IS NULL)
- ORDER BY CASE WHEN LOWER(p.title) LIKE ? THEN 0 ELSE 1 END, p.updated_at DESC, p.id DESC
-OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`)
-	args = append(args, terms[0]+"%", offset, limit)
-
-	var rows []playlistRow
-	if err := r.db.WithContext(ctx).Raw(sql.String(), args...).Scan(&rows).Error; err != nil {
-		return nil, fmt.Errorf("search playlists: %w", err)
-	}
-	out := make([]Playlist, len(rows))
-	for i, row := range rows {
-		out[i] = row.toPlaylist()
-	}
-	return out, nil
+                WHERE pi.playlist_id = p.id AND ` + watchableSQLv + ` AND v.deleted_at IS NULL)`)
+	return sql.String(), args
 }
 
 // SearchPlaylists: handler gRPC.
@@ -121,6 +143,11 @@ func (s *GRPCServer) SearchPlaylists(ctx context.Context, req *videov1.SearchPla
 	resp := &videov1.SearchPlaylistsResponse{NextPageToken: next, Playlists: make([]*videov1.Playlist, len(list))}
 	for i, p := range list {
 		resp.Playlists[i] = s.toProtoPlaylist(p)
+	}
+	if req.GetPageToken() == "" {
+		if resp.TotalSize, err = s.svc.CountSearchPlaylists(ctx, req.GetQuery(), len(list), next != ""); err != nil {
+			return nil, s.toStatus(ctx, err)
+		}
 	}
 	return resp, nil
 }

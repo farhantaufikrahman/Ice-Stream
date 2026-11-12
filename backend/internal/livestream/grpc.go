@@ -39,7 +39,13 @@ func (s *GRPCServer) UpdateMyChannel(ctx context.Context, req *livev1.UpdateMyCh
 	if req.GetRequesterId() <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "requester_id wajib diisi")
 	}
-	v, err := s.svc.UpdateMyChannel(ctx, req.GetRequesterId(), req.GetTitle(), req.GetCategory())
+	v, err := s.svc.UpdateMyChannel(ctx, req.GetRequesterId(), ChannelUpdate{
+		Title:         req.GetTitle(),
+		Category:      req.GetCategory(),
+		RecordEnabled: req.RecordEnabled,
+		SlowMode:      req.SlowMode,
+		FollowersOnly: req.FollowersOnly,
+	})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -70,11 +76,13 @@ func (s *GRPCServer) ListLiveStreams(ctx context.Context, req *livev1.ListLiveSt
 }
 
 func (s *GRPCServer) GetLiveStream(ctx context.Context, req *livev1.GetLiveStreamRequest) (*livev1.GetLiveStreamResponse, error) {
-	st, err := s.svc.GetStream(ctx, req.GetStreamId())
+	v, err := s.svc.GetStreamView(ctx, req.GetStreamId())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
-	return &livev1.GetLiveStreamResponse{Stream: s.streamProto(st)}, nil
+	out := s.streamProto(v.Stream)
+	out.SlowMode, out.FollowersOnly = v.SlowMode, v.FollowersOnly
+	return &livev1.GetLiveStreamResponse{Stream: out}, nil
 }
 
 func (s *GRPCServer) CreatePublishToken(ctx context.Context, req *livev1.CreatePublishTokenRequest) (*livev1.CreatePublishTokenResponse, error) {
@@ -97,6 +105,8 @@ func (s *GRPCServer) SendChatMessage(ctx context.Context, req *livev1.SendChatMe
 		StreamID:    req.GetStreamId(),
 		Body:        req.GetBody(),
 		Color:       req.Color,
+		// Diisi gateway dari UserService; jangan diisi dari input browser.
+		RequesterFollows: req.GetRequesterFollows(),
 	})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
@@ -139,6 +149,8 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrRateLimited):
 		return status.Error(codes.ResourceExhausted, err.Error())
+	case errors.Is(err, ErrFollowersOnly):
+		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "request dibatalkan")
 	case errors.Is(err, context.DeadlineExceeded):
@@ -151,11 +163,20 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 
 func (s *GRPCServer) channelProto(v ChannelView) *livev1.LiveChannel {
 	out := &livev1.LiveChannel{
-		OwnerId:      v.OwnerID,
-		Title:        v.Title,
-		Category:     v.Category,
-		IngestUrl:    v.IngestURL,
-		HasStreamKey: v.StreamKeyHash != "",
+		OwnerId:       v.OwnerID,
+		Title:         v.Title,
+		Category:      v.Category,
+		IngestUrl:     v.IngestURL,
+		HasStreamKey:  v.StreamKeyHash != "",
+		RecordEnabled: v.RecordEnabled,
+		SlowMode:      v.SlowMode,
+		FollowersOnly: v.FollowersOnly,
+	}
+	if r := v.LastRecording; r != nil {
+		out.LastRecording = &livev1.Recording{StreamId: r.StreamID, Status: r.Status, VideoId: r.VideoID, Error: r.Error}
+		if !r.EndedAt.IsZero() {
+			out.LastRecording.EndedAt = timestamppb.New(r.EndedAt)
+		}
 	}
 	if !v.StreamKeyCreatedAt.IsZero() {
 		out.StreamKeyCreatedAt = timestamppb.New(v.StreamKeyCreatedAt)

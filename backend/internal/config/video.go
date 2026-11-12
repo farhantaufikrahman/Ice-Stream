@@ -49,6 +49,10 @@ type LiveConfig struct {
 	// MediaMTXAPIURL adalah alamat Control API MediaMTX, misalnya
 	// "http://mediamtx:9997". Dibaca setiap PollInterval.
 	MediaMTXAPIURL string
+	// MediaMTXPlaybackURL adalah alamat server playback MediaMTX (rekaman
+	// siaran, langkah 27), misalnya "http://mediamtx:9996". Hanya di dalam
+	// cluster.
+	MediaMTXPlaybackURL string
 	// HookAddr adalah alamat server HTTP kecil yang menjawab hook auth
 	// MediaMTX ("boleh siaran?"), misalnya ":8090". Tidak dibuka ke luar
 	// cluster.
@@ -151,9 +155,11 @@ func LoadVideo() (VideoConfig, error) {
 		ViewDedupWindow: viewWindow,
 		Live: LiveConfig{
 			MediaMTXAPIURL: strings.TrimRight(getString("MEDIAMTX_API_URL", "http://localhost:9997"), "/"),
-			HookAddr:       ":" + getString("LIVE_HOOK_PORT", "8090"),
-			IngestURL:      strings.TrimRight(getString("LIVE_INGEST_URL", "rtmp://localhost:1935/live"), "/"),
-			PlaybackURL:    strings.TrimRight(getString("LIVE_PLAYBACK_URL", "http://localhost:8888"), "/"),
+			// Port playback bawaan MediaMTX.
+			MediaMTXPlaybackURL: strings.TrimRight(getString("MEDIAMTX_PLAYBACK_URL", "http://localhost:9996"), "/"),
+			HookAddr:            ":" + getString("LIVE_HOOK_PORT", "8090"),
+			IngestURL:           strings.TrimRight(getString("LIVE_INGEST_URL", "rtmp://localhost:1935/live"), "/"),
+			PlaybackURL:         strings.TrimRight(getString("LIVE_PLAYBACK_URL", "http://localhost:8888"), "/"),
 			// Port WebRTC bawaan MediaMTX.
 			WHIPURL:         strings.TrimRight(getString("LIVE_WHIP_URL", "http://localhost:8889"), "/"),
 			PublishTokenTTL: liveTokenTTL,
@@ -208,7 +214,7 @@ func (c VideoConfig) validate() error {
 }
 
 func (l LiveConfig) validate() error {
-	for key, v := range map[string]string{"MEDIAMTX_API_URL": l.MediaMTXAPIURL, "LIVE_PLAYBACK_URL": l.PlaybackURL, "LIVE_WHIP_URL": l.WHIPURL} {
+	for key, v := range map[string]string{"MEDIAMTX_API_URL": l.MediaMTXAPIURL, "MEDIAMTX_PLAYBACK_URL": l.MediaMTXPlaybackURL, "LIVE_PLAYBACK_URL": l.PlaybackURL, "LIVE_WHIP_URL": l.WHIPURL} {
 		u, err := url.Parse(v)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" || u.RawQuery != "" {
 			return fmt.Errorf("%s harus berupa alamat http(s) tanpa path, dapat %q", key, v)

@@ -20,6 +20,7 @@ import type {
   HistoryPage,
   LikeResult,
   LiveChannel,
+  LiveChannelChanges,
   LiveChatMessage,
   LiveStream,
   MarkReadResult,
@@ -32,6 +33,7 @@ import type {
   PlaylistVisibility,
   Profile,
   PublishToken,
+  SearchCounts,
   StatsDays,
   StreamKeyResult,
   SubscriptionResult,
@@ -158,6 +160,39 @@ export function searchChannels(q: string, pageToken: string, signal?: AbortSigna
 export function searchPlaylists(q: string, pageToken: string, signal?: AbortSignal): Promise<PlaylistPage> {
   const params = new URLSearchParams({ q })
   return apiRequest<PlaylistPage>(`/search/playlists?${params}&${pageQuery(pageToken)}`, { signal })
+}
+
+/**
+ * Angka di setiap tab pencarian (langkah 27). duration hanya berlaku untuk
+ * tab Video, sama dengan searchVideos.
+ */
+export function getSearchCounts(q: string, duration: DurationFilter = '', signal?: AbortSignal): Promise<SearchCounts> {
+  const params = new URLSearchParams({ q })
+  if (duration) params.set('duration', duration)
+  return apiRequest<SearchCounts>(`/search/counts?${params}`, { signal })
+}
+
+/**
+ * "Rekomendasi untukmu" di Beranda (langkah 27). seed mengubah susunan
+ * acaknya: seed yang sama memberi urutan yang sama, jadi tombol "Muat
+ * ulang" cukup mengganti seed. Dengan login, rekomendasi memakai riwayat
+ * tonton dan kanal yang diikuti.
+ */
+export async function listRecommended(seed: string, category: string, limit: number, signal?: AbortSignal): Promise<Video[]> {
+  const params = new URLSearchParams({ seed, limit: String(limit) })
+  if (category) params.set('category', category)
+  const res = await apiRequest<VideoPage>(`/videos/recommended?${params}`, { auth: 'optional', signal })
+  return res.videos
+}
+
+/** Memilih "Video unggulan" kanal sendiri. null = hapus pilihan. */
+export async function setFeaturedVideo(videoId: string | null): Promise<Video | null> {
+  const res = await apiRequest<{ featured_video: Video | null }>('/me/featured-video', {
+    method: 'PUT',
+    body: { video_id: videoId },
+    auth: 'required',
+  })
+  return res.featured_video
 }
 
 export function getVideo(id: string, signal?: AbortSignal): Promise<VideoDetail> {
@@ -616,11 +651,14 @@ export async function getMyLive(signal?: AbortSignal): Promise<LiveChannel> {
   return res.channel
 }
 
-/** Mengubah judul dan kategori (juga siaran yang sedang berjalan). */
-export async function updateMyLive(title: string, category: string): Promise<LiveChannel> {
+/**
+ * Mengubah judul, kategori (juga siaran yang sedang berjalan), dan pilihan
+ * siaran. Pilihan yang tidak diisi tidak diubah.
+ */
+export async function updateMyLive(changes: LiveChannelChanges): Promise<LiveChannel> {
   const res = await apiRequest<{ channel: LiveChannel }>('/me/live', {
     method: 'PATCH',
-    body: { title, category },
+    body: changes,
     auth: 'required',
   })
   return res.channel
@@ -642,7 +680,10 @@ export async function listLiveChat(streamId: string, signal?: AbortSignal): Prom
   return res.messages
 }
 
-/** Mengirim pesan chat. Mode lambat: 429 jika kurang dari 3 detik dari pesan sebelumnya. */
+/**
+ * Mengirim pesan chat. Mode lambat: 429 jika kurang dari 3 detik dari pesan
+ * sebelumnya. Chat khusus pengikut: 403 jika belum mengikuti kanal.
+ */
 export async function sendLiveChat(streamId: string, body: string, color: string): Promise<LiveChatMessage> {
   const res = await apiRequest<{ message: LiveChatMessage }>(`/live/${encodeURIComponent(streamId)}/chat`, {
     method: 'POST',

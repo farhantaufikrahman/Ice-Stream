@@ -5,6 +5,7 @@ import type { Profile } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
 import { LiveSection } from '../components/home/LiveSection'
+import { RecommendedSection } from '../components/home/RecommendedSection'
 import { TrendingSection } from '../components/home/TrendingSection'
 import { VideoGrid } from '../components/VideoGrid'
 import { usePagedVideos } from '../hooks/usePagedVideos'
@@ -21,11 +22,11 @@ const STRIP_COUNT = 24
  * Pilihan chip disimpan di URL (?category=game atau ?tab=mengikuti),
  * jadi tombol Back dan tautan yang dibagikan membuka chip yang sama.
  *
- * Di atas grid ada Trending (langkah 24a) lalu "Sedang live" (langkah
- * 25c). Di desain, "Sedang live" ada di paling bawah, tetapi grid video
- * punya tombol "Muat lagi" yang terus menambah isi, jadi siaran (yang
- * hanya ada sebentar) dipindah ke atas grid supaya tidak tenggelam.
- * Keduanya mengikuti kategori yang dipilih. Chip "Mengikuti" tidak
+ * Urutannya: Trending (langkah 24a), "Rekomendasi untukmu" (langkah 27),
+ * "Sedang live" (langkah 25c), lalu "Video terbaru". Di desain tidak ada
+ * "Video terbaru", tetapi grid itu (dengan "Muat lagi") tetap dipakai
+ * supaya semua video bisa dijelajahi; karena itu ia di paling bawah.
+ * Semuanya mengikuti kategori yang dipilih. Chip "Mengikuti" tidak
  * menampilkannya.
  */
 export function HomePage() {
@@ -70,6 +71,7 @@ export function HomePage() {
       ) : (
         <>
           <TrendingSection category={category} />
+          <RecommendedSection category={category} />
           <LiveSection category={category} />
           <LatestFeed category={category} />
         </>
