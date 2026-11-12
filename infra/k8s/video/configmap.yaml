@@ -45,6 +45,9 @@ data:
   # Control API MediaMTX setiap 5 detik, dan MediaMTX bertanya ke port 8090
   # setiap kali OBS mulai siaran (lihat live/configmap.yaml).
   MEDIAMTX_API_URL: http://mediamtx:9997
+  # Server playback MediaMTX: rekaman siaran yang diimpor menjadi video
+  # draf (langkah 27).
+  MEDIAMTX_PLAYBACK_URL: http://mediamtx:9996
   LIVE_HOOK_PORT: "8090"
   # Diisi kreator di kolom "Server" OBS (Service mediamtx-rtmp, port 1935
   # di localhost).

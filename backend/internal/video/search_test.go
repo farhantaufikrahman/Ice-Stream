@@ -251,3 +251,28 @@ func TestIndexPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, n, "dijalankan ulang: tidak ada yang perlu diindeks")
 }
+
+// CountSearch palsu memakai Search palsu tanpa batas halaman.
+func (r *fakeRepo) CountSearch(ctx context.Context, terms []string, opts SearchOptions, limit int) (int64, error) {
+	hits, err := r.Search(ctx, terms, opts, 0, limit)
+	return int64(len(hits)), err
+}
+
+func TestCountSearchVideos(t *testing.T) {
+	ctx := context.Background()
+	svc, repo, _ := newTestService()
+	for i := 0; i < 5; i++ {
+		readyWith(t, svc, repo, "Golang part", "", int64(i))
+	}
+	page, next, err := svc.SearchVideos(ctx, "golang", SearchOptions{}, 2, "")
+	require.NoError(t, err)
+	n, err := svc.CountSearchVideos(ctx, "golang", SearchOptions{}, len(page), next != "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), n, "halaman pertama penuh: hitung di repo")
+
+	// Tanpa halaman berikutnya, jumlahnya = isi halaman pertama (repo
+	// tidak ditanya, jadi query kosong pun tidak divalidasi ulang).
+	n, err = svc.CountSearchVideos(ctx, "", SearchOptions{}, 3, false)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), n)
+}

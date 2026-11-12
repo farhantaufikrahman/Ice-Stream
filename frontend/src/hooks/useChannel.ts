@@ -56,6 +56,8 @@ export function useChannel(username: string): ChannelState {
           ? {
               ...prev,
               channel: {
+                // Angka kanal dan Video unggulan (langkah 27) ikut dipertahankan.
+                ...prev.channel,
                 user: { ...prev.channel.user, subscriber_count: r.subscriber_count },
                 viewer_subscribed: r.subscribed,
               },

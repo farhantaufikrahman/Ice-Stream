@@ -4,9 +4,13 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 )
@@ -117,6 +121,122 @@ func (h *videoHandler) searchPlaylists(c *gin.Context) {
 	owners := lookupProfiles(c.Request.Context(), h.users, h.logger, ownerIDs)
 	for i, p := range resp.GetPlaylists() {
 		body.Playlists[i].Owner = owners[p.GetOwnerId()]
+	}
+	c.JSON(http.StatusOK, body)
+}
+
+// Langkah 27: angka di setiap tab pencarian (desain Search: "Video 1.204",
+// "Sekitar 1.284 hasil untuk ...").
+
+// searchCountsHandler memanggil tiga service sekaligus.
+type searchCountsHandler struct {
+	videos videov1.VideoServiceClient
+	users  userv1.UserServiceClient
+	live   livev1.LiveServiceClient
+	logger *slog.Logger
+}
+
+const (
+	// searchCountCap: VideoService dan UserService berhenti menghitung di
+	// 1001; yang lebih dari 1000 ditampilkan "1.000+".
+	searchCountCap = 1000
+	// liveCountCap: siaran dicari dengan ListLiveStreams (maksimal 50).
+	liveCountCap = 50
+)
+
+// tabCount adalah jumlah hasil satu tab. Capped true berarti hasilnya
+// lebih banyak dari Count (frontend menampilkan "1.000+").
+type tabCount struct {
+	Count  int64 `json:"count"`
+	Capped bool  `json:"capped"`
+}
+
+// searchCountsResponse: tab yang gagal dihitung bernilai null (frontend
+// tidak menampilkan angkanya), supaya satu service yang mati tidak
+// menghilangkan angka tab lain.
+type searchCountsResponse struct {
+	Video    *tabCount `json:"video"`
+	Channel  *tabCount `json:"channel"`
+	Playlist *tabCount `json:"playlist"`
+	Live     *tabCount `json:"live"`
+}
+
+func capCount(n, limit int64) *tabCount {
+	if n > limit {
+		return &tabCount{Count: limit, Capped: true}
+	}
+	return &tabCount{Count: n}
+}
+
+// get: GET /api/v1/search/counts?q=golang&duration=short
+// Tanpa login. duration hanya berlaku untuk tab Video, sama dengan
+// /search/videos. Empat panggilan berjalan bersamaan (goroutine), jadi
+// lamanya kira-kira sama dengan panggilan yang paling lambat. Padanannya
+// Promise.allSettled di Node.js atau CompletableFuture.allOf di Java.
+func (h *searchCountsHandler) get(c *gin.Context) {
+	q := c.Query("q")
+	if q == "" {
+		abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "parameter q wajib diisi")
+		return
+	}
+	duration, ok := enumQuery(c, "duration", durationParams, "short, medium, long")
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	var (
+		body     searchCountsResponse
+		videoErr error
+		wg       sync.WaitGroup
+	)
+	// page_size 1: yang dibutuhkan hanya total_size di halaman pertama.
+	wg.Go(func() {
+		resp, err := h.videos.SearchVideos(ctx, &videov1.SearchVideosRequest{Query: q, PageSize: 1, Duration: duration})
+		if err != nil {
+			videoErr = err
+			return
+		}
+		body.Video = capCount(resp.GetTotalSize(), searchCountCap)
+	})
+	wg.Go(func() {
+		resp, err := h.users.SearchUsers(ctx, &userv1.SearchUsersRequest{Query: q, PageSize: 1})
+		if err != nil {
+			h.logger.WarnContext(ctx, "gagal menghitung hasil kreator", slog.Any("error", err))
+			return
+		}
+		body.Channel = capCount(resp.GetTotalSize(), searchCountCap)
+	})
+	wg.Go(func() {
+		resp, err := h.videos.SearchPlaylists(ctx, &videov1.SearchPlaylistsRequest{Query: q, PageSize: 1})
+		if err != nil {
+			h.logger.WarnContext(ctx, "gagal menghitung hasil playlist", slog.Any("error", err))
+			return
+		}
+		body.Playlist = capCount(resp.GetTotalSize(), searchCountCap)
+	})
+	wg.Go(func() {
+		resp, err := h.live.ListLiveStreams(ctx, &livev1.ListLiveStreamsRequest{Query: q, Limit: liveCountCap})
+		if err != nil {
+			h.logger.WarnContext(ctx, "gagal menghitung hasil siaran", slog.Any("error", err))
+			return
+		}
+		n := int64(len(resp.GetStreams()))
+		// ListLiveStreams tidak memberi tahu apakah masih ada lagi; jika
+		// penuh, anggap "50+".
+		body.Live = &tabCount{Count: n, Capped: n == liveCountCap}
+	})
+	wg.Wait()
+
+	// Kata kunci yang ditolak (misalnya hanya satu huruf) dijawab 400,
+	// sama seperti /search/videos.
+	if status.Code(videoErr) == codes.InvalidArgument {
+		writeGRPCError(c, h.logger, videoErr)
+		return
+	}
+	if videoErr != nil {
+		h.logger.WarnContext(ctx, "gagal menghitung hasil video", slog.Any("error", videoErr))
 	}
 	c.JSON(http.StatusOK, body)
 }

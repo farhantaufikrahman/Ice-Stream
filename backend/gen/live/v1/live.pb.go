@@ -98,7 +98,11 @@ type LiveStream struct {
 	// sudah ENDED.
 	ViewerCount int64 `protobuf:"varint,9,opt,name=viewer_count,json=viewerCount,proto3" json:"viewer_count,omitempty"`
 	// Jumlah penonton tertinggi selama siaran.
-	PeakViewers   int64 `protobuf:"varint,10,opt,name=peak_viewers,json=peakViewers,proto3" json:"peak_viewers,omitempty"`
+	PeakViewers int64 `protobuf:"varint,10,opt,name=peak_viewers,json=peakViewers,proto3" json:"peak_viewers,omitempty"`
+	// Pengaturan chat kanal ini saat ini (langkah 27). Hanya diisi oleh
+	// GetLiveStream.
+	SlowMode      bool `protobuf:"varint,11,opt,name=slow_mode,json=slowMode,proto3" json:"slow_mode,omitempty"`
+	FollowersOnly bool `protobuf:"varint,12,opt,name=followers_only,json=followersOnly,proto3" json:"followers_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -203,6 +207,20 @@ func (x *LiveStream) GetPeakViewers() int64 {
 	return 0
 }
 
+func (x *LiveStream) GetSlowMode() bool {
+	if x != nil {
+		return x.SlowMode
+	}
+	return false
+}
+
+func (x *LiveStream) GetFollowersOnly() bool {
+	if x != nil {
+		return x.FollowersOnly
+	}
+	return false
+}
+
 type LiveChannel struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	OwnerId  int64                  `protobuf:"varint,1,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
@@ -215,7 +233,14 @@ type LiveChannel struct {
 	HasStreamKey       bool                   `protobuf:"varint,5,opt,name=has_stream_key,json=hasStreamKey,proto3" json:"has_stream_key,omitempty"`
 	StreamKeyCreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=stream_key_created_at,json=streamKeyCreatedAt,proto3" json:"stream_key_created_at,omitempty"`
 	// Siaran yang sedang LIVE milik kreator ini. Tidak diisi jika tidak live.
-	Current       *LiveStream `protobuf:"bytes,7,opt,name=current,proto3" json:"current,omitempty"`
+	Current *LiveStream `protobuf:"bytes,7,opt,name=current,proto3" json:"current,omitempty"`
+	// Pilihan siaran (langkah 27, desain GoLive "Detail siaran").
+	RecordEnabled bool `protobuf:"varint,8,opt,name=record_enabled,json=recordEnabled,proto3" json:"record_enabled,omitempty"`
+	SlowMode      bool `protobuf:"varint,9,opt,name=slow_mode,json=slowMode,proto3" json:"slow_mode,omitempty"`
+	FollowersOnly bool `protobuf:"varint,10,opt,name=followers_only,json=followersOnly,proto3" json:"followers_only,omitempty"`
+	// Rekaman siaran terakhir yang selesai dengan pilihan rekaman aktif.
+	// Tidak diisi jika belum pernah ada.
+	LastRecording *Recording `protobuf:"bytes,11,opt,name=last_recording,json=lastRecording,proto3" json:"last_recording,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -299,6 +324,114 @@ func (x *LiveChannel) GetCurrent() *LiveStream {
 	return nil
 }
 
+func (x *LiveChannel) GetRecordEnabled() bool {
+	if x != nil {
+		return x.RecordEnabled
+	}
+	return false
+}
+
+func (x *LiveChannel) GetSlowMode() bool {
+	if x != nil {
+		return x.SlowMode
+	}
+	return false
+}
+
+func (x *LiveChannel) GetFollowersOnly() bool {
+	if x != nil {
+		return x.FollowersOnly
+	}
+	return false
+}
+
+func (x *LiveChannel) GetLastRecording() *Recording {
+	if x != nil {
+		return x.LastRecording
+	}
+	return nil
+}
+
+// Status rekaman satu siaran (langkah 27).
+type Recording struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	StreamId int64                  `protobuf:"varint,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// PENDING, IMPORTING, DONE, atau FAILED.
+	Status string `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	// Video hasil rekaman (draf), jika status DONE.
+	VideoId int64 `protobuf:"varint,3,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	// Alasan, jika status FAILED.
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Recording) Reset() {
+	*x = Recording{}
+	mi := &file_live_v1_live_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Recording) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Recording) ProtoMessage() {}
+
+func (x *Recording) ProtoReflect() protoreflect.Message {
+	mi := &file_live_v1_live_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Recording.ProtoReflect.Descriptor instead.
+func (*Recording) Descriptor() ([]byte, []int) {
+	return file_live_v1_live_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Recording) GetStreamId() int64 {
+	if x != nil {
+		return x.StreamId
+	}
+	return 0
+}
+
+func (x *Recording) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Recording) GetVideoId() int64 {
+	if x != nil {
+		return x.VideoId
+	}
+	return 0
+}
+
+func (x *Recording) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *Recording) GetEndedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndedAt
+	}
+	return nil
+}
+
 type GetMyChannelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
@@ -308,7 +441,7 @@ type GetMyChannelRequest struct {
 
 func (x *GetMyChannelRequest) Reset() {
 	*x = GetMyChannelRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[2]
+	mi := &file_live_v1_live_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -320,7 +453,7 @@ func (x *GetMyChannelRequest) String() string {
 func (*GetMyChannelRequest) ProtoMessage() {}
 
 func (x *GetMyChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[2]
+	mi := &file_live_v1_live_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -333,7 +466,7 @@ func (x *GetMyChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMyChannelRequest.ProtoReflect.Descriptor instead.
 func (*GetMyChannelRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{2}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetMyChannelRequest) GetRequesterId() int64 {
@@ -352,7 +485,7 @@ type GetMyChannelResponse struct {
 
 func (x *GetMyChannelResponse) Reset() {
 	*x = GetMyChannelResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[3]
+	mi := &file_live_v1_live_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -364,7 +497,7 @@ func (x *GetMyChannelResponse) String() string {
 func (*GetMyChannelResponse) ProtoMessage() {}
 
 func (x *GetMyChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[3]
+	mi := &file_live_v1_live_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -377,7 +510,7 @@ func (x *GetMyChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMyChannelResponse.ProtoReflect.Descriptor instead.
 func (*GetMyChannelResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{3}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetMyChannelResponse) GetChannel() *LiveChannel {
@@ -392,14 +525,18 @@ type UpdateMyChannelRequest struct {
 	RequesterId int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
 	Title       string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	// Kosong = tanpa kategori.
-	Category      string `protobuf:"bytes,3,opt,name=category,proto3" json:"category,omitempty"`
+	Category string `protobuf:"bytes,3,opt,name=category,proto3" json:"category,omitempty"`
+	// Pilihan siaran (langkah 27). Tidak dikirim = tidak diubah.
+	RecordEnabled *bool `protobuf:"varint,4,opt,name=record_enabled,json=recordEnabled,proto3,oneof" json:"record_enabled,omitempty"`
+	SlowMode      *bool `protobuf:"varint,5,opt,name=slow_mode,json=slowMode,proto3,oneof" json:"slow_mode,omitempty"`
+	FollowersOnly *bool `protobuf:"varint,6,opt,name=followers_only,json=followersOnly,proto3,oneof" json:"followers_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateMyChannelRequest) Reset() {
 	*x = UpdateMyChannelRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[4]
+	mi := &file_live_v1_live_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +548,7 @@ func (x *UpdateMyChannelRequest) String() string {
 func (*UpdateMyChannelRequest) ProtoMessage() {}
 
 func (x *UpdateMyChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[4]
+	mi := &file_live_v1_live_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +561,7 @@ func (x *UpdateMyChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMyChannelRequest.ProtoReflect.Descriptor instead.
 func (*UpdateMyChannelRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{4}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *UpdateMyChannelRequest) GetRequesterId() int64 {
@@ -448,6 +585,27 @@ func (x *UpdateMyChannelRequest) GetCategory() string {
 	return ""
 }
 
+func (x *UpdateMyChannelRequest) GetRecordEnabled() bool {
+	if x != nil && x.RecordEnabled != nil {
+		return *x.RecordEnabled
+	}
+	return false
+}
+
+func (x *UpdateMyChannelRequest) GetSlowMode() bool {
+	if x != nil && x.SlowMode != nil {
+		return *x.SlowMode
+	}
+	return false
+}
+
+func (x *UpdateMyChannelRequest) GetFollowersOnly() bool {
+	if x != nil && x.FollowersOnly != nil {
+		return *x.FollowersOnly
+	}
+	return false
+}
+
 type UpdateMyChannelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Channel       *LiveChannel           `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
@@ -457,7 +615,7 @@ type UpdateMyChannelResponse struct {
 
 func (x *UpdateMyChannelResponse) Reset() {
 	*x = UpdateMyChannelResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[5]
+	mi := &file_live_v1_live_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -469,7 +627,7 @@ func (x *UpdateMyChannelResponse) String() string {
 func (*UpdateMyChannelResponse) ProtoMessage() {}
 
 func (x *UpdateMyChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[5]
+	mi := &file_live_v1_live_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,7 +640,7 @@ func (x *UpdateMyChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMyChannelResponse.ProtoReflect.Descriptor instead.
 func (*UpdateMyChannelResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{5}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UpdateMyChannelResponse) GetChannel() *LiveChannel {
@@ -501,7 +659,7 @@ type ResetStreamKeyRequest struct {
 
 func (x *ResetStreamKeyRequest) Reset() {
 	*x = ResetStreamKeyRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[6]
+	mi := &file_live_v1_live_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -513,7 +671,7 @@ func (x *ResetStreamKeyRequest) String() string {
 func (*ResetStreamKeyRequest) ProtoMessage() {}
 
 func (x *ResetStreamKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[6]
+	mi := &file_live_v1_live_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -526,7 +684,7 @@ func (x *ResetStreamKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetStreamKeyRequest.ProtoReflect.Descriptor instead.
 func (*ResetStreamKeyRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{6}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResetStreamKeyRequest) GetRequesterId() int64 {
@@ -547,7 +705,7 @@ type ResetStreamKeyResponse struct {
 
 func (x *ResetStreamKeyResponse) Reset() {
 	*x = ResetStreamKeyResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[7]
+	mi := &file_live_v1_live_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +717,7 @@ func (x *ResetStreamKeyResponse) String() string {
 func (*ResetStreamKeyResponse) ProtoMessage() {}
 
 func (x *ResetStreamKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[7]
+	mi := &file_live_v1_live_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -572,7 +730,7 @@ func (x *ResetStreamKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetStreamKeyResponse.ProtoReflect.Descriptor instead.
 func (*ResetStreamKeyResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{7}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResetStreamKeyResponse) GetChannel() *LiveChannel {
@@ -606,7 +764,7 @@ type ListLiveStreamsRequest struct {
 
 func (x *ListLiveStreamsRequest) Reset() {
 	*x = ListLiveStreamsRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[8]
+	mi := &file_live_v1_live_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +776,7 @@ func (x *ListLiveStreamsRequest) String() string {
 func (*ListLiveStreamsRequest) ProtoMessage() {}
 
 func (x *ListLiveStreamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[8]
+	mi := &file_live_v1_live_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +789,7 @@ func (x *ListLiveStreamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLiveStreamsRequest.ProtoReflect.Descriptor instead.
 func (*ListLiveStreamsRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{8}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListLiveStreamsRequest) GetLimit() int32 {
@@ -671,7 +829,7 @@ type ListLiveStreamsResponse struct {
 
 func (x *ListLiveStreamsResponse) Reset() {
 	*x = ListLiveStreamsResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[9]
+	mi := &file_live_v1_live_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +841,7 @@ func (x *ListLiveStreamsResponse) String() string {
 func (*ListLiveStreamsResponse) ProtoMessage() {}
 
 func (x *ListLiveStreamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[9]
+	mi := &file_live_v1_live_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +854,7 @@ func (x *ListLiveStreamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLiveStreamsResponse.ProtoReflect.Descriptor instead.
 func (*ListLiveStreamsResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{9}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListLiveStreamsResponse) GetStreams() []*LiveStream {
@@ -715,7 +873,7 @@ type GetLiveStreamRequest struct {
 
 func (x *GetLiveStreamRequest) Reset() {
 	*x = GetLiveStreamRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[10]
+	mi := &file_live_v1_live_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -727,7 +885,7 @@ func (x *GetLiveStreamRequest) String() string {
 func (*GetLiveStreamRequest) ProtoMessage() {}
 
 func (x *GetLiveStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[10]
+	mi := &file_live_v1_live_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -740,7 +898,7 @@ func (x *GetLiveStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLiveStreamRequest.ProtoReflect.Descriptor instead.
 func (*GetLiveStreamRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{10}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetLiveStreamRequest) GetStreamId() int64 {
@@ -759,7 +917,7 @@ type GetLiveStreamResponse struct {
 
 func (x *GetLiveStreamResponse) Reset() {
 	*x = GetLiveStreamResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[11]
+	mi := &file_live_v1_live_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -771,7 +929,7 @@ func (x *GetLiveStreamResponse) String() string {
 func (*GetLiveStreamResponse) ProtoMessage() {}
 
 func (x *GetLiveStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[11]
+	mi := &file_live_v1_live_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -784,7 +942,7 @@ func (x *GetLiveStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLiveStreamResponse.ProtoReflect.Descriptor instead.
 func (*GetLiveStreamResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{11}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetLiveStreamResponse) GetStream() *LiveStream {
@@ -803,7 +961,7 @@ type CreatePublishTokenRequest struct {
 
 func (x *CreatePublishTokenRequest) Reset() {
 	*x = CreatePublishTokenRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[12]
+	mi := &file_live_v1_live_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +973,7 @@ func (x *CreatePublishTokenRequest) String() string {
 func (*CreatePublishTokenRequest) ProtoMessage() {}
 
 func (x *CreatePublishTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[12]
+	mi := &file_live_v1_live_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +986,7 @@ func (x *CreatePublishTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePublishTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreatePublishTokenRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{12}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreatePublishTokenRequest) GetRequesterId() int64 {
@@ -852,7 +1010,7 @@ type CreatePublishTokenResponse struct {
 
 func (x *CreatePublishTokenResponse) Reset() {
 	*x = CreatePublishTokenResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[13]
+	mi := &file_live_v1_live_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +1022,7 @@ func (x *CreatePublishTokenResponse) String() string {
 func (*CreatePublishTokenResponse) ProtoMessage() {}
 
 func (x *CreatePublishTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[13]
+	mi := &file_live_v1_live_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +1035,7 @@ func (x *CreatePublishTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePublishTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreatePublishTokenResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{13}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreatePublishTokenResponse) GetWhipUrl() string {
@@ -917,7 +1075,7 @@ type ChatMessage struct {
 
 func (x *ChatMessage) Reset() {
 	*x = ChatMessage{}
-	mi := &file_live_v1_live_proto_msgTypes[14]
+	mi := &file_live_v1_live_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -929,7 +1087,7 @@ func (x *ChatMessage) String() string {
 func (*ChatMessage) ProtoMessage() {}
 
 func (x *ChatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[14]
+	mi := &file_live_v1_live_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -942,7 +1100,7 @@ func (x *ChatMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
 func (*ChatMessage) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{14}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ChatMessage) GetId() int64 {
@@ -993,14 +1151,18 @@ type SendChatMessageRequest struct {
 	StreamId    int64                  `protobuf:"varint,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
 	Body        string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
 	// Opsional: tidak dikirim = putih (0xFFFFFF).
-	Color         *uint32 `protobuf:"varint,4,opt,name=color,proto3,oneof" json:"color,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Color *uint32 `protobuf:"varint,4,opt,name=color,proto3,oneof" json:"color,omitempty"`
+	// true jika requester mengikuti kanal pemilik siaran. Diisi gateway dari
+	// UserService (data langganan ada di schema AUTH_SVC). Dipakai untuk
+	// "Chat hanya untuk pengikut" (langkah 27).
+	RequesterFollows bool `protobuf:"varint,5,opt,name=requester_follows,json=requesterFollows,proto3" json:"requester_follows,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *SendChatMessageRequest) Reset() {
 	*x = SendChatMessageRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[15]
+	mi := &file_live_v1_live_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1012,7 +1174,7 @@ func (x *SendChatMessageRequest) String() string {
 func (*SendChatMessageRequest) ProtoMessage() {}
 
 func (x *SendChatMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[15]
+	mi := &file_live_v1_live_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1025,7 +1187,7 @@ func (x *SendChatMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendChatMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendChatMessageRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{15}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SendChatMessageRequest) GetRequesterId() int64 {
@@ -1056,6 +1218,13 @@ func (x *SendChatMessageRequest) GetColor() uint32 {
 	return 0
 }
 
+func (x *SendChatMessageRequest) GetRequesterFollows() bool {
+	if x != nil {
+		return x.RequesterFollows
+	}
+	return false
+}
+
 type SendChatMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       *ChatMessage           `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
@@ -1065,7 +1234,7 @@ type SendChatMessageResponse struct {
 
 func (x *SendChatMessageResponse) Reset() {
 	*x = SendChatMessageResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[16]
+	mi := &file_live_v1_live_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1077,7 +1246,7 @@ func (x *SendChatMessageResponse) String() string {
 func (*SendChatMessageResponse) ProtoMessage() {}
 
 func (x *SendChatMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[16]
+	mi := &file_live_v1_live_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1090,7 +1259,7 @@ func (x *SendChatMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendChatMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendChatMessageResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{16}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SendChatMessageResponse) GetMessage() *ChatMessage {
@@ -1111,7 +1280,7 @@ type ListChatMessagesRequest struct {
 
 func (x *ListChatMessagesRequest) Reset() {
 	*x = ListChatMessagesRequest{}
-	mi := &file_live_v1_live_proto_msgTypes[17]
+	mi := &file_live_v1_live_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1123,7 +1292,7 @@ func (x *ListChatMessagesRequest) String() string {
 func (*ListChatMessagesRequest) ProtoMessage() {}
 
 func (x *ListChatMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[17]
+	mi := &file_live_v1_live_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1136,7 +1305,7 @@ func (x *ListChatMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChatMessagesRequest.ProtoReflect.Descriptor instead.
 func (*ListChatMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{17}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListChatMessagesRequest) GetStreamId() int64 {
@@ -1162,7 +1331,7 @@ type ListChatMessagesResponse struct {
 
 func (x *ListChatMessagesResponse) Reset() {
 	*x = ListChatMessagesResponse{}
-	mi := &file_live_v1_live_proto_msgTypes[18]
+	mi := &file_live_v1_live_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1174,7 +1343,7 @@ func (x *ListChatMessagesResponse) String() string {
 func (*ListChatMessagesResponse) ProtoMessage() {}
 
 func (x *ListChatMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_live_v1_live_proto_msgTypes[18]
+	mi := &file_live_v1_live_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1356,7 @@ func (x *ListChatMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChatMessagesResponse.ProtoReflect.Descriptor instead.
 func (*ListChatMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_live_v1_live_proto_rawDescGZIP(), []int{18}
+	return file_live_v1_live_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListChatMessagesResponse) GetMessages() []*ChatMessage {
@@ -1201,7 +1370,7 @@ var File_live_v1_live_proto protoreflect.FileDescriptor
 
 const file_live_v1_live_proto_rawDesc = "" +
 	"\n" +
-	"\x12live/v1/live.proto\x12\alive.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf1\x02\n" +
+	"\x12live/v1/live.proto\x12\alive.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x03\n" +
 	"\n" +
 	"LiveStream\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
@@ -1215,7 +1384,9 @@ const file_live_v1_live_proto_rawDesc = "" +
 	"\fplayback_url\x18\b \x01(\tR\vplaybackUrl\x12!\n" +
 	"\fviewer_count\x18\t \x01(\x03R\vviewerCount\x12!\n" +
 	"\fpeak_viewers\x18\n" +
-	" \x01(\x03R\vpeakViewers\"\x9d\x02\n" +
+	" \x01(\x03R\vpeakViewers\x12\x1b\n" +
+	"\tslow_mode\x18\v \x01(\bR\bslowMode\x12%\n" +
+	"\x0efollowers_only\x18\f \x01(\bR\rfollowersOnly\"\xc3\x03\n" +
 	"\vLiveChannel\x12\x19\n" +
 	"\bowner_id\x18\x01 \x01(\x03R\aownerId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1a\n" +
@@ -1224,15 +1395,33 @@ const file_live_v1_live_proto_rawDesc = "" +
 	"ingest_url\x18\x04 \x01(\tR\tingestUrl\x12$\n" +
 	"\x0ehas_stream_key\x18\x05 \x01(\bR\fhasStreamKey\x12M\n" +
 	"\x15stream_key_created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x12streamKeyCreatedAt\x12-\n" +
-	"\acurrent\x18\a \x01(\v2\x13.live.v1.LiveStreamR\acurrent\"8\n" +
+	"\acurrent\x18\a \x01(\v2\x13.live.v1.LiveStreamR\acurrent\x12%\n" +
+	"\x0erecord_enabled\x18\b \x01(\bR\rrecordEnabled\x12\x1b\n" +
+	"\tslow_mode\x18\t \x01(\bR\bslowMode\x12%\n" +
+	"\x0efollowers_only\x18\n" +
+	" \x01(\bR\rfollowersOnly\x129\n" +
+	"\x0elast_recording\x18\v \x01(\v2\x12.live.v1.RecordingR\rlastRecording\"\xa8\x01\n" +
+	"\tRecording\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\x03R\bstreamId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12\x19\n" +
+	"\bvideo_id\x18\x03 \x01(\x03R\avideoId\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x125\n" +
+	"\bended_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\"8\n" +
 	"\x13GetMyChannelRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\"F\n" +
 	"\x14GetMyChannelResponse\x12.\n" +
-	"\achannel\x18\x01 \x01(\v2\x14.live.v1.LiveChannelR\achannel\"m\n" +
+	"\achannel\x18\x01 \x01(\v2\x14.live.v1.LiveChannelR\achannel\"\x9b\x02\n" +
 	"\x16UpdateMyChannelRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1a\n" +
-	"\bcategory\x18\x03 \x01(\tR\bcategory\"I\n" +
+	"\bcategory\x18\x03 \x01(\tR\bcategory\x12*\n" +
+	"\x0erecord_enabled\x18\x04 \x01(\bH\x00R\rrecordEnabled\x88\x01\x01\x12 \n" +
+	"\tslow_mode\x18\x05 \x01(\bH\x01R\bslowMode\x88\x01\x01\x12*\n" +
+	"\x0efollowers_only\x18\x06 \x01(\bH\x02R\rfollowersOnly\x88\x01\x01B\x11\n" +
+	"\x0f_record_enabledB\f\n" +
+	"\n" +
+	"_slow_modeB\x11\n" +
+	"\x0f_followers_only\"I\n" +
 	"\x17UpdateMyChannelResponse\x12.\n" +
 	"\achannel\x18\x01 \x01(\v2\x14.live.v1.LiveChannelR\achannel\":\n" +
 	"\x15ResetStreamKeyRequest\x12!\n" +
@@ -1266,12 +1455,13 @@ const file_live_v1_live_proto_rawDesc = "" +
 	"\x04body\x18\x04 \x01(\tR\x04body\x12\x14\n" +
 	"\x05color\x18\x05 \x01(\rR\x05color\x129\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x91\x01\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xbe\x01\n" +
 	"\x16SendChatMessageRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\x03R\bstreamId\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x19\n" +
-	"\x05color\x18\x04 \x01(\rH\x00R\x05color\x88\x01\x01B\b\n" +
+	"\x05color\x18\x04 \x01(\rH\x00R\x05color\x88\x01\x01\x12+\n" +
+	"\x11requester_follows\x18\x05 \x01(\bR\x10requesterFollowsB\b\n" +
 	"\x06_color\"I\n" +
 	"\x17SendChatMessageResponse\x12.\n" +
 	"\amessage\x18\x01 \x01(\v2\x14.live.v1.ChatMessageR\amessage\"L\n" +
@@ -1309,66 +1499,69 @@ func file_live_v1_live_proto_rawDescGZIP() []byte {
 }
 
 var file_live_v1_live_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_live_v1_live_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_live_v1_live_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_live_v1_live_proto_goTypes = []any{
 	(LiveStatus)(0),                    // 0: live.v1.LiveStatus
 	(*LiveStream)(nil),                 // 1: live.v1.LiveStream
 	(*LiveChannel)(nil),                // 2: live.v1.LiveChannel
-	(*GetMyChannelRequest)(nil),        // 3: live.v1.GetMyChannelRequest
-	(*GetMyChannelResponse)(nil),       // 4: live.v1.GetMyChannelResponse
-	(*UpdateMyChannelRequest)(nil),     // 5: live.v1.UpdateMyChannelRequest
-	(*UpdateMyChannelResponse)(nil),    // 6: live.v1.UpdateMyChannelResponse
-	(*ResetStreamKeyRequest)(nil),      // 7: live.v1.ResetStreamKeyRequest
-	(*ResetStreamKeyResponse)(nil),     // 8: live.v1.ResetStreamKeyResponse
-	(*ListLiveStreamsRequest)(nil),     // 9: live.v1.ListLiveStreamsRequest
-	(*ListLiveStreamsResponse)(nil),    // 10: live.v1.ListLiveStreamsResponse
-	(*GetLiveStreamRequest)(nil),       // 11: live.v1.GetLiveStreamRequest
-	(*GetLiveStreamResponse)(nil),      // 12: live.v1.GetLiveStreamResponse
-	(*CreatePublishTokenRequest)(nil),  // 13: live.v1.CreatePublishTokenRequest
-	(*CreatePublishTokenResponse)(nil), // 14: live.v1.CreatePublishTokenResponse
-	(*ChatMessage)(nil),                // 15: live.v1.ChatMessage
-	(*SendChatMessageRequest)(nil),     // 16: live.v1.SendChatMessageRequest
-	(*SendChatMessageResponse)(nil),    // 17: live.v1.SendChatMessageResponse
-	(*ListChatMessagesRequest)(nil),    // 18: live.v1.ListChatMessagesRequest
-	(*ListChatMessagesResponse)(nil),   // 19: live.v1.ListChatMessagesResponse
-	(*timestamppb.Timestamp)(nil),      // 20: google.protobuf.Timestamp
+	(*Recording)(nil),                  // 3: live.v1.Recording
+	(*GetMyChannelRequest)(nil),        // 4: live.v1.GetMyChannelRequest
+	(*GetMyChannelResponse)(nil),       // 5: live.v1.GetMyChannelResponse
+	(*UpdateMyChannelRequest)(nil),     // 6: live.v1.UpdateMyChannelRequest
+	(*UpdateMyChannelResponse)(nil),    // 7: live.v1.UpdateMyChannelResponse
+	(*ResetStreamKeyRequest)(nil),      // 8: live.v1.ResetStreamKeyRequest
+	(*ResetStreamKeyResponse)(nil),     // 9: live.v1.ResetStreamKeyResponse
+	(*ListLiveStreamsRequest)(nil),     // 10: live.v1.ListLiveStreamsRequest
+	(*ListLiveStreamsResponse)(nil),    // 11: live.v1.ListLiveStreamsResponse
+	(*GetLiveStreamRequest)(nil),       // 12: live.v1.GetLiveStreamRequest
+	(*GetLiveStreamResponse)(nil),      // 13: live.v1.GetLiveStreamResponse
+	(*CreatePublishTokenRequest)(nil),  // 14: live.v1.CreatePublishTokenRequest
+	(*CreatePublishTokenResponse)(nil), // 15: live.v1.CreatePublishTokenResponse
+	(*ChatMessage)(nil),                // 16: live.v1.ChatMessage
+	(*SendChatMessageRequest)(nil),     // 17: live.v1.SendChatMessageRequest
+	(*SendChatMessageResponse)(nil),    // 18: live.v1.SendChatMessageResponse
+	(*ListChatMessagesRequest)(nil),    // 19: live.v1.ListChatMessagesRequest
+	(*ListChatMessagesResponse)(nil),   // 20: live.v1.ListChatMessagesResponse
+	(*timestamppb.Timestamp)(nil),      // 21: google.protobuf.Timestamp
 }
 var file_live_v1_live_proto_depIdxs = []int32{
 	0,  // 0: live.v1.LiveStream.status:type_name -> live.v1.LiveStatus
-	20, // 1: live.v1.LiveStream.started_at:type_name -> google.protobuf.Timestamp
-	20, // 2: live.v1.LiveStream.ended_at:type_name -> google.protobuf.Timestamp
-	20, // 3: live.v1.LiveChannel.stream_key_created_at:type_name -> google.protobuf.Timestamp
+	21, // 1: live.v1.LiveStream.started_at:type_name -> google.protobuf.Timestamp
+	21, // 2: live.v1.LiveStream.ended_at:type_name -> google.protobuf.Timestamp
+	21, // 3: live.v1.LiveChannel.stream_key_created_at:type_name -> google.protobuf.Timestamp
 	1,  // 4: live.v1.LiveChannel.current:type_name -> live.v1.LiveStream
-	2,  // 5: live.v1.GetMyChannelResponse.channel:type_name -> live.v1.LiveChannel
-	2,  // 6: live.v1.UpdateMyChannelResponse.channel:type_name -> live.v1.LiveChannel
-	2,  // 7: live.v1.ResetStreamKeyResponse.channel:type_name -> live.v1.LiveChannel
-	1,  // 8: live.v1.ListLiveStreamsResponse.streams:type_name -> live.v1.LiveStream
-	1,  // 9: live.v1.GetLiveStreamResponse.stream:type_name -> live.v1.LiveStream
-	20, // 10: live.v1.CreatePublishTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
-	20, // 11: live.v1.ChatMessage.created_at:type_name -> google.protobuf.Timestamp
-	15, // 12: live.v1.SendChatMessageResponse.message:type_name -> live.v1.ChatMessage
-	15, // 13: live.v1.ListChatMessagesResponse.messages:type_name -> live.v1.ChatMessage
-	3,  // 14: live.v1.LiveService.GetMyChannel:input_type -> live.v1.GetMyChannelRequest
-	5,  // 15: live.v1.LiveService.UpdateMyChannel:input_type -> live.v1.UpdateMyChannelRequest
-	7,  // 16: live.v1.LiveService.ResetStreamKey:input_type -> live.v1.ResetStreamKeyRequest
-	9,  // 17: live.v1.LiveService.ListLiveStreams:input_type -> live.v1.ListLiveStreamsRequest
-	11, // 18: live.v1.LiveService.GetLiveStream:input_type -> live.v1.GetLiveStreamRequest
-	13, // 19: live.v1.LiveService.CreatePublishToken:input_type -> live.v1.CreatePublishTokenRequest
-	16, // 20: live.v1.LiveService.SendChatMessage:input_type -> live.v1.SendChatMessageRequest
-	18, // 21: live.v1.LiveService.ListChatMessages:input_type -> live.v1.ListChatMessagesRequest
-	4,  // 22: live.v1.LiveService.GetMyChannel:output_type -> live.v1.GetMyChannelResponse
-	6,  // 23: live.v1.LiveService.UpdateMyChannel:output_type -> live.v1.UpdateMyChannelResponse
-	8,  // 24: live.v1.LiveService.ResetStreamKey:output_type -> live.v1.ResetStreamKeyResponse
-	10, // 25: live.v1.LiveService.ListLiveStreams:output_type -> live.v1.ListLiveStreamsResponse
-	12, // 26: live.v1.LiveService.GetLiveStream:output_type -> live.v1.GetLiveStreamResponse
-	14, // 27: live.v1.LiveService.CreatePublishToken:output_type -> live.v1.CreatePublishTokenResponse
-	17, // 28: live.v1.LiveService.SendChatMessage:output_type -> live.v1.SendChatMessageResponse
-	19, // 29: live.v1.LiveService.ListChatMessages:output_type -> live.v1.ListChatMessagesResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	3,  // 5: live.v1.LiveChannel.last_recording:type_name -> live.v1.Recording
+	21, // 6: live.v1.Recording.ended_at:type_name -> google.protobuf.Timestamp
+	2,  // 7: live.v1.GetMyChannelResponse.channel:type_name -> live.v1.LiveChannel
+	2,  // 8: live.v1.UpdateMyChannelResponse.channel:type_name -> live.v1.LiveChannel
+	2,  // 9: live.v1.ResetStreamKeyResponse.channel:type_name -> live.v1.LiveChannel
+	1,  // 10: live.v1.ListLiveStreamsResponse.streams:type_name -> live.v1.LiveStream
+	1,  // 11: live.v1.GetLiveStreamResponse.stream:type_name -> live.v1.LiveStream
+	21, // 12: live.v1.CreatePublishTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 13: live.v1.ChatMessage.created_at:type_name -> google.protobuf.Timestamp
+	16, // 14: live.v1.SendChatMessageResponse.message:type_name -> live.v1.ChatMessage
+	16, // 15: live.v1.ListChatMessagesResponse.messages:type_name -> live.v1.ChatMessage
+	4,  // 16: live.v1.LiveService.GetMyChannel:input_type -> live.v1.GetMyChannelRequest
+	6,  // 17: live.v1.LiveService.UpdateMyChannel:input_type -> live.v1.UpdateMyChannelRequest
+	8,  // 18: live.v1.LiveService.ResetStreamKey:input_type -> live.v1.ResetStreamKeyRequest
+	10, // 19: live.v1.LiveService.ListLiveStreams:input_type -> live.v1.ListLiveStreamsRequest
+	12, // 20: live.v1.LiveService.GetLiveStream:input_type -> live.v1.GetLiveStreamRequest
+	14, // 21: live.v1.LiveService.CreatePublishToken:input_type -> live.v1.CreatePublishTokenRequest
+	17, // 22: live.v1.LiveService.SendChatMessage:input_type -> live.v1.SendChatMessageRequest
+	19, // 23: live.v1.LiveService.ListChatMessages:input_type -> live.v1.ListChatMessagesRequest
+	5,  // 24: live.v1.LiveService.GetMyChannel:output_type -> live.v1.GetMyChannelResponse
+	7,  // 25: live.v1.LiveService.UpdateMyChannel:output_type -> live.v1.UpdateMyChannelResponse
+	9,  // 26: live.v1.LiveService.ResetStreamKey:output_type -> live.v1.ResetStreamKeyResponse
+	11, // 27: live.v1.LiveService.ListLiveStreams:output_type -> live.v1.ListLiveStreamsResponse
+	13, // 28: live.v1.LiveService.GetLiveStream:output_type -> live.v1.GetLiveStreamResponse
+	15, // 29: live.v1.LiveService.CreatePublishToken:output_type -> live.v1.CreatePublishTokenResponse
+	18, // 30: live.v1.LiveService.SendChatMessage:output_type -> live.v1.SendChatMessageResponse
+	20, // 31: live.v1.LiveService.ListChatMessages:output_type -> live.v1.ListChatMessagesResponse
+	24, // [24:32] is the sub-list for method output_type
+	16, // [16:24] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_live_v1_live_proto_init() }
@@ -1376,14 +1569,15 @@ func file_live_v1_live_proto_init() {
 	if File_live_v1_live_proto != nil {
 		return
 	}
-	file_live_v1_live_proto_msgTypes[15].OneofWrappers = []any{}
+	file_live_v1_live_proto_msgTypes[5].OneofWrappers = []any{}
+	file_live_v1_live_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_live_v1_live_proto_rawDesc), len(file_live_v1_live_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

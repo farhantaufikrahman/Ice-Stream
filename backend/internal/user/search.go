@@ -27,6 +27,9 @@ const (
 	// Halaman memakai offset; offset besar makin berat, jadi dibatasi
 	// seperti pencarian video.
 	searchMaxPages = 10
+	// searchCountLimit: angka di tab pencarian berhenti di 1001, yang
+	// ditampilkan "1.000+" (sama dengan pencarian video).
+	searchCountLimit = 1001
 )
 
 // parseSearchTerms memecah kata kunci menjadi kata unik huruf kecil.
@@ -97,6 +100,21 @@ func (s *Service) SearchUsers(ctx context.Context, query string, pageSize int, p
 		found[i].Email = ""
 	}
 	return found, next, nil
+}
+
+// CountSearchUsers menghitung semua hasil SearchUsers (langkah 27).
+// firstPage adalah jumlah kreator di halaman pertama; hasMore false
+// berarti halaman pertama sudah memuat semua hasil, jadi Oracle tidak
+// perlu ditanya lagi.
+func (s *Service) CountSearchUsers(ctx context.Context, query string, firstPage int, hasMore bool) (int64, error) {
+	if !hasMore {
+		return int64(firstPage), nil
+	}
+	terms, err := parseSearchTerms(query)
+	if err != nil {
+		return 0, err
+	}
+	return s.repo.CountSearchUsers(ctx, terms, searchCountLimit)
 }
 
 // encodeSearchPage: base64 dari "s<nomor halaman>", sama dengan token

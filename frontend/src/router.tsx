@@ -28,6 +28,7 @@ import { TrendingPage } from './pages/TrendingPage'
 import { UploadPage } from './pages/UploadPage'
 import { WatchLaterPage } from './pages/WatchLaterPage'
 import { WatchPage } from './pages/WatchPage'
+import { InfoPage } from './pages/InfoPage'
 
 // Daftar halaman. Mirip app.get('/watch/:id', ...) di Express, tetapi
 // dijalankan di browser: berpindah halaman tidak memuat ulang seluruh situs.
@@ -50,6 +51,11 @@ export const router = createBrowserRouter([
           { path: '/live/:id', element: <LiveWatchRoute /> },
           // Boleh tanpa login: playlist PUBLIC bisa dibuka siapa saja.
           { path: '/playlist/:id', element: <PlaylistPage /> },
+          // Halaman dari tautan footer (langkah 27).
+          { path: '/tentang', element: <InfoPage topic="tentang" /> },
+          { path: '/pedoman-komunitas', element: <InfoPage topic="pedoman" /> },
+          { path: '/privasi', element: <InfoPage topic="privasi" /> },
+          { path: '/bantuan', element: <InfoPage topic="bantuan" /> },
           {
             // Wajib login, tapi tetap memakai header dan footer biasa.
             element: <RequireAuth />,

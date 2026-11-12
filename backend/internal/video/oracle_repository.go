@@ -510,6 +510,40 @@ type searchHit struct {
 // Query kedua mengambil data lengkap video-video itu dengan model GORM
 // biasa (videoRow), lalu disusun ulang mengikuti urutan query pertama.
 func (r *OracleRepository) Search(ctx context.Context, terms []string, opts SearchOptions, offset, limit int) ([]Video, error) {
+	base, args := searchHitsSQL(terms, opts)
+	sql := base + "ORDER BY " + searchOrder(opts.Sort) + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+	args = append(args, offset, limit)
+
+	var hits []searchHit
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&hits).Error; err != nil {
+		return nil, fmt.Errorf("search videos: %w", err)
+	}
+	ids := make([]int64, len(hits))
+	for i, h := range hits {
+		ids[i] = h.VideoID
+	}
+	return r.findInOrder(ctx, ids)
+}
+
+// CountSearch menghitung hasil pencarian yang sama dengan Search (langkah
+// 27, angka di tab pencarian), tanpa ORDER BY:
+//
+//	SELECT COUNT(*) FROM (<query Search tanpa ORDER BY> FETCH FIRST 1001 ROWS ONLY)
+//
+// FETCH FIRST membuat Oracle berhenti setelah 1001 baris, jadi kata yang
+// sangat umum tidak membuat Oracle menghitung semua video.
+func (r *OracleRepository) CountSearch(ctx context.Context, terms []string, opts SearchOptions, limit int) (int64, error) {
+	base, args := searchHitsSQL(terms, opts)
+	var n int64
+	err := r.db.WithContext(ctx).Raw("SELECT COUNT(*) FROM ("+base+"FETCH FIRST ? ROWS ONLY)", append(args, limit)...).Scan(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count search videos: %w", err)
+	}
+	return n, nil
+}
+
+// searchHitsSQL menyusun bagian query Search sebelum ORDER BY.
+func searchHitsSQL(terms []string, opts SearchOptions) (string, []any) {
 	parts := make([]string, len(terms))
 	args := make([]any, 0, len(terms)+6)
 	for i, t := range terms {
@@ -532,20 +566,8 @@ func (r *OracleRepository) Search(ctx context.Context, terms []string, opts Sear
 	sql := `SELECT s.video_id AS "video_id", s.score AS "score" FROM (` +
 		"SELECT video_id, SUM(w) AS score FROM (" + strings.Join(parts, " UNION ALL ") + ") " +
 		"GROUP BY video_id HAVING COUNT(*) = ?" +
-		") s JOIN videos v ON v.id = s.video_id " + where +
-		"ORDER BY " + searchOrder(opts.Sort) + " " +
-		"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-	args = append(args, offset, limit)
-
-	var hits []searchHit
-	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&hits).Error; err != nil {
-		return nil, fmt.Errorf("search videos: %w", err)
-	}
-	ids := make([]int64, len(hits))
-	for i, h := range hits {
-		ids[i] = h.VideoID
-	}
-	return r.findInOrder(ctx, ids)
+		") s JOIN videos v ON v.id = s.video_id " + where
+	return sql, args
 }
 
 // searchOrder memilih ORDER BY. Teksnya dari daftar tetap di kode, bukan
@@ -622,6 +644,71 @@ func (r *OracleRepository) ListPopularByOwner(ctx context.Context, ownerID int64
 		videos[i] = row.toVideo()
 	}
 	return videos, nil
+}
+
+// ListPopularPublic:
+//
+//	SELECT * FROM videos
+//	 WHERE status = 'READY' AND draft = 0 AND visibility = 'PUBLIC'
+//	   [AND category = ?] AND deleted_at IS NULL
+//	 ORDER BY view_count DESC, id DESC FETCH FIRST 200 ROWS ONLY
+//
+// memakai index videos_popular_ix (migrasi V21).
+func (r *OracleRepository) ListPopularPublic(ctx context.Context, category string, limit int) ([]Video, error) {
+	q := r.db.WithContext(ctx).Where(listedSQL)
+	if category != "" {
+		q = q.Where("category = ?", category)
+	}
+	var rows []videoRow
+	if err := q.Order("view_count DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select popular public videos: %w", err)
+	}
+	videos := make([]Video, len(rows))
+	for i, row := range rows {
+		videos[i] = row.toVideo()
+	}
+	return videos, nil
+}
+
+// watchSignalRow adalah satu baris hasil RecentWatchSignals.
+type watchSignalRow struct {
+	VideoID    int64   `gorm:"column:video_id"`
+	Category   *string `gorm:"column:category"`
+	PositionMs int64   `gorm:"column:position_ms"`
+	DurationMs *int64  `gorm:"column:duration_ms"`
+}
+
+// RecentWatchSignals:
+//
+//	SELECT h.video_id, v.category, h.position_ms, v.duration_ms
+//	  FROM watch_history h JOIN videos v ON v.id = h.video_id
+//	 WHERE h.user_id = ? AND v.deleted_at IS NULL
+//	 ORDER BY SYS_EXTRACT_UTC(h.watched_at) DESC, h.video_id DESC
+//	 FETCH FIRST 100 ROWS ONLY
+//
+// memakai index watch_history_user_time_ix (migrasi V9), sama dengan
+// halaman Riwayat.
+func (r *OracleRepository) RecentWatchSignals(ctx context.Context, userID int64, limit int) ([]WatchSignal, error) {
+	sql := `SELECT h.video_id AS "video_id", v.category AS "category", h.position_ms AS "position_ms", ` +
+		`v.duration_ms AS "duration_ms" ` +
+		"FROM watch_history h JOIN videos v ON v.id = h.video_id " +
+		"WHERE h.user_id = ? AND v.deleted_at IS NULL " +
+		"ORDER BY SYS_EXTRACT_UTC(h.watched_at) DESC, h.video_id DESC FETCH FIRST ? ROWS ONLY"
+	var rows []watchSignalRow
+	if err := r.db.WithContext(ctx).Raw(sql, userID, limit).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select watch signals: %w", err)
+	}
+	out := make([]WatchSignal, len(rows))
+	for i, row := range rows {
+		out[i] = WatchSignal{VideoID: row.VideoID, PositionMs: row.PositionMs}
+		if row.Category != nil {
+			out[i].Category = *row.Category
+		}
+		if row.DurationMs != nil {
+			out[i].DurationMs = *row.DurationMs
+		}
+	}
+	return out, nil
 }
 
 // trendingRow adalah satu baris hasil query Trending. Aliasnya memakai

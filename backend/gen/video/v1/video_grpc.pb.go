@@ -58,6 +58,9 @@ const (
 	VideoService_ReportVideo_FullMethodName              = "/video.v1.VideoService/ReportVideo"
 	VideoService_ChooseThumbnailFrame_FullMethodName     = "/video.v1.VideoService/ChooseThumbnailFrame"
 	VideoService_UploadThumbnail_FullMethodName          = "/video.v1.VideoService/UploadThumbnail"
+	VideoService_ListRecommendedVideos_FullMethodName    = "/video.v1.VideoService/ListRecommendedVideos"
+	VideoService_GetChannelSummary_FullMethodName        = "/video.v1.VideoService/GetChannelSummary"
+	VideoService_SetFeaturedVideo_FullMethodName         = "/video.v1.VideoService/SetFeaturedVideo"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -200,6 +203,20 @@ type VideoServiceClient interface {
 	// 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
 	// selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
 	UploadThumbnail(ctx context.Context, in *UploadThumbnailRequest, opts ...grpc.CallOption) (*UploadThumbnailResponse, error)
+	// ListRecommendedVideos menyusun "Rekomendasi untukmu" di Beranda
+	// (langkah 27): video publik dengan skor dari tayangan, umur video,
+	// kategori yang sering ditonton viewer, kanal yang diikuti viewer, dan
+	// sedikit acak dari seed. Video milik viewer dan video yang sudah
+	// ditonton sampai hampir habis tidak ikut. Maksimal 2 video per kanal.
+	ListRecommendedVideos(ctx context.Context, in *ListRecommendedVideosRequest, opts ...grpc.CallOption) (*ListRecommendedVideosResponse, error)
+	// GetChannelSummary mengambil angka di kepala halaman kanal (jumlah
+	// video publik, total tayangan, total suka) dan Video unggulan (langkah
+	// 27). Kanal tanpa video menghasilkan angka 0, bukan NOT_FOUND.
+	GetChannelSummary(ctx context.Context, in *GetChannelSummaryRequest, opts ...grpc.CallOption) (*GetChannelSummaryResponse, error)
+	// SetFeaturedVideo memilih Video unggulan kanal requester. video_id 0 =
+	// tidak ada video unggulan. NOT_FOUND jika video tidak ada atau bukan
+	// milik requester; INVALID_ARGUMENT jika video bukan video publik.
+	SetFeaturedVideo(ctx context.Context, in *SetFeaturedVideoRequest, opts ...grpc.CallOption) (*SetFeaturedVideoResponse, error)
 }
 
 type videoServiceClient struct {
@@ -560,6 +577,36 @@ func (c *videoServiceClient) UploadThumbnail(ctx context.Context, in *UploadThum
 	return out, nil
 }
 
+func (c *videoServiceClient) ListRecommendedVideos(ctx context.Context, in *ListRecommendedVideosRequest, opts ...grpc.CallOption) (*ListRecommendedVideosResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRecommendedVideosResponse)
+	err := c.cc.Invoke(ctx, VideoService_ListRecommendedVideos_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) GetChannelSummary(ctx context.Context, in *GetChannelSummaryRequest, opts ...grpc.CallOption) (*GetChannelSummaryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChannelSummaryResponse)
+	err := c.cc.Invoke(ctx, VideoService_GetChannelSummary_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) SetFeaturedVideo(ctx context.Context, in *SetFeaturedVideoRequest, opts ...grpc.CallOption) (*SetFeaturedVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetFeaturedVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_SetFeaturedVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -700,6 +747,20 @@ type VideoServiceServer interface {
 	// 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
 	// selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
 	UploadThumbnail(context.Context, *UploadThumbnailRequest) (*UploadThumbnailResponse, error)
+	// ListRecommendedVideos menyusun "Rekomendasi untukmu" di Beranda
+	// (langkah 27): video publik dengan skor dari tayangan, umur video,
+	// kategori yang sering ditonton viewer, kanal yang diikuti viewer, dan
+	// sedikit acak dari seed. Video milik viewer dan video yang sudah
+	// ditonton sampai hampir habis tidak ikut. Maksimal 2 video per kanal.
+	ListRecommendedVideos(context.Context, *ListRecommendedVideosRequest) (*ListRecommendedVideosResponse, error)
+	// GetChannelSummary mengambil angka di kepala halaman kanal (jumlah
+	// video publik, total tayangan, total suka) dan Video unggulan (langkah
+	// 27). Kanal tanpa video menghasilkan angka 0, bukan NOT_FOUND.
+	GetChannelSummary(context.Context, *GetChannelSummaryRequest) (*GetChannelSummaryResponse, error)
+	// SetFeaturedVideo memilih Video unggulan kanal requester. video_id 0 =
+	// tidak ada video unggulan. NOT_FOUND jika video tidak ada atau bukan
+	// milik requester; INVALID_ARGUMENT jika video bukan video publik.
+	SetFeaturedVideo(context.Context, *SetFeaturedVideoRequest) (*SetFeaturedVideoResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -814,6 +875,15 @@ func (UnimplementedVideoServiceServer) ChooseThumbnailFrame(context.Context, *Ch
 }
 func (UnimplementedVideoServiceServer) UploadThumbnail(context.Context, *UploadThumbnailRequest) (*UploadThumbnailResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UploadThumbnail not implemented")
+}
+func (UnimplementedVideoServiceServer) ListRecommendedVideos(context.Context, *ListRecommendedVideosRequest) (*ListRecommendedVideosResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRecommendedVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) GetChannelSummary(context.Context, *GetChannelSummaryRequest) (*GetChannelSummaryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChannelSummary not implemented")
+}
+func (UnimplementedVideoServiceServer) SetFeaturedVideo(context.Context, *SetFeaturedVideoRequest) (*SetFeaturedVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetFeaturedVideo not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -1466,6 +1536,60 @@ func _VideoService_UploadThumbnail_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_ListRecommendedVideos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRecommendedVideosRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ListRecommendedVideos(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ListRecommendedVideos_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ListRecommendedVideos(ctx, req.(*ListRecommendedVideosRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_GetChannelSummary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChannelSummaryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).GetChannelSummary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_GetChannelSummary_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).GetChannelSummary(ctx, req.(*GetChannelSummaryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_SetFeaturedVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetFeaturedVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).SetFeaturedVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_SetFeaturedVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).SetFeaturedVideo(ctx, req.(*SetFeaturedVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1612,6 +1736,18 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UploadThumbnail",
 			Handler:    _VideoService_UploadThumbnail_Handler,
+		},
+		{
+			MethodName: "ListRecommendedVideos",
+			Handler:    _VideoService_ListRecommendedVideos_Handler,
+		},
+		{
+			MethodName: "GetChannelSummary",
+			Handler:    _VideoService_GetChannelSummary_Handler,
+		},
+		{
+			MethodName: "SetFeaturedVideo",
+			Handler:    _VideoService_SetFeaturedVideo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

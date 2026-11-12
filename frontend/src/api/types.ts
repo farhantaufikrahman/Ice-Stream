@@ -190,6 +190,34 @@ export interface ChannelDetail {
   user: Profile
   /** Hanya ada jika penonton sudah login. */
   viewer_subscribed?: boolean
+  /**
+   * Angka di kepala halaman kanal (langkah 27): hanya video publik yang
+   * sudah terbit. Tidak ada jika VideoService sedang gagal.
+   */
+  stats?: ChannelCounts
+  /** "Video unggulan" pilihan kreator; null jika belum dipilih. Tidak ada jika VideoService gagal. */
+  featured_video?: Video | null
+}
+
+export interface ChannelCounts {
+  video_count: number
+  total_views: number
+  total_likes: number
+}
+
+/** Jumlah hasil satu tab pencarian (GET /search/counts, langkah 27). */
+export interface TabCount {
+  count: number
+  /** true: hasilnya lebih banyak dari count ("1.000+"). */
+  capped: boolean
+}
+
+/** null = tab itu gagal dihitung (angkanya tidak ditampilkan). */
+export interface SearchCounts {
+  video: TabCount | null
+  channel: TabCount | null
+  playlist: TabCount | null
+  live: TabCount | null
 }
 
 /** Jawaban PUT dan DELETE /users/:username/subscription. */
@@ -401,6 +429,28 @@ export interface LiveStream {
   playback_url?: string
   viewer_count: number
   peak_viewers: number
+  /** Pilihan chat kanal saat ini. Hanya ada di GET /live/:id (langkah 27). */
+  chat?: LiveChatOptions
+}
+
+export interface LiveChatOptions {
+  /** "Mode lambat chat (3 detik per pesan)". */
+  slow_mode: boolean
+  /** "Chat hanya untuk pengikut". */
+  followers_only: boolean
+}
+
+/** Status rekaman siaran (langkah 27). */
+export type RecordingStatus = 'PENDING' | 'IMPORTING' | 'DONE' | 'FAILED'
+
+export interface LiveRecording {
+  stream_id: string
+  status: RecordingStatus
+  /** Video draf hasil rekaman, hanya jika DONE. */
+  video_id?: string
+  /** Alasan, hanya jika FAILED. */
+  error?: string
+  ended_at?: string
 }
 
 /** Pengaturan siaran milik sendiri (GET /me/live). */
@@ -413,6 +463,21 @@ export interface LiveChannel {
   stream_key_created_at?: string
   /** Siaran yang sedang berjalan, null jika tidak sedang live. */
   current: LiveStream | null
+  /** Pilihan siaran (langkah 27, desain GoLive "Detail siaran"). */
+  record_enabled: boolean
+  slow_mode: boolean
+  followers_only: boolean
+  /** Rekaman siaran terakhir, null jika belum pernah ada. */
+  last_recording: LiveRecording | null
+}
+
+/** Isi PATCH /me/live. Pilihan yang tidak dikirim tidak diubah. */
+export interface LiveChannelChanges {
+  title: string
+  category: string
+  record_enabled?: boolean
+  slow_mode?: boolean
+  followers_only?: boolean
 }
 
 /** Jawaban POST /me/live/stream-key. stream_key hanya muncul sekali. */

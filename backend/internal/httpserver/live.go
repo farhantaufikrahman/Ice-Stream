@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -52,6 +53,14 @@ type liveStreamResponse struct {
 	PlaybackURL string `json:"playback_url,omitempty"`
 	ViewerCount int64  `json:"viewer_count"`
 	PeakViewers int64  `json:"peak_viewers"`
+	// Chat hanya ada di GET /live/:id (langkah 27): pilihan chat kanal
+	// saat ini, untuk keterangan di panel chat.
+	Chat *liveChatOptionsResponse `json:"chat,omitempty"`
+}
+
+type liveChatOptionsResponse struct {
+	SlowMode      bool `json:"slow_mode"`
+	FollowersOnly bool `json:"followers_only"`
 }
 
 type liveChannelResponse struct {
@@ -62,6 +71,23 @@ type liveChannelResponse struct {
 	HasStreamKey       bool                `json:"has_stream_key"`
 	StreamKeyCreatedAt *time.Time          `json:"stream_key_created_at,omitempty"`
 	Current            *liveStreamResponse `json:"current"`
+	// Pilihan siaran (langkah 27, desain GoLive "Detail siaran").
+	RecordEnabled bool `json:"record_enabled"`
+	SlowMode      bool `json:"slow_mode"`
+	FollowersOnly bool `json:"followers_only"`
+	// LastRecording: rekaman siaran terakhir; null jika belum pernah ada.
+	LastRecording *recordingResponse `json:"last_recording"`
+}
+
+// recordingResponse adalah status rekaman satu siaran.
+type recordingResponse struct {
+	StreamID string `json:"stream_id"`
+	// Status: PENDING, IMPORTING, DONE, atau FAILED.
+	Status string `json:"status"`
+	// VideoID hanya ada jika DONE: video draf hasil rekaman.
+	VideoID string     `json:"video_id,omitempty"`
+	Error   string     `json:"error,omitempty"`
+	EndedAt *time.Time `json:"ended_at,omitempty"`
 }
 
 type publishTokenResponse struct {
@@ -92,6 +118,10 @@ type sendChatRequest struct {
 type updateLiveChannelRequest struct {
 	Title    string `json:"title"`
 	Category string `json:"category"`
+	// Pilihan siaran (langkah 27). Tidak dikirim = tidak diubah.
+	RecordEnabled *bool `json:"record_enabled"`
+	SlowMode      *bool `json:"slow_mode"`
+	FollowersOnly *bool `json:"followers_only"`
 }
 
 var liveStatusNames = map[livev1.LiveStatus]string{
@@ -120,10 +150,24 @@ func toLiveStreamResponse(s *livev1.LiveStream) liveStreamResponse {
 
 func toLiveChannelResponse(ch *livev1.LiveChannel) liveChannelResponse {
 	out := liveChannelResponse{
-		Title:        ch.GetTitle(),
-		Category:     ch.GetCategory(),
-		IngestURL:    ch.GetIngestUrl(),
-		HasStreamKey: ch.GetHasStreamKey(),
+		Title:         ch.GetTitle(),
+		Category:      ch.GetCategory(),
+		IngestURL:     ch.GetIngestUrl(),
+		HasStreamKey:  ch.GetHasStreamKey(),
+		RecordEnabled: ch.GetRecordEnabled(),
+		SlowMode:      ch.GetSlowMode(),
+		FollowersOnly: ch.GetFollowersOnly(),
+	}
+	if r := ch.GetLastRecording(); r != nil {
+		rec := &recordingResponse{StreamID: strconv.FormatInt(r.GetStreamId(), 10), Status: r.GetStatus(), Error: r.GetError()}
+		if r.GetVideoId() > 0 {
+			rec.VideoID = strconv.FormatInt(r.GetVideoId(), 10)
+		}
+		if r.GetEndedAt() != nil {
+			t := r.GetEndedAt().AsTime()
+			rec.EndedAt = &t
+		}
+		out.LastRecording = rec
 	}
 	if ch.GetStreamKeyCreatedAt() != nil {
 		t := ch.GetStreamKeyCreatedAt().AsTime()
@@ -190,7 +234,9 @@ func (h *liveHandler) get(c *gin.Context) {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"stream": h.withOwners(c.Request.Context(), []*livev1.LiveStream{resp.GetStream()})[0]})
+	out := h.withOwners(c.Request.Context(), []*livev1.LiveStream{resp.GetStream()})[0]
+	out.Chat = &liveChatOptionsResponse{SlowMode: resp.GetStream().GetSlowMode(), FollowersOnly: resp.GetStream().GetFollowersOnly()}
+	c.JSON(http.StatusOK, gin.H{"stream": out})
 }
 
 // myChannel: GET /api/v1/me/live  (wajib login)
@@ -224,7 +270,14 @@ func (h *liveHandler) updateMyChannel(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
-	resp, err := h.client.UpdateMyChannel(ctx, &livev1.UpdateMyChannelRequest{RequesterId: userID, Title: req.Title, Category: req.Category})
+	resp, err := h.client.UpdateMyChannel(ctx, &livev1.UpdateMyChannelRequest{
+		RequesterId:   userID,
+		Title:         req.Title,
+		Category:      req.Category,
+		RecordEnabled: req.RecordEnabled,
+		SlowMode:      req.SlowMode,
+		FollowersOnly: req.FollowersOnly,
+	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return
@@ -333,6 +386,11 @@ func (h *liveHandler) sendChat(c *gin.Context) {
 		}
 		in.Color = &color
 	}
+	// "Chat hanya untuk pengikut" (langkah 27): data langganan ada di
+	// UserService, jadi gateway yang mengisinya. Jika UserService gagal,
+	// requester dianggap belum mengikuti; siaran tanpa pilihan itu tidak
+	// terpengaruh, karena LiveService hanya memeriksanya jika aktif.
+	in.RequesterFollows = h.follows(c.Request.Context(), userID, id)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
@@ -352,6 +410,27 @@ func (h *liveHandler) sendChat(c *gin.Context) {
 //
 //	event: chat
 //	data: {"id":"15","stream_id":"3","user":{...},"body":"halo",...}
+//
+// follows: userID mengikuti pemilik siaran streamID. Dua panggilan kecil
+// (pemilik siaran, lalu daftar kanal yang diikuti); false jika salah satu
+// gagal.
+func (h *liveHandler) follows(ctx context.Context, userID, streamID int64) bool {
+	ctx, cancel := context.WithTimeout(ctx, ownerLookupTimeout)
+	defer cancel()
+	st, err := h.client.GetLiveStream(ctx, &livev1.GetLiveStreamRequest{StreamId: streamID})
+	if err != nil || !st.GetStream().GetFollowersOnly() {
+		// Pilihan tidak aktif (atau siaran tidak ada; SendChatMessage yang
+		// menjawab error-nya): tidak perlu bertanya ke UserService.
+		return false
+	}
+	subs, err := h.users.ListSubscribedChannelIds(ctx, &userv1.ListSubscribedChannelIdsRequest{RequesterId: userID})
+	if err != nil {
+		h.logger.WarnContext(ctx, "gagal memeriksa langganan untuk chat khusus pengikut", slog.Any("error", err))
+		return false
+	}
+	return slices.Contains(subs.GetChannelIds(), st.GetStream().GetOwnerId())
+}
+
 func (h *liveHandler) chatLive(c *gin.Context) {
 	if h.chatHub == nil {
 		abortError(c, http.StatusServiceUnavailable, "UNAVAILABLE", "chat live sedang tidak tersedia")

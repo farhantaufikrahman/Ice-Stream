@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -39,6 +40,9 @@ type ObjectStore interface {
 	Put(ctx context.Context, key, contentType string, data []byte) error
 	// Delete menghapus satu file. File yang tidak ada bukan error.
 	Delete(ctx context.Context, key string) error
+	// PutStream menyimpan isi r sampai habis tanpa menampung semuanya di
+	// memori (rekaman siaran, langkah 27), lalu mengembalikan ukurannya.
+	PutStream(ctx context.Context, key, contentType string, r io.Reader) (int64, error)
 }
 
 // PresignedRequest adalah URL presigned beserta header yang wajib dikirim.
@@ -257,4 +261,82 @@ func (s *S3Store) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("hapus %s: %w", key, err)
 	}
 	return nil
+}
+
+// streamPartSize: ukuran satu bagian multipart upload. S3 mewajibkan
+// minimal 5 MiB untuk semua bagian kecuali yang terakhir, dan maksimal
+// 10.000 bagian, jadi 8 MiB cukup untuk file sampai sekitar 78 GiB.
+const streamPartSize = 8 << 20
+
+// PutStream mengunggah r dengan multipart upload: dibaca 8 MiB demi 8 MiB,
+// setiap potongan dikirim sebagai satu bagian. Memori yang dipakai hanya
+// satu potongan, dan tidak ada file sementara (root filesystem pod video
+// read-only).
+//
+// Ditulis sendiri dengan tiga panggilan API (Create, UploadPart, Complete)
+// daripada memakai paket feature/s3/manager, supaya tidak menambah
+// dependensi. Padanannya: Upload dari @aws-sdk/lib-storage (Node.js),
+// S3TransferManager di AWS SDK for Java v2.
+func (s *S3Store) PutStream(ctx context.Context, key, contentType string, r io.Reader) (int64, error) {
+	created, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("mulai multipart %s: %w", key, err)
+	}
+	uploadID := created.UploadId
+	abort := func(err error) (int64, error) {
+		// Bagian yang sudah terkirim memakan tempat sampai upload
+		// dibatalkan, jadi selalu batalkan, juga saat ctx sudah selesai.
+		_, aerr := s.client.AbortMultipartUpload(context.WithoutCancel(ctx), &s3.AbortMultipartUploadInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: uploadID,
+		})
+		if aerr != nil {
+			return 0, fmt.Errorf("%w (abort juga gagal: %v)", err, aerr)
+		}
+		return 0, err
+	}
+
+	buf := make([]byte, streamPartSize)
+	var parts []types.CompletedPart
+	var total int64
+	for partNumber := int32(1); ; partNumber++ {
+		n, rerr := io.ReadFull(r, buf)
+		if rerr != nil && !errors.Is(rerr, io.EOF) && !errors.Is(rerr, io.ErrUnexpectedEOF) {
+			return abort(fmt.Errorf("baca rekaman: %w", rerr))
+		}
+		// Bagian kosong hanya dikirim jika seluruh file kosong: S3 tidak
+		// mau menyelesaikan multipart tanpa satu bagian pun.
+		if n > 0 || partNumber == 1 {
+			out, err := s.client.UploadPart(ctx, &s3.UploadPartInput{
+				Bucket:        aws.String(s.bucket),
+				Key:           aws.String(key),
+				UploadId:      uploadID,
+				PartNumber:    aws.Int32(partNumber),
+				Body:          bytes.NewReader(buf[:n]),
+				ContentLength: aws.Int64(int64(n)),
+			})
+			if err != nil {
+				return abort(fmt.Errorf("upload bagian %d %s: %w", partNumber, key, err))
+			}
+			parts = append(parts, types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(partNumber)})
+			total += int64(n)
+		}
+		if rerr != nil {
+			// EOF: bagian ini (jika ada) adalah yang terakhir.
+			break
+		}
+	}
+	_, err = s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket:          aws.String(s.bucket),
+		Key:             aws.String(key),
+		UploadId:        uploadID,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+	})
+	if err != nil {
+		return abort(fmt.Errorf("selesaikan multipart %s: %w", key, err))
+	}
+	return total, nil
 }

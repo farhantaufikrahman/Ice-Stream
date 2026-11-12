@@ -69,7 +69,9 @@ type LiveServiceClient interface {
 	// "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
 	// 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
 	// FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
-	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik,
+	// hanya jika mode lambat aktif). PERMISSION_DENIED jika chat khusus
+	// pengikut dan requester bukan pengikut (pemilik siaran selalu boleh).
 	SendChatMessage(ctx context.Context, in *SendChatMessageRequest, opts ...grpc.CallOption) (*SendChatMessageResponse, error)
 	// ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
 	// paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.
@@ -194,7 +196,9 @@ type LiveServiceServer interface {
 	// "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
 	// 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
 	// FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
-	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik,
+	// hanya jika mode lambat aktif). PERMISSION_DENIED jika chat khusus
+	// pengikut dan requester bukan pengikut (pemilik siaran selalu boleh).
 	SendChatMessage(context.Context, *SendChatMessageRequest) (*SendChatMessageResponse, error)
 	// ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
 	// paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.

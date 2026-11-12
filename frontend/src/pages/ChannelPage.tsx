@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { listChannelPlaylists, listChannelVideos } from '../api/endpoints'
-import type { Playlist, Profile, Video } from '../api/types'
+import type { ChannelCounts, Playlist, Profile, Video } from '../api/types'
 import { Avatar } from '../components/Avatar'
 import { SubscribeButton } from '../components/channel/SubscribeButton'
 import { ErrorBox } from '../components/ErrorBox'
@@ -31,11 +31,12 @@ function tabFromParam(value: string | null): Tab {
 /**
  * Halaman kanal /channel/:username (desain Channel.dc.html).
  *
- * Bagian desain yang belum punya data di backend sengaja tidak
- * ditampilkan: jumlah video, total tayangan, total suka, tombol Kirim
- * pesan, tab Live, dan "Video unggulan" (diganti video terbaru).
- * Urutan Terbaru/Terpopuler di tab Video ada sejak langkah 24a
- * (?sort=popular di URL).
+ * Angka video, total tayangan, dan suka serta "Video unggulan" ada sejak
+ * langkah 27 (kreator memilih video unggulan di Studio > Pengaturan; jika
+ * belum memilih, video terbaru yang ditampilkan besar). Bagian desain yang
+ * belum punya data di backend sengaja tidak ditampilkan: tombol Kirim
+ * pesan dan tab Live. Urutan Terbaru/Terpopuler di tab Video ada sejak
+ * langkah 24a (?sort=popular di URL).
  */
 export function ChannelPage() {
   const { username = '' } = useParams()
@@ -80,6 +81,19 @@ export function ChannelPage() {
             <span>
               <strong>{formatCount(user.subscriber_count)}</strong> <span className="muted">pengikut</span>
             </span>
+            {channel.stats && (
+              <>
+                <span>
+                  <strong>{formatCount(channel.stats.video_count)}</strong> <span className="muted">video</span>
+                </span>
+                <span>
+                  <strong>{formatCount(channel.stats.total_views)}</strong> <span className="muted">total tayangan</span>
+                </span>
+                <span>
+                  <strong>{formatCount(channel.stats.total_likes)}</strong> <span className="muted">suka</span>
+                </span>
+              </>
+            )}
             <span className="muted">Bergabung {formatDate(user.created_at)}</span>
           </div>
         </div>
@@ -110,9 +124,17 @@ export function ChannelPage() {
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'video' && <ChannelVideos username={user.username} isOwn={isOwn} sort={sort} onSort={pickSort} />}
+        {tab === 'video' && (
+          <ChannelVideos
+            username={user.username}
+            isOwn={isOwn}
+            sort={sort}
+            onSort={pickSort}
+            featured={channel.featured_video ?? null}
+          />
+        )}
         {tab === 'playlist' && <ChannelPlaylists key={`${user.username}|${isOwn}`} username={user.username} isOwn={isOwn} />}
-        {tab === 'tentang' && <ChannelAbout user={user} />}
+        {tab === 'tentang' && <ChannelAbout user={user} stats={channel.stats} />}
       </div>
     </div>
   )
@@ -123,21 +145,27 @@ interface ChannelVideosProps {
   isOwn: boolean
   sort: ChannelSort
   onSort: (sort: ChannelSort) => void
+  /** Video unggulan pilihan kreator, null jika belum dipilih. */
+  featured: Video | null
 }
 
 /**
- * Tab Video. Urutan Terbaru: video terbaru dibuat besar, sisanya di grid.
- * Urutan Terpopuler: semua di grid, tayangan terbanyak dulu.
+ * Tab Video. Urutan Terbaru: Video unggulan (atau video terbaru jika
+ * kreator belum memilih) dibuat besar, sisanya di grid. Urutan
+ * Terpopuler: semua di grid, tayangan terbanyak dulu.
  */
-function ChannelVideos({ username, isOwn, sort, onSort }: ChannelVideosProps) {
+function ChannelVideos({ username, isOwn, sort, onSort, featured }: ChannelVideosProps) {
   // sort ikut di key: ganti urutan = mulai lagi dari halaman pertama.
   const feed = usePagedVideos(`channel:${username}|${sort}`, (token, signal) => listChannelVideos(username, token, signal, sort))
   const empty = isOwn ? 'Kamu belum punya video yang siap ditonton. Unggah video pertamamu!' : 'Kanal ini belum punya video.'
-  const [latest, ...rest] = feed.videos
+  const [latest, ...others] = feed.videos
+  // Video unggulan tidak diulang di grid di bawahnya.
+  const big = featured ?? latest
+  const rest = featured ? feed.videos.filter((v) => v.id !== featured.id) : others
 
   // Belum ada video sama sekali: cukup grid (yang menampilkan memuat, error,
   // atau kosong), tanpa tombol urutan yang tidak berguna.
-  if (feed.videos.length === 0) return <VideoGrid feed={feed} empty={empty} hideOwner />
+  if (feed.videos.length === 0 && !featured) return <VideoGrid feed={feed} empty={empty} hideOwner />
 
   const sortButtons = (
     <div className="sort-toggle" role="group" aria-label="Urutan video">
@@ -169,7 +197,7 @@ function ChannelVideos({ username, isOwn, sort, onSort }: ChannelVideosProps) {
 
   return (
     <div className="channel-videos">
-      <LatestVideo video={latest} />
+      <BigVideo video={big} badge={featured ? 'Video unggulan' : 'Video terbaru'} />
       <section className="channel-section">
         <div className="section-head">
           <h2 className="section-title">Video lainnya</h2>
@@ -185,12 +213,13 @@ function ChannelVideos({ username, isOwn, sort, onSort }: ChannelVideosProps) {
   )
 }
 
-function LatestVideo({ video }: { video: Video }) {
+/** Video besar di atas tab Video: Video unggulan, atau video terbaru. */
+function BigVideo({ video, badge }: { video: Video; badge: string }) {
   return (
-    <section className="channel-latest">
+    <section className="channel-latest" aria-label={badge}>
       <Link to={`/watch/${video.id}`} className="channel-latest-thumb" aria-label={video.title}>
         <Thumbnail url={video.thumbnail_url} title={video.title} />
-        <span className="channel-latest-badge">Video terbaru</span>
+        <span className="channel-latest-badge">{badge}</span>
         {video.duration_ms ? <span className="duration">{formatDuration(video.duration_ms)}</span> : null}
       </Link>
       <div className="channel-latest-text">
@@ -262,7 +291,7 @@ function ChannelPlaylists({ username, isOwn }: { username: string; isOwn: boolea
 }
 
 /** Tab Tentang: bio lengkap dan data kanal. */
-function ChannelAbout({ user }: { user: Profile }) {
+function ChannelAbout({ user, stats }: { user: Profile; stats?: ChannelCounts }) {
   return (
     <section className="channel-about">
       <h2 className="section-title">Tentang</h2>
@@ -272,6 +301,18 @@ function ChannelAbout({ user }: { user: Profile }) {
           <dt>Pengikut</dt>
           <dd>{formatCount(user.subscriber_count)}</dd>
         </div>
+        {stats && (
+          <>
+            <div>
+              <dt>Video</dt>
+              <dd>{formatCount(stats.video_count)}</dd>
+            </div>
+            <div>
+              <dt>Total tayangan</dt>
+              <dd>{formatCount(stats.total_views)}</dd>
+            </div>
+          </>
+        )}
         <div>
           <dt>Bergabung</dt>
           <dd>{formatDate(user.created_at)}</dd>

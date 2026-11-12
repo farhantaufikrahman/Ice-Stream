@@ -45,6 +45,8 @@ type fakeRepo struct {
 	activity []fakeActivity
 	// reports[{videoID, reporterID}] = laporan (lihat report_test.go).
 	reports map[[2]int64]Report
+	// featured[ownerID] = Video unggulan (lihat channel_test.go).
+	featured map[int64]int64
 }
 
 func newFakeRepo() *fakeRepo {
@@ -289,6 +291,9 @@ type fakeStore struct {
 	// deleteErr diisi test untuk mensimulasikan storage yang mati saat
 	// menghapus file.
 	deleteErr error
+	// putErr diisi test untuk mensimulasikan storage yang mati saat
+	// PutStream (lihat import_test.go).
+	putErr error
 }
 
 func (s *fakeStore) PresignPut(_ context.Context, key, contentType string, _ int64, ttl time.Duration) (PresignedRequest, error) {

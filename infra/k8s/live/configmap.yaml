@@ -8,6 +8,7 @@
 #                          |
 #                          +-- "boleh siaran?" --> VideoService :8090 (hook)
 #                          +-- Control API :9997 <-- VideoService (status, penonton)
+#                          +-- Playback :9996 <-- VideoService (rekaman, langkah 27)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -38,6 +39,14 @@ data:
     # Control API untuk VideoService (GET /v3/paths/list).
     api: yes
     apiAddress: :9997
+
+    # Server playback (langkah 27): VideoService mengambil rekaman siaran
+    # lewat GET /list dan GET /get, lalu menyimpannya sebagai video draf
+    # jika kreator mencentang "Simpan rekaman sebagai video". Hanya di
+    # dalam cluster (Service mediamtx), tidak ada HTTPRoute ke port ini.
+    # https://mediamtx.org/docs/features/playback
+    playback: yes
+    playbackAddress: :9996
 
     # RTMP (dari OBS), WebRTC (siaran dari browser, langkah 25b), dan HLS
     # (ke browser penonton).
@@ -70,6 +79,19 @@ data:
       # Jika stream sudah berjalan, publisher kedua dengan key yang sama
       # ditolak (bukan menggantikan yang pertama).
       overridePublisher: no
+      # Rekaman (langkah 27, https://mediamtx.org/docs/features/record).
+      # SEMUA siaran direkam ke /recordings (volume di deployment.yaml),
+      # karena kreator boleh mencentang pilihan rekaman kapan saja selama
+      # siaran. VideoService hanya mengimpor siaran yang pilihannya aktif
+      # saat selesai; rekaman lain terhapus sendiri setelah 1 hari.
+      record: yes
+      recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f_%z
+      # fMP4 mendukung H264 (OBS dan browser, lihat frontend/src/lib/whip.ts),
+      # AAC (OBS), dan Opus (browser).
+      recordFormat: fmp4
+      recordPartDuration: 1s
+      recordSegmentDuration: 1h
+      recordDeleteAfter: 1d
 
     paths:
       # Hanya nama "live/<id user>" yang diterima, sama dengan

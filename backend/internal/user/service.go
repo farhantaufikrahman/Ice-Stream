@@ -45,6 +45,8 @@ type Repository interface {
 	// SearchUsers: user yang tidak diblokir, username atau display_name
 	// berisi setiap kata di terms (huruf kecil), urut paling relevan.
 	SearchUsers(ctx context.Context, terms []string, offset, limit int) ([]Profile, error)
+	// CountSearchUsers menghitung hasil SearchUsers, paling banyak limit.
+	CountSearchUsers(ctx context.Context, terms []string, limit int) (int64, error)
 }
 
 // ObjectStore adalah penyimpanan file foto profil. Implementasi S3 ada di

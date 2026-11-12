@@ -24,16 +24,22 @@ type fakeRepo struct {
 	streams  []Stream
 	syncs    [][]Online
 	chats    []ChatMessage
+	// recordings[streamID] = status rekaman; claimedAt = kapan diambil.
+	recordings map[int64]Recording
+	claimedAt  map[int64]time.Time
 }
 
-func newFakeRepo() *fakeRepo { return &fakeRepo{channels: map[int64]Channel{}} }
+func newFakeRepo() *fakeRepo {
+	return &fakeRepo{channels: map[int64]Channel{}, recordings: map[int64]Recording{}, claimedAt: map[int64]time.Time{}}
+}
 
 func (r *fakeRepo) GetOrCreateChannel(_ context.Context, ownerID int64, _ time.Time) (Channel, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ch, ok := r.channels[ownerID]
 	if !ok {
-		ch = Channel{OwnerID: ownerID, Title: DefaultTitle}
+		// SlowMode true: sama dengan DEFAULT 1 di migrasi V21.
+		ch = Channel{OwnerID: ownerID, Title: DefaultTitle, SlowMode: true}
 		r.channels[ownerID] = ch
 	}
 	return ch, nil
@@ -49,11 +55,20 @@ func (r *fakeRepo) FindChannel(_ context.Context, ownerID int64) (Channel, error
 	return ch, nil
 }
 
-func (r *fakeRepo) UpdateChannel(_ context.Context, ownerID int64, title, category string, _ time.Time) (Channel, error) {
+func (r *fakeRepo) UpdateChannel(_ context.Context, ownerID int64, u ChannelUpdate, _ time.Time) (Channel, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ch := r.channels[ownerID]
+	title, category := u.Title, u.Category
 	ch.Title, ch.Category = title, category
+	for _, o := range []struct {
+		v   *bool
+		dst *bool
+	}{{u.RecordEnabled, &ch.RecordEnabled}, {u.SlowMode, &ch.SlowMode}, {u.FollowersOnly, &ch.FollowersOnly}} {
+		if o.v != nil {
+			*o.dst = *o.v
+		}
+	}
 	r.channels[ownerID] = ch
 	for i := range r.streams {
 		if r.streams[i].OwnerID == ownerID && r.streams[i].Status == StatusLive {
@@ -160,6 +175,69 @@ func (r *fakeRepo) CountChatSince(_ context.Context, userID int64, since time.Ti
 	return n, nil
 }
 
+// Rekaman: recordings[streamID] = status (lihat recording_test.go).
+func (r *fakeRepo) LastRecording(_ context.Context, ownerID int64) (Recording, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out Recording
+	var latest time.Time
+	found := false
+	for _, st := range r.streams {
+		rec, ok := r.recordings[st.ID]
+		if ok && st.OwnerID == ownerID && (!found || st.StartedAt.After(latest)) {
+			rec.StreamID, rec.EndedAt, rec.VideoID = st.ID, st.EndedAt, st.RecordingVideoID
+			out, latest, found = rec, st.StartedAt, true
+		}
+	}
+	if !found {
+		return Recording{}, ErrNotFound
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) ClaimRecording(_ context.Context, now, staleBefore time.Time) (Stream, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, st := range r.streams {
+		rec, ok := r.recordings[st.ID]
+		if !ok || st.Status != StatusEnded {
+			continue
+		}
+		if rec.Status == RecordingPending || (rec.Status == RecordingImporting && r.claimedAt[st.ID].Before(staleBefore)) {
+			rec.Status, rec.Error = RecordingImporting, ""
+			r.recordings[st.ID] = rec
+			r.claimedAt[st.ID] = now
+			return st, nil
+		}
+	}
+	return Stream{}, ErrNotFound
+}
+
+func (r *fakeRepo) SetRecordingVideo(_ context.Context, streamID, videoID int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.streams {
+		if r.streams[i].ID == streamID {
+			r.streams[i].RecordingVideoID = videoID
+		}
+	}
+	return nil
+}
+
+func (r *fakeRepo) FinishRecording(_ context.Context, streamID int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recordings[streamID] = Recording{Status: RecordingDone}
+	return nil
+}
+
+func (r *fakeRepo) FailRecording(_ context.Context, streamID int64, reason string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recordings[streamID] = Recording{Status: RecordingFailed, Error: reason}
+	return nil
+}
+
 type fakePublisher struct {
 	mu   sync.Mutex
 	sent []ChatMessage
@@ -198,12 +276,28 @@ func TestUpdateMyChannel(t *testing.T) {
 	ctx := context.Background()
 	repo.streams = []Stream{{ID: 1, OwnerID: 7, Title: DefaultTitle, Status: StatusLive}}
 
-	v, err := svc.UpdateMyChannel(ctx, 7, "  Ngoding   bareng  ", "Teknologi")
+	v, err := svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: "  Ngoding   bareng  ", Category: "Teknologi"})
 	require.NoError(t, err)
 	assert.Equal(t, "Ngoding bareng", v.Title, "spasi berlebih dirapikan")
 	assert.Equal(t, "teknologi", v.Category)
 	require.NotNil(t, v.Current)
 	assert.Equal(t, "Ngoding bareng", v.Current.Title, "siaran yang sedang live ikut berubah")
+	assert.True(t, v.SlowMode, "mode lambat aktif sejak awal")
+	assert.False(t, v.RecordEnabled)
+	assert.False(t, v.FollowersOnly)
+
+	// Pilihan siaran: yang tidak dikirim tidak berubah.
+	on, off := true, false
+	v, err = svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: "Ngoding bareng", RecordEnabled: &on, SlowMode: &off})
+	require.NoError(t, err)
+	assert.True(t, v.RecordEnabled)
+	assert.False(t, v.SlowMode)
+	assert.False(t, v.FollowersOnly)
+	v, err = svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: "Ngoding bareng", FollowersOnly: &on})
+	require.NoError(t, err)
+	assert.True(t, v.RecordEnabled, "tetap")
+	assert.False(t, v.SlowMode, "tetap")
+	assert.True(t, v.FollowersOnly)
 
 	tests := map[string]struct{ title, category, field string }{
 		"judul kosong":         {"   ", "", "title"},
@@ -212,13 +306,13 @@ func TestUpdateMyChannel(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := svc.UpdateMyChannel(ctx, 7, tt.title, tt.category)
+			_, err := svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: tt.title, Category: tt.category})
 			var verr *ValidationError
 			require.ErrorAs(t, err, &verr)
 			assert.Equal(t, tt.field, verr.Field)
 		})
 	}
-	_, err = svc.UpdateMyChannel(ctx, 7, strings.Repeat("é", 100), "")
+	_, err = svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: strings.Repeat("é", 100)})
 	assert.NoError(t, err, "100 karakter multibyte masih boleh")
 }
 
@@ -366,6 +460,37 @@ func TestSendChat(t *testing.T) {
 	assert.Error(t, err)
 	_, err = svc.ListChat(ctx, 99, 0)
 	assert.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestSendChatOptions(t *testing.T) {
+	svc, repo := newTestService()
+	ctx := context.Background()
+	repo.streams = []Stream{{ID: 1, OwnerID: 7, Status: StatusLive}}
+	on, off := true, false
+	_, err := svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: "Siaran", SlowMode: &off, FollowersOnly: &on})
+	require.NoError(t, err)
+
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "halo"})
+	assert.ErrorIs(t, err, ErrFollowersOnly, "belum mengikuti")
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "halo", RequesterFollows: true})
+	require.NoError(t, err)
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "lagi", RequesterFollows: true})
+	assert.NoError(t, err, "mode lambat mati: boleh langsung kirim lagi")
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 7, StreamID: 1, Body: "terima kasih"})
+	assert.NoError(t, err, "pemilik siaran selalu boleh chat")
+
+	v, err := svc.GetStreamView(ctx, 1)
+	require.NoError(t, err)
+	assert.False(t, v.SlowMode)
+	assert.True(t, v.FollowersOnly)
+
+	// Diubah di tengah siaran: langsung berlaku.
+	_, err = svc.UpdateMyChannel(ctx, 7, ChannelUpdate{Title: "Siaran", SlowMode: &on, FollowersOnly: &off})
+	require.NoError(t, err)
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 10, StreamID: 1, Body: "halo"})
+	require.NoError(t, err)
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 10, StreamID: 1, Body: "lagi"})
+	assert.ErrorIs(t, err, ErrRateLimited)
 }
 
 func TestOwnerFromPath(t *testing.T) {

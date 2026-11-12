@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { listLive, searchChannels, searchPlaylists, searchVideos } from '../api/endpoints'
-import type { ChannelResult, LiveStream, Playlist } from '../api/types'
+import { getSearchCounts, listLive, searchChannels, searchPlaylists, searchVideos } from '../api/endpoints'
+import type { ChannelResult, LiveStream, Playlist, SearchCounts } from '../api/types'
 import { ErrorBox } from '../components/ErrorBox'
 import { PlaylistCard } from '../components/playlist/PlaylistCard'
 import { LiveGrid } from '../components/live/LiveCard'
@@ -11,6 +11,7 @@ import { VideoGrid } from '../components/VideoGrid'
 import { usePagedList, type PagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
 import { durationFromParam, searchSortFromParam, withParam, type DurationFilter, type SearchSort } from '../lib/discover'
+import { formatTabCount, resultSummary, tabCount } from '../lib/searchCounts'
 
 type Tab = 'semua' | 'video' | 'live' | 'kreator' | 'playlist'
 
@@ -34,7 +35,8 @@ function tabFromParam(value: string | null): Tab {
  * durasi (langkah 24a) berlaku untuk video, jadi hanya tampil di tab Semua
  * dan Video, dan disimpan di URL (?sort=views&duration=short). Tab Live
  * (langkah 25c) mencari judul siaran yang sedang berlangsung. Jumlah hasil
- * per tab di desain belum ditampilkan karena backend belum mendukungnya.
+ * per tab dan kalimat "Sekitar N hasil untuk ..." ada sejak langkah 27
+ * (GET /search/counts); filter durasi ikut mengubah angka tab Video.
  */
 export function SearchPage() {
   const [params, setParams] = useSearchParams()
@@ -42,6 +44,7 @@ export function SearchPage() {
   const tab = tabFromParam(params.get('tab'))
   const sort = searchSortFromParam(params.get('sort'))
   const duration = durationFromParam(params.get('duration'))
+  const counts = useSearchCounts(q, duration)
 
   if (!q) {
     return (
@@ -70,7 +73,7 @@ export function SearchPage() {
 
   return (
     <div className="search-page">
-      <h1 className="page-title">Hasil untuk "{q}"</h1>
+      <h1 className="sr-only">Hasil untuk "{q}"</h1>
       <div className="tabs" role="tablist" aria-label="Jenis hasil">
         {TABS.map((t) => (
           <button
@@ -84,6 +87,7 @@ export function SearchPage() {
             onClick={() => pickTab(t.id)}
           >
             {t.label}
+            <TabCountBadge counts={counts} tab={t.id} />
           </button>
         ))}
       </div>
@@ -95,6 +99,7 @@ export function SearchPage() {
           onDuration={(v: DurationFilter) => setParam('duration', v)}
         />
       )}
+      <ResultSummary counts={counts} tab={tab} q={q} />
       {/* key: hasil dimuat ulang dari halaman pertama saat kata kunci atau tab berubah. */}
       <div role="tabpanel" id="search-panel" aria-labelledby={`search-tab-${tab}`} className="search-panel" key={`${tab}|${q}`}>
         {tab === 'semua' && <AllResults q={q} filters={filters} />}
@@ -104,6 +109,42 @@ export function SearchPage() {
         {tab === 'playlist' && <PlaylistResults q={q} />}
       </div>
     </div>
+  )
+}
+
+/**
+ * Angka semua tab untuk q (dan filter durasi). null selama memuat atau jika
+ * gagal: angkanya tidak ditampilkan, hasil pencarian tetap jalan.
+ */
+function useSearchCounts(q: string, duration: DurationFilter): SearchCounts | null {
+  const [loaded, setLoaded] = useState<{ key: string; counts: SearchCounts | null } | null>(null)
+  const key = `${q}|${duration}`
+  useEffect(() => {
+    if (!q) return
+    const ctrl = new AbortController()
+    getSearchCounts(q, duration, ctrl.signal)
+      .then((counts) => setLoaded({ key, counts }))
+      .catch(() => {
+        if (!ctrl.signal.aborted) setLoaded({ key, counts: null })
+      })
+    return () => ctrl.abort()
+  }, [q, duration, key])
+  return loaded?.key === key ? loaded.counts : null
+}
+
+function TabCountBadge({ counts, tab }: { counts: SearchCounts | null; tab: Tab }) {
+  const c = tabCount(counts, tab)
+  if (!c) return null
+  return <span className="tab-count">{formatTabCount(c)}</span>
+}
+
+/** "Sekitar 1.284 hasil untuk "resep es krim"" (desain Search.dc.html). */
+function ResultSummary({ counts, tab, q }: { counts: SearchCounts | null; tab: Tab; q: string }) {
+  const c = tabCount(counts, tab)
+  return (
+    <p className="search-summary">
+      {c ? resultSummary(c) : 'Hasil'} untuk <strong>"{q}"</strong>
+    </p>
   )
 }
 

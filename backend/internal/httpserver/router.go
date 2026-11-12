@@ -106,6 +106,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	requireAuth := RequireAuth(deps.Verifier)
 	videoGroup := v1.Group("/videos", limitBody(maxVideoBodyBytes))
 	videoGroup.GET("", videos.list)
+	// Rekomendasi Beranda (langkah 27). Route statis ini didahulukan Gin
+	// daripada /:id.
+	videoGroup.GET("/recommended", OptionalAuth(deps.Verifier), videos.recommended)
 	videoGroup.POST("", requireAuth, videos.create)
 	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
@@ -143,6 +146,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	v1.GET("/me/playlists", requireAuth, videos.myPlaylists)
 	// Dasbor Creator Studio (langkah 22b).
 	v1.GET("/me/channel-stats", requireAuth, videos.channelStats)
+	v1.PUT("/me/featured-video", requireAuth, limitBody(maxVideoBodyBytes), videos.setFeaturedVideo)
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)
@@ -186,6 +190,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	// Tab Kreator dan Playlist di halaman pencarian (langkah 22c).
 	v1.GET("/search/channels", OptionalAuth(deps.Verifier), users.searchChannels)
 	v1.GET("/search/playlists", videos.searchPlaylists)
+	// Angka di setiap tab pencarian (langkah 27).
+	counts := &searchCountsHandler{videos: deps.Videos, users: deps.Users, live: deps.LiveStreams, logger: logger}
+	v1.GET("/search/counts", counts.get)
 	v1.PUT("/users/:username/subscription", requireAuth, users.subscribe)
 	v1.DELETE("/users/:username/subscription", requireAuth, users.unsubscribe)
 	v1.GET("/me/subscriptions", requireAuth, users.subscriptions)

@@ -28,9 +28,10 @@ type Repository interface {
 	GetOrCreateChannel(ctx context.Context, ownerID int64, now time.Time) (Channel, error)
 	// FindChannel mengambil pengaturan siaran. ErrNotFound jika belum ada.
 	FindChannel(ctx context.Context, ownerID int64) (Channel, error)
-	// UpdateChannel mengubah judul dan kategori, sekaligus siaran yang
-	// sedang LIVE milik user itu (satu transaksi).
-	UpdateChannel(ctx context.Context, ownerID int64, title, category string, now time.Time) (Channel, error)
+	// UpdateChannel mengubah judul, kategori, dan pilihan siaran (yang
+	// nil tidak diubah), sekaligus judul siaran yang sedang LIVE milik user
+	// itu (satu transaksi).
+	UpdateChannel(ctx context.Context, ownerID int64, u ChannelUpdate, now time.Time) (Channel, error)
 	// SetStreamKey menyimpan hash stream key baru.
 	SetStreamKey(ctx context.Context, ownerID int64, hash string, now time.Time) (Channel, error)
 	// CurrentStream mengambil siaran LIVE milik user. ErrNotFound jika
@@ -56,6 +57,22 @@ type Repository interface {
 	ListChat(ctx context.Context, streamID int64, limit int) ([]ChatMessage, error)
 	// CountChatSince menghitung pesan chat userID sesudah waktu since.
 	CountChatSince(ctx context.Context, userID int64, since time.Time) (int64, error)
+
+	// Rekaman siaran (langkah 27).
+
+	// LastRecording mengambil rekaman siaran terakhir milik ownerID.
+	// ErrNotFound jika belum pernah ada.
+	LastRecording(ctx context.Context, ownerID int64) (Recording, error)
+	// ClaimRecording menandai satu rekaman PENDING (atau IMPORTING yang
+	// diambil sebelum staleBefore) menjadi IMPORTING dan mengembalikan
+	// siarannya. ErrNotFound jika tidak ada yang menunggu.
+	ClaimRecording(ctx context.Context, now, staleBefore time.Time) (Stream, error)
+	// SetRecordingVideo menyimpan id video hasil rekaman.
+	SetRecordingVideo(ctx context.Context, streamID, videoID int64) error
+	// FinishRecording menandai rekaman DONE.
+	FinishRecording(ctx context.Context, streamID int64) error
+	// FailRecording menandai rekaman FAILED beserta alasannya.
+	FailRecording(ctx context.Context, streamID int64, reason string) error
 }
 
 // ChatPublisher menyiarkan pesan chat yang baru tersimpan ke penonton lain.
@@ -119,6 +136,8 @@ type ChannelView struct {
 	IngestURL string
 	// Current nil jika tidak sedang live.
 	Current *Stream
+	// LastRecording nil jika belum pernah ada siaran yang direkam.
+	LastRecording *Recording
 }
 
 const (
@@ -142,25 +161,26 @@ func (s *Service) GetMyChannel(ctx context.Context, requesterID int64) (ChannelV
 	return s.view(ctx, ch)
 }
 
-// UpdateMyChannel mengubah judul dan kategori siaran.
-func (s *Service) UpdateMyChannel(ctx context.Context, requesterID int64, title, category string) (ChannelView, error) {
-	title = strings.Join(strings.Fields(title), " ")
+// UpdateMyChannel mengubah judul, kategori, dan pilihan siaran.
+func (s *Service) UpdateMyChannel(ctx context.Context, requesterID int64, u ChannelUpdate) (ChannelView, error) {
+	title := strings.Join(strings.Fields(u.Title), " ")
 	if title == "" {
 		return ChannelView{}, &ValidationError{"title", "judul siaran wajib diisi"}
 	}
 	if utf8.RuneCountInString(title) > maxTitleRunes {
 		return ChannelView{}, &ValidationError{"title", "maksimal 100 karakter"}
 	}
-	category = strings.ToLower(strings.TrimSpace(category))
+	category := strings.ToLower(strings.TrimSpace(u.Category))
 	if category != "" && !isCategory(category) {
 		return ChannelView{}, &ValidationError{"category", "harus salah satu dari: " + strings.Join(video.Categories, ", ")}
 	}
+	u.Title, u.Category = title, category
 	now := s.now()
 	// Pastikan barisnya ada dulu, supaya UpdateChannel cukup UPDATE.
 	if _, err := s.repo.GetOrCreateChannel(ctx, requesterID, now); err != nil {
 		return ChannelView{}, err
 	}
-	ch, err := s.repo.UpdateChannel(ctx, requesterID, title, category, now)
+	ch, err := s.repo.UpdateChannel(ctx, requesterID, u, now)
 	if err != nil {
 		return ChannelView{}, err
 	}
@@ -308,6 +328,9 @@ type SendChatInput struct {
 	Body        string
 	// Color nil = putih.
 	Color *uint32
+	// RequesterFollows: requester mengikuti kanal pemilik siaran. Diisi
+	// gateway dari UserService (langkah 27).
+	RequesterFollows bool
 }
 
 // SendChat memeriksa dan menyimpan pesan chat, lalu menyiarkannya. Siaran
@@ -336,15 +359,32 @@ func (s *Service) SendChat(ctx context.Context, in SendChatInput) (ChatMessage, 
 	if st.Status != StatusLive {
 		return ChatMessage{}, ErrStreamEnded
 	}
+	// Pilihan chat dibaca dari live_channels saat ini, jadi kreator bisa
+	// mengubahnya di tengah siaran dan langsung berlaku (langkah 27).
+	ch, err := s.repo.FindChannel(ctx, st.OwnerID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return ChatMessage{}, err
+	}
+	if errors.Is(err, ErrNotFound) {
+		// Seharusnya tidak terjadi (siaran butuh baris live_channels).
+		// Pakai bawaan kolom di migrasi V21.
+		ch = Channel{OwnerID: st.OwnerID, SlowMode: true}
+	}
+	// Pemilik siaran selalu boleh chat di siarannya sendiri.
+	if ch.FollowersOnly && in.RequesterID != st.OwnerID && !in.RequesterFollows {
+		return ChatMessage{}, ErrFollowersOnly
+	}
 	now := s.now()
 	// Mode lambat: satu pesan per chatSlowMode per user. Dua request yang
 	// datang bersamaan bisa sama-sama lolos; untuk mencegah spam itu cukup.
-	recent, err := s.repo.CountChatSince(ctx, in.RequesterID, now.Add(-chatSlowMode))
-	if err != nil {
-		return ChatMessage{}, err
-	}
-	if recent > 0 {
-		return ChatMessage{}, ErrRateLimited
+	if ch.SlowMode {
+		recent, err := s.repo.CountChatSince(ctx, in.RequesterID, now.Add(-chatSlowMode))
+		if err != nil {
+			return ChatMessage{}, err
+		}
+		if recent > 0 {
+			return ChatMessage{}, ErrRateLimited
+		}
 	}
 	saved, err := s.repo.CreateChat(ctx, ChatMessage{StreamID: st.ID, UserID: in.RequesterID, Body: body, Color: color, CreatedAt: now})
 	if err != nil {
@@ -373,6 +413,31 @@ func (s *Service) ListChat(ctx context.Context, streamID int64, limit int) ([]Ch
 	return s.repo.ListChat(ctx, streamID, limit)
 }
 
+// StreamView adalah siaran beserta pilihan chat kanalnya saat ini.
+type StreamView struct {
+	Stream
+	SlowMode      bool
+	FollowersOnly bool
+}
+
+// GetStreamView mengambil satu siaran beserta pilihan chat-nya, untuk
+// halaman tonton siaran (keterangan "Mode lambat" dan "Khusus pengikut").
+func (s *Service) GetStreamView(ctx context.Context, id int64) (StreamView, error) {
+	st, err := s.GetStream(ctx, id)
+	if err != nil {
+		return StreamView{}, err
+	}
+	out := StreamView{Stream: st, SlowMode: true}
+	ch, err := s.repo.FindChannel(ctx, st.OwnerID)
+	switch {
+	case err == nil:
+		out.SlowMode, out.FollowersOnly = ch.SlowMode, ch.FollowersOnly
+	case !errors.Is(err, ErrNotFound):
+		return StreamView{}, err
+	}
+	return out, nil
+}
+
 // Sync menyamakan status siaran dengan daftar stream dari MediaMTX.
 func (s *Service) Sync(ctx context.Context, online []Online) (started, ended int, err error) {
 	now := s.now()
@@ -385,6 +450,13 @@ func (s *Service) view(ctx context.Context, ch Channel) (ChannelView, error) {
 	switch {
 	case err == nil:
 		v.Current = &cur
+	case !errors.Is(err, ErrNotFound):
+		return ChannelView{}, err
+	}
+	rec, err := s.repo.LastRecording(ctx, ch.OwnerID)
+	switch {
+	case err == nil:
+		v.LastRecording = &rec
 	case !errors.Is(err, ErrNotFound):
 		return ChannelView{}, err
 	}

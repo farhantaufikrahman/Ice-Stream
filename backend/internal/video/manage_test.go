@@ -2,6 +2,7 @@ package video
 
 import (
 	"context"
+	"io"
 	"errors"
 	"slices"
 	"strings"
@@ -266,4 +267,19 @@ func TestMediaPrefixes(t *testing.T) {
 	assert.Equal(t, []string{"hls/42/"}, mediaPrefixes(Video{ID: 42, ObjectKey: "raw/source"}))
 	assert.Equal(t, []string{"hls/42/"}, mediaPrefixes(Video{ID: 42, ObjectKey: ""}))
 	assert.Equal(t, []string{"hls/42/"}, mediaPrefixes(Video{ID: 42, ObjectKey: "lain/abc/source"}))
+}
+
+func (s *fakeStore) PutStream(_ context.Context, key, contentType string, r io.Reader) (int64, error) {
+	if s.putErr != nil {
+		return 0, s.putErr
+	}
+	n, err := io.Copy(io.Discard, r)
+	if err != nil {
+		return 0, err
+	}
+	if s.objects == nil {
+		s.objects = map[string]ObjectInfo{}
+	}
+	s.objects[key] = ObjectInfo{Size: n, ContentType: contentType}
+	return n, nil
 }
