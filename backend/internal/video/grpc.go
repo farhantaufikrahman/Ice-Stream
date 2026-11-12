@@ -419,3 +419,26 @@ func (s *GRPCServer) ListTrendingVideos(ctx context.Context, req *videov1.ListTr
 	}
 	return resp, nil
 }
+
+// reportReasons memetakan enum gRPC ke alasan di database.
+var reportReasons = map[videov1.ReportReason]ReportReason{
+	videov1.ReportReason_REPORT_REASON_SPAM:       ReportSpam,
+	videov1.ReportReason_REPORT_REASON_SEXUAL:     ReportSexual,
+	videov1.ReportReason_REPORT_REASON_VIOLENCE:   ReportViolence,
+	videov1.ReportReason_REPORT_REASON_HATE:       ReportHate,
+	videov1.ReportReason_REPORT_REASON_HARASSMENT: ReportHarassment,
+	videov1.ReportReason_REPORT_REASON_MISLEADING: ReportMisleading,
+	videov1.ReportReason_REPORT_REASON_COPYRIGHT:  ReportCopyright,
+	videov1.ReportReason_REPORT_REASON_OTHER:      ReportOther,
+}
+
+func (s *GRPCServer) ReportVideo(ctx context.Context, req *videov1.ReportVideoRequest) (*videov1.ReportVideoResponse, error) {
+	// Nilai yang tidak ada di map (termasuk UNSPECIFIED) menjadi "" dan
+	// ditolak oleh ReportVideo sebagai alasan tidak dikenal.
+	reason := reportReasons[req.GetReason()]
+	at, err := s.svc.ReportVideo(ctx, req.GetRequesterId(), req.GetVideoId(), reason, req.GetDetails())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &videov1.ReportVideoResponse{ReportedAt: timestamppb.New(at)}, nil
+}

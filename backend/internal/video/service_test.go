@@ -43,6 +43,8 @@ type fakeRepo struct {
 	// yang diterima (lihat stats_test.go).
 	daily    map[int64]map[string]int64
 	activity []fakeActivity
+	// reports[{videoID, reporterID}] = laporan (lihat report_test.go).
+	reports map[[2]int64]Report
 }
 
 func newFakeRepo() *fakeRepo {

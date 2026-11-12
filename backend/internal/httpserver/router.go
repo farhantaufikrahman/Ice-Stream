@@ -99,6 +99,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
 	videoGroup.PUT("/:id/like", requireAuth, videos.like)
 	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
+	videoGroup.POST("/:id/reports", requireAuth, videos.report)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 	v1.GET("/search/videos", videos.search)
 	v1.GET("/trending/videos", videos.trending)

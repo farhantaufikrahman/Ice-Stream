@@ -136,6 +136,35 @@ service VideoService {
   // 7 hari terakhir, termasuk hari ini (tanggal WIB). Langkah 24a, bagian
   // Trending di beranda. Video tanpa tayangan dalam 7 hari tidak ikut.
   rpc ListTrendingVideos(ListTrendingVideosRequest) returns (ListTrendingVideosResponse);
+
+  // ReportVideo menyimpan laporan requester atas video READY milik orang
+  // lain (langkah 24b, tombol Laporkan). Satu laporan per user per video:
+  // melapor lagi mengganti alasan dan keterangan. INVALID_ARGUMENT jika
+  // alasan tidak dikenal, keterangan terlalu panjang atau kosong untuk
+  // alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
+  // tidak ada atau belum READY.
+  rpc ReportVideo(ReportVideoRequest) returns (ReportVideoResponse);
+}
+
+// Alasan laporan (dialog Laporkan).
+enum ReportReason {
+  REPORT_REASON_UNSPECIFIED = 0;
+  // Spam atau penipuan.
+  REPORT_REASON_SPAM = 1;
+  // Konten seksual.
+  REPORT_REASON_SEXUAL = 2;
+  // Kekerasan atau konten berbahaya.
+  REPORT_REASON_VIOLENCE = 3;
+  // Ujaran kebencian.
+  REPORT_REASON_HATE = 4;
+  // Perundungan atau pelecehan.
+  REPORT_REASON_HARASSMENT = 5;
+  // Informasi yang menyesatkan.
+  REPORT_REASON_MISLEADING = 6;
+  // Pelanggaran hak cipta.
+  REPORT_REASON_COPYRIGHT = 7;
+  // Lainnya: details wajib diisi.
+  REPORT_REASON_OTHER = 8;
 }
 
 // Urutan hasil pencarian video (desain Search: "Urutkan").
@@ -756,4 +785,17 @@ message TrendingVideo {
   Video video = 1;
   // Tayangan 7 hari terakhir, angka yang dipakai untuk mengurutkan.
   int64 recent_views = 2;
+}
+
+message ReportVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  ReportReason reason = 3;
+  // Keterangan tambahan, maksimal 500 karakter. Wajib untuk REPORT_REASON_OTHER.
+  string details = 4;
+}
+
+message ReportVideoResponse {
+  // Waktu laporan terakhir disimpan.
+  google.protobuf.Timestamp reported_at = 1;
 }

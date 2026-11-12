@@ -814,7 +814,8 @@ a:focus-visible {
   font-size: 0.82rem;
   font-weight: 600;
 }
-.field input,
+/* Radio dan checkbox dikecualikan: mereka memakai ukuran bawaan browser. */
+.field input:not([type='radio'], [type='checkbox']),
 .field textarea {
   width: 100%;
   border-radius: 12px;
@@ -823,7 +824,7 @@ a:focus-visible {
   color: var(--fg);
   font: inherit;
 }
-.field input {
+.field input:not([type='radio'], [type='checkbox']) {
   height: 46px;
   padding: 0 14px;
   font-size: 0.95rem;
@@ -834,7 +835,7 @@ a:focus-visible {
   line-height: 1.6;
   resize: vertical;
 }
-.field input:focus,
+.field input:not([type='radio'], [type='checkbox']):focus,
 .field textarea:focus {
   border-color: var(--accent-text);
   outline: none;
@@ -2272,7 +2273,10 @@ a.channel-result-name:hover {
   background: var(--chip-mint);
 }
 .radio-card input {
-  margin: 3px 0 0;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
   accent-color: var(--mint);
 }
 .radio-card-text {
@@ -2919,4 +2923,57 @@ a.trending-title:hover {
   .filter-divider {
     display: none;
   }
+}
+
+/* ---------- Langkah 24b: Bagikan dan Laporkan ---------- */
+/* Laporkan: tombol tanpa latar, abu-abu (desain Watch). */
+.btn-ghost-muted {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost-muted:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.share-row {
+  display: flex;
+  gap: 8px;
+}
+.share-url {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.share-url:focus {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 1px;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--mint);
+}
+.report-reasons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.report-reasons .radio-card {
+  align-items: center;
 }

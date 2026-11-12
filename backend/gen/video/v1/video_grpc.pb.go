@@ -55,6 +55,7 @@ const (
 	VideoService_GetChannelStats_FullMethodName          = "/video.v1.VideoService/GetChannelStats"
 	VideoService_SearchPlaylists_FullMethodName          = "/video.v1.VideoService/SearchPlaylists"
 	VideoService_ListTrendingVideos_FullMethodName       = "/video.v1.VideoService/ListTrendingVideos"
+	VideoService_ReportVideo_FullMethodName              = "/video.v1.VideoService/ReportVideo"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -181,6 +182,13 @@ type VideoServiceClient interface {
 	// 7 hari terakhir, termasuk hari ini (tanggal WIB). Langkah 24a, bagian
 	// Trending di beranda. Video tanpa tayangan dalam 7 hari tidak ikut.
 	ListTrendingVideos(ctx context.Context, in *ListTrendingVideosRequest, opts ...grpc.CallOption) (*ListTrendingVideosResponse, error)
+	// ReportVideo menyimpan laporan requester atas video READY milik orang
+	// lain (langkah 24b, tombol Laporkan). Satu laporan per user per video:
+	// melapor lagi mengganti alasan dan keterangan. INVALID_ARGUMENT jika
+	// alasan tidak dikenal, keterangan terlalu panjang atau kosong untuk
+	// alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
+	// tidak ada atau belum READY.
+	ReportVideo(ctx context.Context, in *ReportVideoRequest, opts ...grpc.CallOption) (*ReportVideoResponse, error)
 }
 
 type videoServiceClient struct {
@@ -511,6 +519,16 @@ func (c *videoServiceClient) ListTrendingVideos(ctx context.Context, in *ListTre
 	return out, nil
 }
 
+func (c *videoServiceClient) ReportVideo(ctx context.Context, in *ReportVideoRequest, opts ...grpc.CallOption) (*ReportVideoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportVideoResponse)
+	err := c.cc.Invoke(ctx, VideoService_ReportVideo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -635,6 +653,13 @@ type VideoServiceServer interface {
 	// 7 hari terakhir, termasuk hari ini (tanggal WIB). Langkah 24a, bagian
 	// Trending di beranda. Video tanpa tayangan dalam 7 hari tidak ikut.
 	ListTrendingVideos(context.Context, *ListTrendingVideosRequest) (*ListTrendingVideosResponse, error)
+	// ReportVideo menyimpan laporan requester atas video READY milik orang
+	// lain (langkah 24b, tombol Laporkan). Satu laporan per user per video:
+	// melapor lagi mengganti alasan dan keterangan. INVALID_ARGUMENT jika
+	// alasan tidak dikenal, keterangan terlalu panjang atau kosong untuk
+	// alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
+	// tidak ada atau belum READY.
+	ReportVideo(context.Context, *ReportVideoRequest) (*ReportVideoResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -740,6 +765,9 @@ func (UnimplementedVideoServiceServer) SearchPlaylists(context.Context, *SearchP
 }
 func (UnimplementedVideoServiceServer) ListTrendingVideos(context.Context, *ListTrendingVideosRequest) (*ListTrendingVideosResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTrendingVideos not implemented")
+}
+func (UnimplementedVideoServiceServer) ReportVideo(context.Context, *ReportVideoRequest) (*ReportVideoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportVideo not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -1338,6 +1366,24 @@ func _VideoService_ListTrendingVideos_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_ReportVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportVideoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ReportVideo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ReportVideo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ReportVideo(ctx, req.(*ReportVideoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1472,6 +1518,10 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTrendingVideos",
 			Handler:    _VideoService_ListTrendingVideos_Handler,
+		},
+		{
+			MethodName: "ReportVideo",
+			Handler:    _VideoService_ReportVideo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
