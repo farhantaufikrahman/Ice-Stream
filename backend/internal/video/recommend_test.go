@@ -57,9 +57,9 @@ func TestRecommendGuestPrefersPopularAndFresh(t *testing.T) {
 	svc, repo, _ := newTestService()
 	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
 	svc.now = func() time.Time { return now }
-	addListed(repo, 1, 10, "game", 1000, now.Add(-time.Hour))       // populer dan baru
-	addListed(repo, 2, 11, "game", 0, now.Add(-200*24*time.Hour))   // lama dan sepi
-	addListed(repo, 3, 12, "musik", 50, now.Add(-2*24*time.Hour))   // sedang
+	addListed(repo, 1, 10, "game", 1000, now.Add(-time.Hour))     // populer dan baru
+	addListed(repo, 2, 11, "game", 0, now.Add(-200*24*time.Hour)) // lama dan sepi
+	addListed(repo, 3, 12, "musik", 50, now.Add(-2*24*time.Hour)) // sedang
 	repo.videos[4] = Video{ID: 4, OwnerID: 13, Status: StatusReady, Visibility: VisibilityUnlisted, ViewCount: 9999}
 
 	got, err := svc.Recommend(context.Background(), RecommendInput{Seed: 1})

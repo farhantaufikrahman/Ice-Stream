@@ -2,8 +2,8 @@ package video
 
 import (
 	"context"
-	"io"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
