@@ -94,8 +94,10 @@ func (r *OracleRepository) CountSince(ctx context.Context, userID int64, since t
 	return n, nil
 }
 
-// Create menyimpan danmaku. Tidak perlu transaksi: hanya satu INSERT, dan
-// FOREIGN KEY memastikan videonya ada.
+// Create menyimpan danmaku dan menambah videos.danmaku_count (migrasi V16)
+// dalam satu transaksi, sama seperti komentar dan comment_count. Jumlah ini
+// dipakai urutan "Danmaku terbanyak" di pencarian dan angka danmaku di
+// halaman tonton. FOREIGN KEY memastikan videonya ada.
 func (r *OracleRepository) Create(ctx context.Context, d Danmaku) (Danmaku, error) {
 	row := danmakuRow{
 		VideoID:    d.VideoID,
@@ -105,8 +107,21 @@ func (r *OracleRepository) Create(ctx context.Context, d Danmaku) (Danmaku, erro
 		Color:      d.Color,
 		Mode:       string(d.Mode),
 	}
-	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-		return Danmaku{}, fmt.Errorf("insert danmaku: %w", err)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&row).Error; err != nil {
+			return fmt.Errorf("insert danmaku: %w", err)
+		}
+		// "danmaku_count + 1" dihitung Oracle sendiri, jadi aman walau
+		// banyak danmaku masuk bersamaan.
+		err := tx.Table("videos").Where("id = ?", d.VideoID).
+			UpdateColumn("danmaku_count", gorm.Expr("danmaku_count + 1")).Error
+		if err != nil {
+			return fmt.Errorf("update danmaku_count: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return Danmaku{}, err
 	}
 	return row.toDanmaku(), nil
 }

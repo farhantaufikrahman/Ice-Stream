@@ -46,6 +46,9 @@ type videoRow struct {
 	LikeCount int64 `gorm:"column:like_count;<-:update"`
 	// Migrasi V8: waktu kata-kata video ini disimpan untuk pencarian.
 	SearchIndexedAt *time.Time `gorm:"column:search_indexed_at"`
+	// Migrasi V16. "<-:false" = hanya dibaca; nilainya diubah oleh package
+	// danmaku di transaksi yang sama dengan INSERT danmaku.
+	DanmakuCount int64 `gorm:"column:danmaku_count;<-:false"`
 	// Migrasi V15. NULL = tanpa kategori / tanpa tag.
 	Category *string `gorm:"column:category"`
 	Tags     *string `gorm:"column:tags"`
@@ -67,6 +70,7 @@ func (r videoRow) toVideo() Video {
 	}
 	v.CommentCount = r.CommentCount
 	v.LikeCount = r.LikeCount
+	v.DanmakuCount = r.DanmakuCount
 	if r.Description != nil {
 		v.Description = *r.Description
 	}
@@ -458,7 +462,8 @@ type searchHit struct {
 //	  HAVING COUNT(*) = 2            -- video harus cocok dengan SEMUA kata
 //	) s JOIN videos v ON v.id = s.video_id
 //	WHERE v.status = 'READY' AND v.deleted_at IS NULL
-//	ORDER BY s.score DESC, v.view_count DESC, v.id DESC
+//	  [AND v.duration_ms >= ? AND v.duration_ms < ?]   -- filter durasi
+//	ORDER BY s.score DESC, v.view_count DESC, v.id DESC  -- lihat searchOrder
 //	OFFSET 0 ROWS FETCH NEXT 21 ROWS ONLY
 //
 // Setiap subquery menghasilkan paling banyak satu baris per video, jadi
@@ -469,12 +474,22 @@ type searchHit struct {
 //
 // Query kedua mengambil data lengkap video-video itu dengan model GORM
 // biasa (videoRow), lalu disusun ulang mengikuti urutan query pertama.
-func (r *OracleRepository) Search(ctx context.Context, terms []string, offset, limit int) ([]Video, error) {
+func (r *OracleRepository) Search(ctx context.Context, terms []string, opts SearchOptions, offset, limit int) ([]Video, error) {
 	parts := make([]string, len(terms))
-	args := make([]any, 0, len(terms)+4)
+	args := make([]any, 0, len(terms)+6)
 	for i, t := range terms {
 		parts[i] = "SELECT video_id, MAX(weight) AS w FROM video_search_terms WHERE term LIKE ? GROUP BY video_id"
 		args = append(args, t+"%")
+	}
+	args = append(args, len(terms), StatusReady)
+	where := "WHERE v.status = ? AND v.deleted_at IS NULL "
+	if minMs, maxMs := opts.Duration.durationRange(); minMs > 0 || maxMs > 0 {
+		where += "AND v.duration_ms >= ? "
+		args = append(args, minMs)
+		if maxMs > 0 {
+			where += "AND v.duration_ms < ? "
+			args = append(args, maxMs)
+		}
 	}
 	// Alias dengan tanda kutip ("video_id") supaya Oracle mengembalikan nama
 	// kolom huruf kecil persis seperti tag GORM di searchHit. Tanpa kutip,
@@ -482,39 +497,141 @@ func (r *OracleRepository) Search(ctx context.Context, terms []string, offset, l
 	sql := `SELECT s.video_id AS "video_id", s.score AS "score" FROM (` +
 		"SELECT video_id, SUM(w) AS score FROM (" + strings.Join(parts, " UNION ALL ") + ") " +
 		"GROUP BY video_id HAVING COUNT(*) = ?" +
-		") s JOIN videos v ON v.id = s.video_id " +
-		"WHERE v.status = ? AND v.deleted_at IS NULL " +
-		"ORDER BY s.score DESC, v.view_count DESC, v.id DESC " +
+		") s JOIN videos v ON v.id = s.video_id " + where +
+		"ORDER BY " + searchOrder(opts.Sort) + " " +
 		"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-	args = append(args, len(terms), StatusReady, offset, limit)
+	args = append(args, offset, limit)
 
 	var hits []searchHit
 	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&hits).Error; err != nil {
 		return nil, fmt.Errorf("search videos: %w", err)
 	}
-	if len(hits) == 0 {
-		return nil, nil
-	}
 	ids := make([]int64, len(hits))
 	for i, h := range hits {
 		ids[i] = h.VideoID
 	}
-	var rows []videoRow
-	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("select search results: %w", err)
+	return r.findInOrder(ctx, ids)
+}
+
+// searchOrder memilih ORDER BY. Teksnya dari daftar tetap di kode, bukan
+// dari input user, jadi aman disambung ke SQL. id selalu terakhir supaya
+// urutan pasti walau nilainya sama, dan halaman berikutnya tidak dobel.
+func searchOrder(sort SearchSort) string {
+	switch sort {
+	case SortNewest:
+		// SYS_EXTRACT_UTC: sama dengan ListPublic, lihat penjelasannya di sana.
+		return "SYS_EXTRACT_UTC(v.processed_at) DESC, v.id DESC"
+	case SortMostViewed:
+		return "v.view_count DESC, v.id DESC"
+	case SortMostDanmaku:
+		return "v.danmaku_count DESC, v.view_count DESC, v.id DESC"
+	default:
+		return "s.score DESC, v.view_count DESC, v.id DESC"
 	}
-	byID := make(map[int64]videoRow, len(rows))
-	for _, row := range rows {
-		byID[row.ID] = row
+}
+
+// findInOrder mengambil video READY dengan id ini lalu menyusunnya sesuai
+// urutan ids. Id yang sudah tidak READY (misalnya dihapus di antara dua
+// query) dilewati saja.
+func (r *OracleRepository) findInOrder(ctx context.Context, ids []int64) ([]Video, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	videos := make([]Video, 0, len(hits))
-	for _, h := range hits {
-		// Video yang dihapus di antara dua query dilewati saja.
-		if row, ok := byID[h.VideoID]; ok {
-			videos = append(videos, row.toVideo())
+	found, err := r.FindReadyByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]Video, len(found))
+	for _, v := range found {
+		byID[v.ID] = v
+	}
+	videos := make([]Video, 0, len(ids))
+	for _, id := range ids {
+		if v, ok := byID[id]; ok {
+			videos = append(videos, v)
 		}
 	}
 	return videos, nil
+}
+
+// FindReadyByIDs mengambil video READY dengan id ini. GORM menambahkan
+// "deleted_at IS NULL" sendiri. Pemanggil membatasi ids paling banyak 51,
+// jauh di bawah batas 1000 nilai IN (...) di Oracle.
+func (r *OracleRepository) FindReadyByIDs(ctx context.Context, ids []int64) ([]Video, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []videoRow
+	if err := r.db.WithContext(ctx).Where("id IN ? AND status = ?", ids, StatusReady).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select videos by id: %w", err)
+	}
+	videos := make([]Video, len(rows))
+	for i, row := range rows {
+		videos[i] = row.toVideo()
+	}
+	return videos, nil
+}
+
+// ListPopularByOwner memakai index videos_owner_popular_ix (owner_id,
+// status, view_count, id), migrasi V16.
+func (r *OracleRepository) ListPopularByOwner(ctx context.Context, ownerID int64, offset, limit int) ([]Video, error) {
+	var rows []videoRow
+	err := r.db.WithContext(ctx).
+		Where("owner_id = ? AND status = ?", ownerID, StatusReady).
+		Order("view_count DESC, id DESC").Offset(offset).Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("select popular videos: %w", err)
+	}
+	videos := make([]Video, len(rows))
+	for i, row := range rows {
+		videos[i] = row.toVideo()
+	}
+	return videos, nil
+}
+
+// trendingRow adalah satu baris hasil query Trending. Aliasnya memakai
+// tanda kutip, sama seperti searchHit.
+type trendingRow struct {
+	VideoID int64 `gorm:"column:video_id"`
+	Views   int64 `gorm:"column:views"`
+}
+
+// TrendingVideos:
+//
+//	SELECT d.video_id AS "video_id", SUM(d.views) AS "views"
+//	  FROM video_daily_views d JOIN videos v ON v.id = d.video_id
+//	 WHERE d.view_date >= DATE '2026-11-05'
+//	   AND v.status = 'READY' AND v.deleted_at IS NULL [AND v.category = ?]
+//	 GROUP BY d.video_id
+//	 ORDER BY SUM(d.views) DESC, d.video_id DESC
+//	 FETCH FIRST 10 ROWS ONLY
+//
+// Bagian video_daily_views dibaca dari index video_daily_views_date_ix
+// (view_date, video_id, views), migrasi V16. TO_DATE dengan format tetap,
+// sama seperti query dasbor (stats_repository.go), supaya tidak bergantung
+// pada pengaturan NLS_DATE_FORMAT di session Oracle.
+func (r *OracleRepository) TrendingVideos(ctx context.Context, fromDay, category string, limit int) ([]TrendingHit, error) {
+	sql := `SELECT d.video_id AS "video_id", SUM(d.views) AS "views" ` +
+		"FROM video_daily_views d JOIN videos v ON v.id = d.video_id " +
+		"WHERE d.view_date >= TO_DATE(?, 'YYYY-MM-DD') AND v.status = ? AND v.deleted_at IS NULL "
+	args := []any{fromDay, StatusReady}
+	if category != "" {
+		sql += "AND v.category = ? "
+		args = append(args, category)
+	}
+	sql += "GROUP BY d.video_id HAVING SUM(d.views) > 0 " +
+		"ORDER BY SUM(d.views) DESC, d.video_id DESC FETCH FIRST ? ROWS ONLY"
+	args = append(args, limit)
+
+	var rows []trendingRow
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select trending: %w", err)
+	}
+	hits := make([]TrendingHit, len(rows))
+	for i, row := range rows {
+		hits[i] = TrendingHit{VideoID: row.VideoID, Views: row.Views}
+	}
+	return hits, nil
 }
 
 // ListUnindexed mengambil video yang search_indexed_at-nya masih NULL.

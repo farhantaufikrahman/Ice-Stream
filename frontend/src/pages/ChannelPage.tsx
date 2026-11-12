@@ -12,6 +12,7 @@ import { VideoGrid } from '../components/VideoGrid'
 import { useChannel } from '../hooks/useChannel'
 import { usePagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
+import { CHANNEL_SORTS, channelSortFromParam, withParam, type ChannelSort } from '../lib/discover'
 import { formatCount, formatDate, formatDuration, timeAgo } from '../lib/format'
 
 type Tab = 'video' | 'playlist' | 'tentang'
@@ -31,8 +32,9 @@ function tabFromParam(value: string | null): Tab {
  *
  * Bagian desain yang belum punya data di backend sengaja tidak
  * ditampilkan: jumlah video, total tayangan, total suka, tombol Kirim
- * pesan, tab Live, urutan Terpopuler, dan "Video unggulan"
- * (diganti video terbaru).
+ * pesan, tab Live, dan "Video unggulan" (diganti video terbaru).
+ * Urutan Terbaru/Terpopuler di tab Video ada sejak langkah 24a
+ * (?sort=popular di URL).
  */
 export function ChannelPage() {
   const { username = '' } = useParams()
@@ -56,7 +58,9 @@ export function ChannelPage() {
 
   const user = channel.user
   const name = user.display_name || user.username
+  const sort = channelSortFromParam(params.get('sort'))
   const pickTab = (t: Tab) => setParams(t === 'video' ? {} : { tab: t }, { replace: true })
+  const pickSort = (v: ChannelSort) => setParams((p) => withParam(p, 'sort', v, 'newest'), { replace: true })
 
   return (
     <div className="channel-page">
@@ -105,7 +109,7 @@ export function ChannelPage() {
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === 'video' && <ChannelVideos username={user.username} isOwn={isOwn} />}
+        {tab === 'video' && <ChannelVideos username={user.username} isOwn={isOwn} sort={sort} onSort={pickSort} />}
         {tab === 'playlist' && <ChannelPlaylists key={`${user.username}|${isOwn}`} username={user.username} isOwn={isOwn} />}
         {tab === 'tentang' && <ChannelAbout user={user} />}
       </div>
@@ -113,24 +117,69 @@ export function ChannelPage() {
   )
 }
 
-/** Tab Video: video terbaru dibuat besar, sisanya di grid. */
-function ChannelVideos({ username, isOwn }: { username: string; isOwn: boolean }) {
-  const feed = usePagedVideos(`channel:${username}`, (token, signal) => listChannelVideos(username, token, signal))
-  const [latest, ...rest] = feed.videos
-  const empty = isOwn ? 'Kamu belum punya video yang siap ditonton. Unggah video pertamamu!' : 'Kanal ini belum punya video.'
+interface ChannelVideosProps {
+  username: string
+  isOwn: boolean
+  sort: ChannelSort
+  onSort: (sort: ChannelSort) => void
+}
 
-  // Belum ada video sama sekali: cukup grid (yang menampilkan memuat, error, atau kosong).
-  if (!latest) return <VideoGrid feed={feed} empty={empty} hideOwner />
+/**
+ * Tab Video. Urutan Terbaru: video terbaru dibuat besar, sisanya di grid.
+ * Urutan Terpopuler: semua di grid, tayangan terbanyak dulu.
+ */
+function ChannelVideos({ username, isOwn, sort, onSort }: ChannelVideosProps) {
+  // sort ikut di key: ganti urutan = mulai lagi dari halaman pertama.
+  const feed = usePagedVideos(`channel:${username}|${sort}`, (token, signal) => listChannelVideos(username, token, signal, sort))
+  const empty = isOwn ? 'Kamu belum punya video yang siap ditonton. Unggah video pertamamu!' : 'Kanal ini belum punya video.'
+  const [latest, ...rest] = feed.videos
+
+  // Belum ada video sama sekali: cukup grid (yang menampilkan memuat, error,
+  // atau kosong), tanpa tombol urutan yang tidak berguna.
+  if (feed.videos.length === 0) return <VideoGrid feed={feed} empty={empty} hideOwner />
+
+  const sortButtons = (
+    <div className="sort-toggle" role="group" aria-label="Urutan video">
+      {CHANNEL_SORTS.map((s) => (
+        <button
+          key={s.value}
+          type="button"
+          aria-pressed={sort === s.value}
+          className={sort === s.value ? 'filter-btn is-active' : 'filter-btn'}
+          onClick={() => onSort(s.value)}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (sort === 'popular') {
+    return (
+      <section className="channel-section">
+        <div className="section-head">
+          <h2 className="section-title">Video terpopuler</h2>
+          {sortButtons}
+        </div>
+        <VideoGrid feed={feed} empty="" hideOwner />
+      </section>
+    )
+  }
 
   return (
     <div className="channel-videos">
       <LatestVideo video={latest} />
-      {(rest.length > 0 || feed.hasMore || feed.error) && (
-        <section className="channel-section">
+      <section className="channel-section">
+        <div className="section-head">
           <h2 className="section-title">Video lainnya</h2>
+          {sortButtons}
+        </div>
+        {rest.length === 0 && !feed.hasMore && !feed.error ? (
+          <p className="muted">Belum ada video lain.</p>
+        ) : (
           <VideoGrid feed={{ ...feed, videos: rest }} empty="" hideOwner />
-        </section>
-      )}
+        )}
+      </section>
     </div>
   )
 }

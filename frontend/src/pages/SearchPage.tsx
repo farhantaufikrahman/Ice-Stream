@@ -5,9 +5,11 @@ import type { ChannelResult, Playlist } from '../api/types'
 import { ErrorBox } from '../components/ErrorBox'
 import { PlaylistCard } from '../components/playlist/PlaylistCard'
 import { ChannelResultCard } from '../components/search/ChannelResultCard'
+import { SearchFilters } from '../components/search/SearchFilters'
 import { VideoGrid } from '../components/VideoGrid'
 import { usePagedList, type PagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
+import { durationFromParam, searchSortFromParam, withParam, type DurationFilter, type SearchSort } from '../lib/discover'
 
 type Tab = 'semua' | 'video' | 'kreator' | 'playlist'
 
@@ -25,14 +27,18 @@ function tabFromParam(value: string | null): Tab {
 /**
  * Halaman pencarian /search?q=...&tab=... (desain Search.dc.html).
  *
- * Tab Semua: kreator paling cocok di atas, lalu video. Tab Live, jumlah
- * hasil per tab, urutan, dan filter durasi di desain belum ditampilkan
- * karena backend belum mendukungnya.
+ * Tab Semua: kreator paling cocok di atas, lalu video. Urutan dan filter
+ * durasi (langkah 24a) berlaku untuk video, jadi hanya tampil di tab Semua
+ * dan Video, dan disimpan di URL (?sort=views&duration=short). Tab Live
+ * dan jumlah hasil per tab di desain belum ditampilkan karena backend
+ * belum mendukungnya.
  */
 export function SearchPage() {
   const [params, setParams] = useSearchParams()
   const q = (params.get('q') ?? '').trim()
   const tab = tabFromParam(params.get('tab'))
+  const sort = searchSortFromParam(params.get('sort'))
+  const duration = durationFromParam(params.get('duration'))
 
   if (!q) {
     return (
@@ -54,6 +60,11 @@ export function SearchPage() {
       { replace: true },
     )
 
+  const setParam = (name: string, value: string, defaultValue = '') =>
+    setParams((p) => withParam(p, name, value, defaultValue), { replace: true })
+  const showFilters = tab === 'semua' || tab === 'video'
+  const filters = { sort, duration }
+
   return (
     <div className="search-page">
       <h1 className="page-title">Hasil untuk "{q}"</h1>
@@ -73,10 +84,18 @@ export function SearchPage() {
           </button>
         ))}
       </div>
+      {showFilters && (
+        <SearchFilters
+          sort={sort}
+          duration={duration}
+          onSort={(v: SearchSort) => setParam('sort', v, 'relevance')}
+          onDuration={(v: DurationFilter) => setParam('duration', v)}
+        />
+      )}
       {/* key: hasil dimuat ulang dari halaman pertama saat kata kunci atau tab berubah. */}
       <div role="tabpanel" id="search-panel" aria-labelledby={`search-tab-${tab}`} className="search-panel" key={`${tab}|${q}`}>
-        {tab === 'semua' && <AllResults q={q} />}
-        {tab === 'video' && <VideoResults q={q} />}
+        {tab === 'semua' && <AllResults q={q} filters={filters} />}
+        {tab === 'video' && <VideoResults q={q} filters={filters} />}
         {tab === 'kreator' && <ChannelResults q={q} />}
         {tab === 'playlist' && <PlaylistResults q={q} />}
       </div>
@@ -84,20 +103,27 @@ export function SearchPage() {
   )
 }
 
-function VideoResults({ q }: { q: string }) {
-  const feed = usePagedVideos(`search:${q}`, (token, signal) => searchVideos(q, token, signal))
-  return <VideoGrid feed={feed} empty="Tidak ada video yang cocok." />
+interface VideoFilters {
+  sort: SearchSort
+  duration: DurationFilter
+}
+
+function VideoResults({ q, filters: { sort, duration } }: { q: string; filters: VideoFilters }) {
+  // sort dan duration ikut di key: ganti urutan = mulai lagi dari halaman 1.
+  const feed = usePagedVideos(`search:${q}|${sort}|${duration}`, (token, signal) => searchVideos(q, token, signal, sort, duration))
+  const empty = duration ? 'Tidak ada video yang cocok dengan durasi ini.' : 'Tidak ada video yang cocok.'
+  return <VideoGrid feed={feed} empty={empty} />
 }
 
 /** Satu kreator paling cocok (seperti desain), lalu daftar video. */
-function AllResults({ q }: { q: string }) {
+function AllResults({ q, filters }: { q: string; filters: VideoFilters }) {
   const top = usePagedList<ChannelResult>((token, signal) =>
     searchChannels(q, token, signal, 1).then((p) => ({ items: p.channels, next: '' })),
   )
   return (
     <>
       {top.items[0] && <ChannelResultCard channel={top.items[0]} />}
-      <VideoResults q={q} />
+      <VideoResults q={q} filters={filters} />
     </>
   )
 }

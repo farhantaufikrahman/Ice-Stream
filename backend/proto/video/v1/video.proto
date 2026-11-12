@@ -131,6 +131,48 @@ service VideoService {
   // Playlist tanpa video READY tidak ikut. Urutan: judul yang diawali kata
   // pertama lebih dulu, lalu yang paling baru diperbarui.
   rpc SearchPlaylists(SearchPlaylistsRequest) returns (SearchPlaylistsResponse);
+
+  // ListTrendingVideos mengambil video READY dengan tayangan terbanyak dalam
+  // 7 hari terakhir, termasuk hari ini (tanggal WIB). Langkah 24a, bagian
+  // Trending di beranda. Video tanpa tayangan dalam 7 hari tidak ikut.
+  rpc ListTrendingVideos(ListTrendingVideosRequest) returns (ListTrendingVideosResponse);
+}
+
+// Urutan hasil pencarian video (desain Search: "Urutkan").
+enum SearchSort {
+  // Sama dengan SEARCH_SORT_RELEVANCE.
+  SEARCH_SORT_UNSPECIFIED = 0;
+  // Skor kecocokan kata, lalu tayangan terbanyak.
+  SEARCH_SORT_RELEVANCE = 1;
+  // Paling baru tayang lebih dulu.
+  SEARCH_SORT_NEWEST = 2;
+  // Tayangan sepanjang masa terbanyak lebih dulu.
+  SEARCH_SORT_MOST_VIEWED = 3;
+  // Danmaku terbanyak lebih dulu.
+  SEARCH_SORT_MOST_DANMAKU = 4;
+}
+
+// Filter durasi pencarian (desain Search: "Durasi").
+enum DurationFilter {
+  // Semua durasi.
+  DURATION_FILTER_UNSPECIFIED = 0;
+  // Kurang dari 10 menit.
+  DURATION_FILTER_SHORT = 1;
+  // 10 sampai 30 menit.
+  DURATION_FILTER_MEDIUM = 2;
+  // Lebih dari 30 menit.
+  DURATION_FILTER_LONG = 3;
+}
+
+// Urutan ListVideos.
+enum VideoSort {
+  // Sama dengan VIDEO_SORT_NEWEST.
+  VIDEO_SORT_UNSPECIFIED = 0;
+  // Paling baru tayang lebih dulu (feed biasa).
+  VIDEO_SORT_NEWEST = 1;
+  // Tayangan terbanyak lebih dulu (tab Terpopuler di halaman channel).
+  // Hanya untuk tepat satu pemilik (owner_id), tanpa category.
+  VIDEO_SORT_POPULAR = 2;
 }
 
 enum VideoStatus {
@@ -184,6 +226,8 @@ message Video {
   // Tag tanpa "#", sesuai urutan yang diketik kreator, misalnya
   // ["esKrim", "anakKos"]. Maksimal 10.
   repeated string tags = 20;
+  // Jumlah danmaku (langkah 24a).
+  int64 danmaku_count = 21;
 }
 
 message CreateUploadRequest {
@@ -277,6 +321,8 @@ message ListVideosRequest {
   repeated int64 owner_ids = 4;
   // Jika diisi, hanya video kategori ini (chip di beranda). Kosong = semua.
   string category = 5;
+  // Bawaan: terbaru. Token halaman berbeda untuk setiap urutan.
+  VideoSort sort = 6;
 }
 
 message ListVideosResponse {
@@ -293,6 +339,9 @@ message SearchVideosRequest {
   int32 page_size = 2;
   // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
   string page_token = 3;
+  // Halaman berikutnya harus memakai sort dan duration yang sama.
+  SearchSort sort = 4;
+  DurationFilter duration = 5;
 }
 
 message SearchVideosResponse {
@@ -690,4 +739,21 @@ message SearchPlaylistsResponse {
   repeated Playlist playlists = 1;
   // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
   string next_page_token = 2;
+}
+
+message ListTrendingVideosRequest {
+  // Jika diisi, hanya video kategori ini. Kosong = semua kategori.
+  string category = 1;
+  // Jumlah maksimal (1 sampai 50, default 10).
+  int32 limit = 2;
+}
+
+message ListTrendingVideosResponse {
+  repeated TrendingVideo videos = 1;
+}
+
+message TrendingVideo {
+  Video video = 1;
+  // Tayangan 7 hari terakhir, angka yang dipakai untuk mengurutkan.
+  int64 recent_views = 2;
 }

@@ -231,6 +231,11 @@ func (h *userHandler) listVideos(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// ?sort=popular: tab Terpopuler (langkah 24a). Bawaan: terbaru.
+	sort, ok := enumQuery(c, "sort", channelSortParams, "newest, popular")
+	if !ok {
+		return
+	}
 	p, ok := h.lookup(c)
 	if !ok {
 		return
@@ -242,6 +247,7 @@ func (h *userHandler) listVideos(c *gin.Context) {
 		OwnerId:   p.GetId(),
 		PageSize:  pageSize,
 		PageToken: c.Query("page_token"),
+		Sort:      sort,
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)

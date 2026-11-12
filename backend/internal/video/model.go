@@ -71,6 +71,8 @@ type Video struct {
 	CommentCount int64
 	// LikeCount adalah jumlah like (lihat Service.LikeVideo).
 	LikeCount int64
+	// DanmakuCount adalah jumlah danmaku (migrasi V16).
+	DanmakuCount int64
 	// Category kosong jika video tidak punya kategori (lihat category.go).
 	Category string
 	// Tags sesuai urutan yang diketik kreator, tanpa "#".

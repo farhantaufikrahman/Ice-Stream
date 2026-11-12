@@ -91,8 +91,25 @@ func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequ
 	if req.GetOwnerId() > 0 {
 		owners = append([]int64{req.GetOwnerId()}, owners...)
 	}
-	filter := FeedFilter{OwnerIDs: owners, Category: req.GetCategory()}
-	videos, next, err := s.svc.ListVideos(ctx, filter, int(req.GetPageSize()), req.GetPageToken())
+	var (
+		videos []Video
+		next   string
+		err    error
+	)
+	switch req.GetSort() {
+	case videov1.VideoSort_VIDEO_SORT_UNSPECIFIED, videov1.VideoSort_VIDEO_SORT_NEWEST:
+		filter := FeedFilter{OwnerIDs: owners, Category: req.GetCategory()}
+		videos, next, err = s.svc.ListVideos(ctx, filter, int(req.GetPageSize()), req.GetPageToken())
+	case videov1.VideoSort_VIDEO_SORT_POPULAR:
+		// Index videos_owner_popular_ix hanya cocok untuk satu pemilik.
+		if len(uniquePositive(owners)) != 1 || req.GetCategory() != "" {
+			err = &ValidationError{"sort", "POPULAR hanya untuk satu owner_id, tanpa category"}
+			break
+		}
+		videos, next, err = s.svc.ListPopular(ctx, owners[0], int(req.GetPageSize()), req.GetPageToken())
+	default:
+		err = &ValidationError{"sort", "tidak dikenal"}
+	}
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -104,7 +121,16 @@ func (s *GRPCServer) ListVideos(ctx context.Context, req *videov1.ListVideosRequ
 }
 
 func (s *GRPCServer) SearchVideos(ctx context.Context, req *videov1.SearchVideosRequest) (*videov1.SearchVideosResponse, error) {
-	videos, next, err := s.svc.SearchVideos(ctx, req.GetQuery(), int(req.GetPageSize()), req.GetPageToken())
+	opts := SearchOptions{Sort: searchSorts[req.GetSort()], Duration: durationFilters[req.GetDuration()]}
+	// Nilai enum yang tidak dikenal (client lebih baru dari server) ditolak,
+	// bukan diam-diam dianggap "Paling relevan".
+	if _, ok := searchSorts[req.GetSort()]; !ok {
+		return nil, s.toStatus(ctx, &ValidationError{"sort", "tidak dikenal"})
+	}
+	if _, ok := durationFilters[req.GetDuration()]; !ok {
+		return nil, s.toStatus(ctx, &ValidationError{"duration", "tidak dikenal"})
+	}
+	videos, next, err := s.svc.SearchVideos(ctx, req.GetQuery(), opts, int(req.GetPageSize()), req.GetPageToken())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -305,6 +331,7 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 	}
 	pv.CommentCount = v.CommentCount
 	pv.LikeCount = v.LikeCount
+	pv.DanmakuCount = v.DanmakuCount
 	pv.DurationMs = v.DurationMs
 	pv.Renditions = v.Renditions
 	pv.FailureReason = v.FailureReason
@@ -362,6 +389,33 @@ func (s *GRPCServer) ListWatchLater(ctx context.Context, req *videov1.ListWatchL
 			Video:   s.toProtoVideo(e.Video),
 			AddedAt: timestamppb.New(e.AddedAt),
 		})
+	}
+	return resp, nil
+}
+
+var searchSorts = map[videov1.SearchSort]SearchSort{
+	videov1.SearchSort_SEARCH_SORT_UNSPECIFIED:  SortRelevance,
+	videov1.SearchSort_SEARCH_SORT_RELEVANCE:    SortRelevance,
+	videov1.SearchSort_SEARCH_SORT_NEWEST:       SortNewest,
+	videov1.SearchSort_SEARCH_SORT_MOST_VIEWED:  SortMostViewed,
+	videov1.SearchSort_SEARCH_SORT_MOST_DANMAKU: SortMostDanmaku,
+}
+
+var durationFilters = map[videov1.DurationFilter]DurationFilter{
+	videov1.DurationFilter_DURATION_FILTER_UNSPECIFIED: DurationAny,
+	videov1.DurationFilter_DURATION_FILTER_SHORT:       DurationShort,
+	videov1.DurationFilter_DURATION_FILTER_MEDIUM:      DurationMedium,
+	videov1.DurationFilter_DURATION_FILTER_LONG:        DurationLong,
+}
+
+func (s *GRPCServer) ListTrendingVideos(ctx context.Context, req *videov1.ListTrendingVideosRequest) (*videov1.ListTrendingVideosResponse, error) {
+	trending, err := s.svc.ListTrending(ctx, req.GetCategory(), int(req.GetLimit()))
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &videov1.ListTrendingVideosResponse{Videos: make([]*videov1.TrendingVideo, len(trending))}
+	for i, t := range trending {
+		resp.Videos[i] = &videov1.TrendingVideo{Video: s.toProtoVideo(t.Video), RecentViews: t.RecentViews}
 	}
 	return resp, nil
 }

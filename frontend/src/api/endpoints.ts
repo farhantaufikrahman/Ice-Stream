@@ -27,6 +27,7 @@ import type {
   Profile,
   StatsDays,
   SubscriptionResult,
+  TrendingList,
   Video,
   VideoDetail,
   VideoPage,
@@ -34,6 +35,7 @@ import type {
   WatchLaterPage,
   WatchLaterResult,
 } from './types'
+import type { ChannelSort, DurationFilter, SearchSort } from '../lib/discover'
 
 // ---------- Auth ----------
 
@@ -79,8 +81,17 @@ export function listVideos(pageToken: string, signal?: AbortSignal, category?: s
   return apiRequest<VideoPage>(`/videos?${filter}${pageQuery(pageToken)}`, { signal })
 }
 
-export function searchVideos(q: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
+/** Pencarian video. sort dan duration hanya dikirim jika bukan bawaan (langkah 24a). */
+export function searchVideos(
+  q: string,
+  pageToken: string,
+  signal?: AbortSignal,
+  sort: SearchSort = 'relevance',
+  duration: DurationFilter = '',
+): Promise<VideoPage> {
   const params = new URLSearchParams({ q })
+  if (sort !== 'relevance') params.set('sort', sort)
+  if (duration) params.set('duration', duration)
   return apiRequest<VideoPage>(`/search/videos?${params}&${pageQuery(pageToken)}`, { signal })
 }
 
@@ -271,9 +282,17 @@ export function getChannel(username: string, signal?: AbortSignal): Promise<Chan
   return apiRequest<ChannelDetail>(`/users/${encodeURIComponent(username)}`, { auth: 'optional', signal })
 }
 
-/** Video READY milik kanal, terbaru dulu. */
-export function listChannelVideos(username: string, pageToken: string, signal?: AbortSignal): Promise<VideoPage> {
-  return apiRequest<VideoPage>(`/users/${encodeURIComponent(username)}/videos?${pageQuery(pageToken)}`, { signal })
+/** Video READY milik kanal: terbaru dulu, atau tayangan terbanyak dulu (sort "popular", langkah 24a). */
+export function listChannelVideos(username: string, pageToken: string, signal?: AbortSignal, sort: ChannelSort = 'newest'): Promise<VideoPage> {
+  const filter = sort === 'popular' ? 'sort=popular&' : ''
+  return apiRequest<VideoPage>(`/users/${encodeURIComponent(username)}/videos?${filter}${pageQuery(pageToken)}`, { signal })
+}
+
+/** Trending: tayangan 7 hari terakhir terbanyak. category "" = semua kategori. limit maksimal 50. */
+export function listTrending(category: string, limit: number, signal?: AbortSignal): Promise<TrendingList> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (category) params.set('category', category)
+  return apiRequest<TrendingList>(`/trending/videos?${params}`, { signal })
 }
 
 /** Ikuti (true) atau berhenti mengikuti (false) sebuah kanal. Aman diulang. */
