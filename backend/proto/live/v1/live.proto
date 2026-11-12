@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+// Kontrak gRPC LiveService: siaran langsung (langkah 25a). Berjalan di
+// proses yang sama dengan VideoService (cmd/video, port 50052) dan memakai
+// schema VIDEO_SVC. Hanya dipanggil oleh API gateway; requester_id sudah
+// diverifikasi gateway dari access token.
+//
+// Video siaran TIDAK lewat gRPC. Kreator mengirim video ke MediaMTX (RTMP
+// dari OBS), dan penonton memutar HLS langsung dari MediaMTX. LiveService
+// hanya mengurus stream key, judul, dan status siaran (LIVE / ENDED), yang
+// dibaca dari API MediaMTX setiap beberapa detik.
+package live.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service LiveService {
+  // GetMyChannel mengambil pengaturan siaran milik requester. Jika belum
+  // pernah dibuka, pengaturan baru dibuat (judul default, tanpa stream key).
+  rpc GetMyChannel(GetMyChannelRequest) returns (GetMyChannelResponse);
+  // UpdateMyChannel mengubah judul dan kategori. Jika requester sedang
+  // live, siaran yang sedang berjalan ikut berubah. INVALID_ARGUMENT jika
+  // judul kosong, lebih dari 100 karakter, atau kategori tidak dikenal.
+  rpc UpdateMyChannel(UpdateMyChannelRequest) returns (UpdateMyChannelResponse);
+  // ResetStreamKey membuat stream key baru. Key lama langsung tidak
+  // berlaku untuk siaran berikutnya. Key hanya dikirim di jawaban ini dan
+  // tidak bisa diminta lagi (yang disimpan hanya hash-nya).
+  rpc ResetStreamKey(ResetStreamKeyRequest) returns (ResetStreamKeyResponse);
+  // ListLiveStreams mengambil siaran yang sedang LIVE, terbaru dulu.
+  // Boleh dipanggil tanpa login.
+  rpc ListLiveStreams(ListLiveStreamsRequest) returns (ListLiveStreamsResponse);
+  // GetLiveStream mengambil satu siaran (LIVE atau ENDED). NOT_FOUND jika
+  // tidak ada. Boleh dipanggil tanpa login.
+  rpc GetLiveStream(GetLiveStreamRequest) returns (GetLiveStreamResponse);
+}
+
+enum LiveStatus {
+  LIVE_STATUS_UNSPECIFIED = 0;
+  LIVE_STATUS_LIVE = 1;
+  LIVE_STATUS_ENDED = 2;
+}
+
+message LiveStream {
+  int64 id = 1;
+  int64 owner_id = 2;
+  string title = 3;
+  // Kosong = tanpa kategori.
+  string category = 4;
+  LiveStatus status = 5;
+  google.protobuf.Timestamp started_at = 6;
+  // Tidak diisi selama masih LIVE.
+  google.protobuf.Timestamp ended_at = 7;
+  // Alamat HLS untuk penonton. Kosong jika siaran sudah ENDED.
+  string playback_url = 8;
+  // Penonton yang sedang memutar (satu sesi HLS = satu penonton). 0 jika
+  // sudah ENDED.
+  int64 viewer_count = 9;
+  // Jumlah penonton tertinggi selama siaran.
+  int64 peak_viewers = 10;
+}
+
+message LiveChannel {
+  int64 owner_id = 1;
+  string title = 2;
+  string category = 3;
+  // Alamat server RTMP untuk kolom "Server" di OBS, misalnya
+  // "rtmp://localhost:1935/live".
+  string ingest_url = 4;
+  // false jika kreator belum pernah membuat stream key.
+  bool has_stream_key = 5;
+  google.protobuf.Timestamp stream_key_created_at = 6;
+  // Siaran yang sedang LIVE milik kreator ini. Tidak diisi jika tidak live.
+  LiveStream current = 7;
+}
+
+message GetMyChannelRequest {
+  int64 requester_id = 1;
+}
+
+message GetMyChannelResponse {
+  LiveChannel channel = 1;
+}
+
+message UpdateMyChannelRequest {
+  int64 requester_id = 1;
+  string title = 2;
+  // Kosong = tanpa kategori.
+  string category = 3;
+}
+
+message UpdateMyChannelResponse {
+  LiveChannel channel = 1;
+}
+
+message ResetStreamKeyRequest {
+  int64 requester_id = 1;
+}
+
+message ResetStreamKeyResponse {
+  LiveChannel channel = 1;
+  // Isi kolom "Stream Key" di OBS. Hanya muncul sekali.
+  string stream_key = 2;
+}
+
+message ListLiveStreamsRequest {
+  // 1 sampai 50. 0 = 20.
+  int32 limit = 1;
+  // Opsional: hanya siaran dengan kategori ini.
+  string category = 2;
+  // Opsional: hanya siaran milik user-user ini (paling banyak 100).
+  repeated int64 owner_ids = 3;
+}
+
+message ListLiveStreamsResponse {
+  repeated LiveStream streams = 1;
+}
+
+message GetLiveStreamRequest {
+  int64 stream_id = 1;
+}
+
+message GetLiveStreamResponse {
+  LiveStream stream = 1;
+}

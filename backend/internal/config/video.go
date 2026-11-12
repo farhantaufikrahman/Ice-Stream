@@ -39,6 +39,30 @@ type VideoConfig struct {
 	// ViewDedupWindow adalah jarak waktu minimal agar penonton yang sama
 	// dihitung sebagai view baru untuk video yang sama.
 	ViewDedupWindow time.Duration
+	// Live adalah pengaturan siaran langsung (langkah 25a).
+	Live LiveConfig
+}
+
+// LiveConfig adalah pengaturan LiveService, yang berjalan di proses
+// VideoService dan berbicara dengan MediaMTX.
+type LiveConfig struct {
+	// MediaMTXAPIURL adalah alamat Control API MediaMTX, misalnya
+	// "http://mediamtx:9997". Dibaca setiap PollInterval.
+	MediaMTXAPIURL string
+	// HookAddr adalah alamat server HTTP kecil yang menjawab hook auth
+	// MediaMTX ("boleh siaran?"), misalnya ":8090". Tidak dibuka ke luar
+	// cluster.
+	HookAddr string
+	// IngestURL adalah alamat RTMP yang diisi kreator di OBS, misalnya
+	// "rtmp://localhost:1935/live".
+	IngestURL string
+	// PlaybackURL adalah alamat publik HLS MediaMTX, misalnya
+	// "http://live.ice-stream.localhost:4000".
+	PlaybackURL string
+	// PollInterval adalah jarak antar pembacaan status dari MediaMTX.
+	PollInterval time.Duration
+	// Grace adalah batas tenggang sebelum siaran yang hilang ditutup.
+	Grace time.Duration
 }
 
 // StorageConfig berisi pengaturan object storage yang kompatibel S3
@@ -89,6 +113,14 @@ func LoadVideo() (VideoConfig, error) {
 	if err != nil {
 		return VideoConfig{}, err
 	}
+	livePoll, err := getDuration("LIVE_POLL_INTERVAL", 5*time.Second)
+	if err != nil {
+		return VideoConfig{}, err
+	}
+	liveGrace, err := getDuration("LIVE_GRACE", 15*time.Second)
+	if err != nil {
+		return VideoConfig{}, err
+	}
 	db, err := loadDB("video_svc")
 	if err != nil {
 		return VideoConfig{}, err
@@ -108,6 +140,14 @@ func LoadVideo() (VideoConfig, error) {
 		UploadURLTTL:    uploadTTL,
 		PlaybackURLTTL:  playbackTTL,
 		ViewDedupWindow: viewWindow,
+		Live: LiveConfig{
+			MediaMTXAPIURL: strings.TrimRight(getString("MEDIAMTX_API_URL", "http://localhost:9997"), "/"),
+			HookAddr:       ":" + getString("LIVE_HOOK_PORT", "8090"),
+			IngestURL:      strings.TrimRight(getString("LIVE_INGEST_URL", "rtmp://localhost:1935/live"), "/"),
+			PlaybackURL:    strings.TrimRight(getString("LIVE_PLAYBACK_URL", "http://localhost:8888"), "/"),
+			PollInterval:   livePoll,
+			Grace:          liveGrace,
+		},
 	}
 	if err := cfg.validate(); err != nil {
 		return VideoConfig{}, err
@@ -149,7 +189,34 @@ func (c VideoConfig) validate() error {
 	if err := validMediaURL(c.MediaPublicURL, "/videos"); err != nil {
 		return err
 	}
+	if err := c.Live.validate(); err != nil {
+		return err
+	}
 	return c.DB.validate()
+}
+
+func (l LiveConfig) validate() error {
+	for key, v := range map[string]string{"MEDIAMTX_API_URL": l.MediaMTXAPIURL, "LIVE_PLAYBACK_URL": l.PlaybackURL} {
+		u, err := url.Parse(v)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" || u.RawQuery != "" {
+			return fmt.Errorf("%s harus berupa alamat http(s) tanpa path, dapat %q", key, v)
+		}
+	}
+	if u, err := url.Parse(l.IngestURL); err != nil || (u.Scheme != "rtmp" && u.Scheme != "rtmps") || u.Host == "" {
+		return fmt.Errorf("LIVE_INGEST_URL harus berupa URL seperti rtmp://localhost:1935/live, dapat %q", l.IngestURL)
+	}
+	if err := validPort("LIVE_HOOK_PORT", strings.TrimPrefix(l.HookAddr, ":")); err != nil {
+		return err
+	}
+	if l.PollInterval < time.Second || l.PollInterval > time.Minute {
+		return fmt.Errorf("LIVE_POLL_INTERVAL harus antara 1s dan 1m, dapat %s", l.PollInterval)
+	}
+	// Batas tenggang harus lebih lama dari jarak pembacaan, kalau tidak
+	// siaran bisa ditutup di antara dua pembacaan.
+	if l.Grace < 2*l.PollInterval || l.Grace > 10*time.Minute {
+		return fmt.Errorf("LIVE_GRACE harus minimal 2x LIVE_POLL_INTERVAL dan maksimal 10m, dapat %s", l.Grace)
+	}
+	return nil
 }
 
 // loadStorage membaca pengaturan object storage (STORAGE_*). defaultBucket

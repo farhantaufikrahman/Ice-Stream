@@ -1,0 +1,84 @@
+# MediaMTX (https://mediamtx.org): server media open source yang ditulis
+# dengan Go. Menerima siaran RTMP dari OBS dan membagikannya sebagai HLS.
+# Video tidak pernah melewati gateway atau VideoService.
+#
+# Padanannya: node-media-server (Node.js), Red5 / Ant Media Server (Java),
+# atau nginx-rtmp-module. Layanan berbayar: Mux, Amazon IVS, Cloudflare
+# Stream.
+#
+# replicas: 1. Satu siaran harus diterima satu pod MediaMTX, jadi menambah
+# replika butuh pengaturan lain (misalnya satu MediaMTX per wilayah).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  # Pod lama dimatikan dulu sebelum pod baru dibuat, supaya port 1935
+  # (LoadBalancer) tidak dipakai dua pod sekaligus saat update.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mediamtx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mediamtx
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      securityContext:
+        # Image resmi berjalan sebagai root jika tidak diatur. MediaMTX
+        # tidak butuh root (semua port di atas 1024).
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mediamtx
+          image: bluenviron/mediamtx:1.21.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: rtmp
+              containerPort: 1935
+            - name: hls
+              containerPort: 8888
+            - name: api
+              containerPort: 9997
+          readinessProbe:
+            httpGet:
+              path: /v3/paths/list
+              port: api
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: rtmp
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              # Satu siaran 720p memakai sekitar beberapa puluh MB untuk
+              # potongan HLS di memori.
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /mediamtx.yml
+              subPath: mediamtx.yml
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: mediamtx-config

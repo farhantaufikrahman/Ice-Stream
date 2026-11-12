@@ -1,0 +1,21 @@
+# Alamat MediaMTX di dalam cluster:
+#   mediamtx:8888  HLS (diteruskan Gateway, lihat httproute.yaml)
+#   mediamtx:9997  Control API (hanya untuk VideoService, tidak ada HTTPRoute)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: mediamtx
+  ports:
+    - name: hls
+      port: 8888
+      targetPort: hls
+    - name: api
+      port: 9997
+      targetPort: api

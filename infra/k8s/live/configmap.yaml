@@ -1,0 +1,62 @@
+# Konfigurasi MediaMTX, server media untuk siaran langsung (langkah 25a).
+# Isi file ini dipasang sebagai /mediamtx.yml di dalam container.
+# Semua pilihan lengkap: https://mediamtx.org/docs/references/configuration-file
+#
+# Alurnya:
+#   OBS --RTMP :1935--> MediaMTX --HLS :8888--> browser penonton
+#                          |
+#                          +-- "boleh siaran?" --> VideoService :8090 (hook)
+#                          +-- Control API :9997 <-- VideoService (status, penonton)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediamtx-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+data:
+  mediamtx.yml: |
+    logLevel: info
+
+    # Setiap kali OBS mulai mengirim video, MediaMTX bertanya ke VideoService
+    # apakah stream key-nya benar. Jawaban 2xx = boleh.
+    authMethod: http
+    authHTTPAddress: http://video:8090/mediamtx/auth
+    # Aksi di bawah TIDAK ditanyakan ke VideoService (selalu boleh):
+    # - read/playback: siaran bisa ditonton siapa saja, dan penonton tidak
+    #   membebani Oracle;
+    # - api/metrics: port 9997/9998 hanya ada di dalam cluster (Service
+    #   mediamtx), tidak ada HTTPRoute ke sana.
+    authHTTPExclude:
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+
+    # Control API untuk VideoService (GET /v3/paths/list).
+    api: yes
+    apiAddress: :9997
+
+    # Hanya RTMP (dari OBS) dan HLS (ke browser) yang dipakai sekarang.
+    # Siaran dari browser (WebRTC) menyusul di langkah 25b.
+    rtmp: yes
+    rtmpAddress: :1935
+    hls: yes
+    hlsAddress: :8888
+    # Browser di alamat ini boleh memutar HLS (CORS).
+    hlsAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000"]
+    rtsp: no
+    srt: no
+    webrtc: no
+    moq: no
+
+    pathDefaults:
+      # Jika stream sudah berjalan, publisher kedua dengan key yang sama
+      # ditolak (bukan menggantikan yang pertama).
+      overridePublisher: no
+
+    paths:
+      # Hanya nama "live/<id user>" yang diterima, sama dengan
+      # livestream.PathFor di backend.
+      "~^live/[1-9][0-9]{0,18}$": {}
