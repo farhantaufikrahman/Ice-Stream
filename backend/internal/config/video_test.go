@@ -46,12 +46,14 @@ func TestLoadVideoDefaults(t *testing.T) {
 	assert.Equal(t, "http://localhost:9000/videos", cfg.MediaPublicURL)
 	// Tanpa pengaturan: MediaMTX berjalan di laptop dengan port bawaannya.
 	assert.Equal(t, LiveConfig{
-		MediaMTXAPIURL: "http://localhost:9997",
-		HookAddr:       ":8090",
-		IngestURL:      "rtmp://localhost:1935/live",
-		PlaybackURL:    "http://localhost:8888",
-		PollInterval:   5 * time.Second,
-		Grace:          15 * time.Second,
+		MediaMTXAPIURL:  "http://localhost:9997",
+		HookAddr:        ":8090",
+		IngestURL:       "rtmp://localhost:1935/live",
+		PlaybackURL:     "http://localhost:8888",
+		WHIPURL:         "http://localhost:8889",
+		PublishTokenTTL: 5 * time.Minute,
+		PollInterval:    5 * time.Second,
+		Grace:           15 * time.Second,
 	}, cfg.Live)
 }
 

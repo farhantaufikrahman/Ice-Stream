@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ShareDialog } from './ShareDialog'
 
 function renderDialog(currentSeconds: number) {
-  render(<ShareDialog videoId="42" title="Bikin gelato" currentSeconds={currentSeconds} onClose={vi.fn()} />)
+  render(<ShareDialog target={{ videoId: '42', currentSeconds }} title="Bikin gelato" onClose={vi.fn()} />)
   return screen.getByLabelText('Tautan') as HTMLInputElement
 }
 
@@ -21,6 +21,13 @@ describe('ShareDialog', () => {
 
   it('pilihan waktu mulai tidak ada jika video belum diputar', () => {
     renderDialog(0)
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('siaran langsung: tautan /live tanpa pilihan waktu mulai', () => {
+    render(<ShareDialog target={{ liveId: '3' }} title="Ngoding bareng" onClose={vi.fn()} />)
+    expect(screen.getByRole('dialog', { name: 'Bagikan siaran' })).toBeInTheDocument()
+    expect((screen.getByLabelText('Tautan') as HTMLInputElement).value).toBe(`${window.location.origin}/live/3`)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 

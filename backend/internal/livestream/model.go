@@ -32,6 +32,10 @@ var (
 	// ErrForbidden: stream key salah atau path tidak dikenal. Dipakai
 	// hook MediaMTX, tidak pernah sampai ke gateway.
 	ErrForbidden = errors.New("tidak boleh siaran")
+	// ErrStreamEnded: chat dikirim ke siaran yang sudah selesai.
+	ErrStreamEnded = errors.New("siaran sudah selesai")
+	// ErrRateLimited: user mengirim chat lebih cepat dari mode lambat.
+	ErrRateLimited = errors.New("tunggu sebentar sebelum mengirim pesan lagi")
 )
 
 // Status siaran, sama dengan CHECK constraint live_streams_status_ck.
@@ -53,6 +57,10 @@ type Channel struct {
 	// StreamKeyHash kosong jika kreator belum pernah membuat stream key.
 	StreamKeyHash      string
 	StreamKeyCreatedAt time.Time
+	// PublishTokenHash adalah hash token siaran browser (langkah 25b).
+	// Kosong jika belum pernah dibuat.
+	PublishTokenHash      string
+	PublishTokenExpiresAt time.Time
 }
 
 // Stream adalah satu kali siaran (tabel live_streams).
@@ -81,7 +89,33 @@ type Online struct {
 type ListFilter struct {
 	Category string
 	OwnerIDs []int64
-	Limit    int
+	// Query mencari teks di judul (huruf besar/kecil dianggap sama).
+	Query string
+	Limit int
+}
+
+// ChatMessage adalah satu pesan chat siaran (tabel live_chat_messages).
+type ChatMessage struct {
+	ID        int64
+	StreamID  int64
+	UserID    int64
+	Body      string
+	Color     uint32
+	CreatedAt time.Time
+}
+
+// ColorWhite adalah warna chat default.
+const ColorWhite uint32 = 0xFFFFFF
+
+// PublishRequest adalah isi permintaan "boleh siaran?" dari MediaMTX.
+type PublishRequest struct {
+	// Path adalah nama stream, misalnya "live/7".
+	Path string
+	// Query adalah sisa URL RTMP dari OBS, misalnya "key=isk_...".
+	Query string
+	// Token dari header "Authorization: Bearer ..." saat siaran dari
+	// browser (WHIP).
+	Token string
 }
 
 // ValidationError menandai input dari user yang tidak valid.

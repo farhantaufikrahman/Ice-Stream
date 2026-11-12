@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { searchChannels, searchPlaylists, searchVideos } from '../api/endpoints'
-import type { ChannelResult, Playlist } from '../api/types'
+import { listLive, searchChannels, searchPlaylists, searchVideos } from '../api/endpoints'
+import type { ChannelResult, LiveStream, Playlist } from '../api/types'
 import { ErrorBox } from '../components/ErrorBox'
 import { PlaylistCard } from '../components/playlist/PlaylistCard'
+import { LiveGrid } from '../components/live/LiveCard'
 import { ChannelResultCard } from '../components/search/ChannelResultCard'
 import { SearchFilters } from '../components/search/SearchFilters'
 import { VideoGrid } from '../components/VideoGrid'
@@ -11,12 +12,14 @@ import { usePagedList, type PagedList } from '../hooks/usePagedList'
 import { usePagedVideos } from '../hooks/usePagedVideos'
 import { durationFromParam, searchSortFromParam, withParam, type DurationFilter, type SearchSort } from '../lib/discover'
 
-type Tab = 'semua' | 'video' | 'kreator' | 'playlist'
+type Tab = 'semua' | 'video' | 'live' | 'kreator' | 'playlist'
 
+// Urutan sama dengan desain Search.dc.html.
 const TABS: { id: Tab; label: string }[] = [
   { id: 'semua', label: 'Semua' },
   { id: 'video', label: 'Video' },
   { id: 'kreator', label: 'Kreator' },
+  { id: 'live', label: 'Live' },
   { id: 'playlist', label: 'Playlist' },
 ]
 
@@ -30,8 +33,8 @@ function tabFromParam(value: string | null): Tab {
  * Tab Semua: kreator paling cocok di atas, lalu video. Urutan dan filter
  * durasi (langkah 24a) berlaku untuk video, jadi hanya tampil di tab Semua
  * dan Video, dan disimpan di URL (?sort=views&duration=short). Tab Live
- * dan jumlah hasil per tab di desain belum ditampilkan karena backend
- * belum mendukungnya.
+ * (langkah 25c) mencari judul siaran yang sedang berlangsung. Jumlah hasil
+ * per tab di desain belum ditampilkan karena backend belum mendukungnya.
  */
 export function SearchPage() {
   const [params, setParams] = useSearchParams()
@@ -96,6 +99,7 @@ export function SearchPage() {
       <div role="tabpanel" id="search-panel" aria-labelledby={`search-tab-${tab}`} className="search-panel" key={`${tab}|${q}`}>
         {tab === 'semua' && <AllResults q={q} filters={filters} />}
         {tab === 'video' && <VideoResults q={q} filters={filters} />}
+        {tab === 'live' && <LiveResults q={q} />}
         {tab === 'kreator' && <ChannelResults q={q} />}
         {tab === 'playlist' && <PlaylistResults q={q} />}
       </div>
@@ -125,6 +129,16 @@ function AllResults({ q, filters }: { q: string; filters: VideoFilters }) {
       {top.items[0] && <ChannelResultCard channel={top.items[0]} />}
       <VideoResults q={q} filters={filters} />
     </>
+  )
+}
+
+/** Siaran yang sedang LIVE dengan judul yang cocok (maksimal 50, satu halaman). */
+function LiveResults({ q }: { q: string }) {
+  const list = usePagedList<LiveStream>((_token, signal) => listLive({ q, limit: 50 }, signal).then((items) => ({ items, next: '' })))
+  return (
+    <ResultList list={list} empty="Tidak ada siaran langsung yang cocok saat ini.">
+      <LiveGrid streams={list.items} />
+    </ResultList>
   )
 }
 

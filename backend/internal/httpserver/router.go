@@ -49,6 +49,9 @@ type Deps struct {
 	// Live membagikan danmaku baru ke penonton yang tersambung (SSE).
 	// Boleh nil di test.
 	Live *live.Hub
+	// LiveChat membagikan chat siaran langsung baru ke penonton (SSE,
+	// langkah 25c). Boleh nil di test.
+	LiveChat *live.Hub
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
 }
@@ -142,14 +145,19 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
 	videoGroup.GET("/:id/danmaku/live", danmaku.live)
 
-	// Siaran langsung (langkah 25a).
-	lives := &liveHandler{client: deps.LiveStreams, users: deps.Users, logger: logger}
+	// Siaran langsung (langkah 25a-25c).
+	lives := &liveHandler{client: deps.LiveStreams, users: deps.Users, chatHub: deps.LiveChat, heartbeat: liveHeartbeat, logger: logger}
 	v1.GET("/live", lives.list)
-	v1.GET("/live/:id", lives.get)
+	liveGroup := v1.Group("/live/:id", limitBody(maxLiveBodyBytes))
+	liveGroup.GET("", lives.get)
+	liveGroup.GET("/chat", lives.listChat)
+	liveGroup.POST("/chat", requireAuth, lives.sendChat)
+	liveGroup.GET("/chat/live", lives.chatLive)
 	meLive := v1.Group("/me/live", requireAuth, limitBody(maxLiveBodyBytes))
 	meLive.GET("", lives.myChannel)
 	meLive.PATCH("", lives.updateMyChannel)
 	meLive.POST("/stream-key", lives.resetStreamKey)
+	meLive.POST("/publish-token", lives.createPublishToken)
 
 	notifications := &notificationHandler{videos: deps.Videos, users: deps.Users, logger: logger}
 	v1.GET("/me/notifications", requireAuth, notifications.list)

@@ -31,6 +31,20 @@ service LiveService {
   // GetLiveStream mengambil satu siaran (LIVE atau ENDED). NOT_FOUND jika
   // tidak ada. Boleh dipanggil tanpa login.
   rpc GetLiveStream(GetLiveStreamRequest) returns (GetLiveStreamResponse);
+  // CreatePublishToken membuat token pendek untuk siaran dari browser
+  // (WebRTC lewat WHIP, langkah 25b). Token lama milik requester langsung
+  // tidak berlaku. Seperti stream key, token hanya ada di jawaban ini.
+  rpc CreatePublishToken(CreatePublishTokenRequest) returns (CreatePublishTokenResponse);
+  // SendChatMessage mengirim pesan chat ke siaran yang sedang LIVE, lalu
+  // menyiarkannya ke penonton lain lewat NATS (subject
+  // "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
+  // 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
+  // FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
+  // user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+  rpc SendChatMessage(SendChatMessageRequest) returns (SendChatMessageResponse);
+  // ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
+  // paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.
+  rpc ListChatMessages(ListChatMessagesRequest) returns (ListChatMessagesResponse);
 }
 
 enum LiveStatus {
@@ -108,6 +122,9 @@ message ListLiveStreamsRequest {
   string category = 2;
   // Opsional: hanya siaran milik user-user ini (paling banyak 100).
   repeated int64 owner_ids = 3;
+  // Opsional: hanya siaran yang judulnya mengandung teks ini (tab Live di
+  // halaman pencarian). Huruf besar dan kecil dianggap sama.
+  string query = 4;
 }
 
 message ListLiveStreamsResponse {
@@ -120,4 +137,50 @@ message GetLiveStreamRequest {
 
 message GetLiveStreamResponse {
   LiveStream stream = 1;
+}
+
+message CreatePublishTokenRequest {
+  int64 requester_id = 1;
+}
+
+message CreatePublishTokenResponse {
+  // Alamat WHIP MediaMTX, misalnya
+  // "http://webrtc.ice-stream.localhost:4000/live/7/whip".
+  string whip_url = 1;
+  // Dikirim browser di header "Authorization: Bearer <token>".
+  string token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message ChatMessage {
+  int64 id = 1;
+  int64 stream_id = 2;
+  // Pengirim. Gateway menambahkan nama dan foto profilnya.
+  int64 user_id = 3;
+  string body = 4;
+  // Warna RGB saat tampil melayang di atas video, 0x000000 sampai 0xFFFFFF.
+  uint32 color = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message SendChatMessageRequest {
+  int64 requester_id = 1;
+  int64 stream_id = 2;
+  string body = 3;
+  // Opsional: tidak dikirim = putih (0xFFFFFF).
+  optional uint32 color = 4;
+}
+
+message SendChatMessageResponse {
+  ChatMessage message = 1;
+}
+
+message ListChatMessagesRequest {
+  int64 stream_id = 1;
+  // 1 sampai 100. 0 = 50.
+  int32 limit = 2;
+}
+
+message ListChatMessagesResponse {
+  repeated ChatMessage messages = 1;
 }

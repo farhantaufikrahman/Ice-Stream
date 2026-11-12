@@ -23,6 +23,7 @@ type fakeRepo struct {
 	channels map[int64]Channel
 	streams  []Stream
 	syncs    [][]Online
+	chats    []ChatMessage
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{channels: map[int64]Channel{}} }
@@ -112,9 +113,72 @@ func (r *fakeRepo) Sync(_ context.Context, online []Online, _, _ time.Time) (int
 	return len(online), 0, nil
 }
 
+func (r *fakeRepo) SetPublishToken(_ context.Context, ownerID int64, hash string, expiresAt, _ time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ch, ok := r.channels[ownerID]
+	if !ok {
+		return ErrNotFound
+	}
+	ch.PublishTokenHash, ch.PublishTokenExpiresAt = hash, expiresAt
+	r.channels[ownerID] = ch
+	return nil
+}
+
+func (r *fakeRepo) CreateChat(_ context.Context, m ChatMessage) (ChatMessage, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m.ID = int64(len(r.chats) + 1)
+	r.chats = append(r.chats, m)
+	return m, nil
+}
+
+func (r *fakeRepo) ListChat(_ context.Context, streamID int64, limit int) ([]ChatMessage, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []ChatMessage
+	for _, m := range r.chats {
+		if m.StreamID == streamID {
+			out = append(out, m)
+		}
+	}
+	if len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out, nil
+}
+
+func (r *fakeRepo) CountChatSince(_ context.Context, userID int64, since time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var n int64
+	for _, m := range r.chats {
+		if m.UserID == userID && m.CreatedAt.After(since) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+type fakePublisher struct {
+	mu   sync.Mutex
+	sent []ChatMessage
+}
+
+func (p *fakePublisher) PublishChat(_ context.Context, m ChatMessage) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sent = append(p.sent, m)
+	return nil
+}
+
 func newTestService() (*Service, *fakeRepo) {
 	repo := newFakeRepo()
-	svc := NewService(repo, Options{IngestURL: "rtmp://localhost:1935/live", PlaybackBaseURL: "http://live.ice-stream.localhost:4000/"})
+	svc := NewService(repo, Options{
+		IngestURL:       "rtmp://localhost:1935/live",
+		PlaybackBaseURL: "http://live.ice-stream.localhost:4000/",
+		WHIPBaseURL:     "http://webrtc.ice-stream.localhost:4000/",
+	})
 	svc.now = func() time.Time { return time.Date(2026, 11, 12, 7, 0, 0, 0, time.UTC) }
 	return svc, repo
 }
@@ -162,7 +226,7 @@ func TestStreamKeyAuthorizesPublish(t *testing.T) {
 	svc, repo := newTestService()
 	ctx := context.Background()
 
-	_, err := svc.AuthorizePublish(ctx, "live/7", "key=apa-saja")
+	_, err := svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Query: "key=apa-saja"})
 	assert.ErrorIs(t, err, ErrForbidden, "belum punya channel")
 
 	v, key, err := svc.ResetStreamKey(ctx, 7)
@@ -172,7 +236,7 @@ func TestStreamKeyAuthorizesPublish(t *testing.T) {
 	secret := strings.TrimPrefix(key, "7?")
 	assert.NotContains(t, repo.channels[7].StreamKeyHash, "isk_", "yang disimpan hanya hash")
 
-	owner, err := svc.AuthorizePublish(ctx, "live/7", secret)
+	owner, err := svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Query: secret})
 	require.NoError(t, err)
 	assert.Equal(t, int64(7), owner)
 
@@ -184,15 +248,124 @@ func TestStreamKeyAuthorizesPublish(t *testing.T) {
 		"path dengan nol":     {"live/07", secret},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := svc.AuthorizePublish(ctx, tc[0], tc[1])
+			_, err := svc.AuthorizePublish(ctx, PublishRequest{Path: tc[0], Query: tc[1]})
 			assert.ErrorIs(t, err, ErrForbidden)
 		})
 	}
 
 	_, _, err = svc.ResetStreamKey(ctx, 7)
 	require.NoError(t, err)
-	_, err = svc.AuthorizePublish(ctx, "live/7", secret)
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Query: secret})
 	assert.ErrorIs(t, err, ErrForbidden, "key lama mati setelah dibuat ulang")
+}
+
+func TestPublishTokenAuthorizesBrowser(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+	now := svc.now()
+
+	tok, err := svc.CreatePublishToken(ctx, 7)
+	require.NoError(t, err)
+	assert.Equal(t, "http://webrtc.ice-stream.localhost:4000/live/7/whip", tok.WHIPURL)
+	require.True(t, strings.HasPrefix(tok.Token, "ipt_"), tok.Token)
+	assert.Equal(t, now.Add(5*time.Minute), tok.ExpiresAt)
+
+	owner, err := svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: tok.Token})
+	require.NoError(t, err)
+	assert.Equal(t, int64(7), owner)
+
+	for name, req := range map[string]PublishRequest{
+		"token salah":           {Path: "live/7", Token: "ipt_salah"},
+		"token milik user lain": {Path: "live/8", Token: tok.Token},
+		"token di query":        {Path: "live/7", Query: "key=" + tok.Token},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.AuthorizePublish(ctx, req)
+			assert.ErrorIs(t, err, ErrForbidden)
+		})
+	}
+
+	svc.now = func() time.Time { return now.Add(5 * time.Minute) }
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: tok.Token})
+	assert.ErrorIs(t, err, ErrForbidden, "token kedaluwarsa")
+
+	svc.now = func() time.Time { return now }
+	tok2, err := svc.CreatePublishToken(ctx, 7)
+	require.NoError(t, err)
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: tok.Token})
+	assert.ErrorIs(t, err, ErrForbidden, "token lama mati setelah token baru dibuat")
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: tok2.Token})
+	assert.NoError(t, err)
+}
+
+func TestStreamKeyIsNotAPublishToken(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+	_, key, err := svc.ResetStreamKey(ctx, 7)
+	require.NoError(t, err)
+	secret := strings.TrimPrefix(key, "7?key=")
+	// Stream key sebagai bearer token juga diterima: rahasianya sama-sama
+	// milik kreator, dan awalannya menentukan hash mana yang dicek.
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: secret})
+	assert.NoError(t, err)
+	// Tapi hash stream key tidak pernah dicocokkan dengan awalan "ipt_".
+	_, err = svc.AuthorizePublish(ctx, PublishRequest{Path: "live/7", Token: "ipt_" + strings.TrimPrefix(secret, "isk_")})
+	assert.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestSendChat(t *testing.T) {
+	svc, repo := newTestService()
+	pub := &fakePublisher{}
+	svc.opts.Publisher = pub
+	ctx := context.Background()
+	repo.streams = []Stream{
+		{ID: 1, OwnerID: 7, Status: StatusLive},
+		{ID: 2, OwnerID: 8, Status: StatusEnded},
+	}
+
+	m, err := svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "  halo kak  "})
+	require.NoError(t, err)
+	assert.Equal(t, "halo kak", m.Body)
+	assert.Equal(t, ColorWhite, m.Color)
+	assert.Equal(t, svc.now(), m.CreatedAt)
+	require.Len(t, pub.sent, 1, "pesan disiarkan ke penonton lain")
+
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "lagi"})
+	assert.ErrorIs(t, err, ErrRateLimited, "mode lambat 3 detik")
+
+	start := svc.now()
+	svc.now = func() time.Time { return start.Add(3 * time.Second) }
+	pink := uint32(0xFF6B8B)
+	m, err = svc.SendChat(ctx, SendChatInput{RequesterID: 9, StreamID: 1, Body: "lagi", Color: &pink})
+	require.NoError(t, err, "boleh lagi setelah 3 detik")
+	assert.Equal(t, pink, m.Color)
+
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 10, StreamID: 2, Body: "halo"})
+	assert.ErrorIs(t, err, ErrStreamEnded)
+	_, err = svc.SendChat(ctx, SendChatInput{RequesterID: 10, StreamID: 99, Body: "halo"})
+	assert.ErrorIs(t, err, ErrNotFound)
+
+	bad := uint32(0x1000000)
+	for name, in := range map[string]SendChatInput{
+		"kosong":     {RequesterID: 10, StreamID: 1, Body: "  "},
+		"baris baru": {RequesterID: 10, StreamID: 1, Body: "a\nb"},
+		"warna":      {RequesterID: 10, StreamID: 1, Body: "a", Color: &bad},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.SendChat(ctx, in)
+			var verr *ValidationError
+			assert.ErrorAs(t, err, &verr)
+		})
+	}
+
+	list, err := svc.ListChat(ctx, 1, 0)
+	require.NoError(t, err)
+	require.Len(t, list, 2)
+	assert.Equal(t, "halo kak", list[0].Body, "urut dari yang paling lama")
+	_, err = svc.ListChat(ctx, 1, 101)
+	assert.Error(t, err)
+	_, err = svc.ListChat(ctx, 99, 0)
+	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestOwnerFromPath(t *testing.T) {
@@ -221,6 +394,8 @@ func TestListLiveAndPlaybackURL(t *testing.T) {
 	assert.Error(t, err)
 	_, err = svc.ListLive(ctx, ListFilter{Category: "politik"})
 	assert.Error(t, err)
+	_, err = svc.ListLive(ctx, ListFilter{Query: strings.Repeat("a", 101)})
+	assert.Error(t, err)
 
 	_, err = svc.GetStream(ctx, 99)
 	assert.ErrorIs(t, err, ErrNotFound)
@@ -241,6 +416,10 @@ func TestHookHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, post(`{"action":"publish","path":"live/7","protocol":"rtmp","query":"`+query+`"}`))
 	assert.Equal(t, http.StatusUnauthorized, post(`{"action":"publish","path":"live/7","query":"key=salah"}`))
 	assert.Equal(t, http.StatusForbidden, post(`{"action":"api","path":""}`), "selain publish ditolak")
+	tok, err := svc.CreatePublishToken(context.Background(), 7)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, post(`{"action":"publish","path":"live/7","protocol":"webrtc","token":"`+tok.Token+`"}`), "siaran browser lewat WHIP")
+	assert.Equal(t, http.StatusUnauthorized, post(`{"action":"publish","path":"live/7","protocol":"webrtc","token":"ipt_salah"}`))
 	assert.Equal(t, http.StatusBadRequest, post(`{`))
 }
 

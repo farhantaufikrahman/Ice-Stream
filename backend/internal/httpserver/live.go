@@ -2,18 +2,24 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
 
-// Langkah 25a: siaran langsung.
+// Langkah 25a: siaran langsung. Langkah 25b: token siaran dari browser.
+// Langkah 25c: pencarian siaran dan chat live.
 //
 // Gateway hanya meneruskan ke LiveService (proses VideoService). Video
 // siarannya tidak pernah lewat gateway: OBS mengirim ke MediaMTX lewat
@@ -25,7 +31,11 @@ const maxLiveBodyBytes = 4 << 10 // 4 KiB
 type liveHandler struct {
 	client livev1.LiveServiceClient
 	users  userv1.UserServiceClient
-	logger *slog.Logger
+	// chatHub membagikan chat baru ke penonton (SSE). Boleh nil (test);
+	// endpoint chat live lalu menjawab 503.
+	chatHub   *live.Hub
+	heartbeat time.Duration
+	logger    *slog.Logger
 }
 
 type liveStreamResponse struct {
@@ -52,6 +62,31 @@ type liveChannelResponse struct {
 	HasStreamKey       bool                `json:"has_stream_key"`
 	StreamKeyCreatedAt *time.Time          `json:"stream_key_created_at,omitempty"`
 	Current            *liveStreamResponse `json:"current"`
+}
+
+type publishTokenResponse struct {
+	// WHIPURL adalah alamat yang di-POST browser (offer SDP) untuk mulai
+	// siaran WebRTC.
+	WHIPURL string `json:"whip_url"`
+	// Token dikirim di header "Authorization: Bearer <token>".
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type chatMessageResponse struct {
+	ID       string `json:"id"`
+	StreamID string `json:"stream_id"`
+	// User boleh kosong jika UserService sedang gagal.
+	User      *ownerResponse `json:"user"`
+	Body      string         `json:"body"`
+	Color     string         `json:"color"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+type sendChatRequest struct {
+	Body string `json:"body"`
+	// Color opsional, format "#RRGGBB". Default "#FFFFFF".
+	Color string `json:"color"`
 }
 
 type updateLiveChannelRequest struct {
@@ -117,8 +152,9 @@ func (h *liveHandler) withOwners(ctx context.Context, streams []*livev1.LiveStre
 	return out
 }
 
-// list: GET /api/v1/live?category=game&limit=8  (tanpa login)
-// Siaran yang sedang LIVE, terbaru dulu.
+// list: GET /api/v1/live?category=game&limit=8&q=ngoding  (tanpa login)
+// Siaran yang sedang LIVE, terbaru dulu. q mencari di judul (tab Live di
+// halaman pencarian, langkah 25c).
 func (h *liveHandler) list(c *gin.Context) {
 	var limit int32
 	if v := c.Query("limit"); v != "" {
@@ -132,7 +168,7 @@ func (h *liveHandler) list(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
-	resp, err := h.client.ListLiveStreams(ctx, &livev1.ListLiveStreamsRequest{Limit: limit, Category: c.Query("category")})
+	resp, err := h.client.ListLiveStreams(ctx, &livev1.ListLiveStreamsRequest{Limit: limit, Category: c.Query("category"), Query: c.Query("q")})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
 		return
@@ -142,9 +178,8 @@ func (h *liveHandler) list(c *gin.Context) {
 
 // get: GET /api/v1/live/:id  (tanpa login)
 func (h *liveHandler) get(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id <= 0 {
-		abortError(c, http.StatusNotFound, "NOT_FOUND", "siaran tidak ditemukan")
+	id, ok := liveIDParam(c)
+	if !ok {
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
@@ -215,4 +250,206 @@ func (h *liveHandler) resetStreamKey(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"channel": toLiveChannelResponse(resp.GetChannel()), "stream_key": resp.GetStreamKey()})
+}
+
+// createPublishToken: POST /api/v1/me/live/publish-token  (langkah 25b)
+// Token pendek untuk siaran dari browser (WebRTC lewat WHIP). Seperti
+// stream key, token hanya ada di jawaban ini, jadi Cache-Control: no-store.
+func (h *liveHandler) createPublishToken(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.CreatePublishToken(ctx, &livev1.CreatePublishTokenRequest{RequesterId: userID})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, publishTokenResponse{WHIPURL: resp.GetWhipUrl(), Token: resp.GetToken(), ExpiresAt: resp.GetExpiresAt().AsTime()})
+}
+
+// listChat: GET /api/v1/live/:id/chat?limit=50  (tanpa login, langkah 25c)
+// Pesan chat terakhir, urut dari yang paling lama.
+func (h *liveHandler) listChat(c *gin.Context) {
+	id, ok := liveIDParam(c)
+	if !ok {
+		return
+	}
+	var limit int32
+	if v := c.Query("limit"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil {
+			abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "limit harus berupa angka")
+			return
+		}
+		limit = int32(n)
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.ListChatMessages(ctx, &livev1.ListChatMessagesRequest{StreamId: id, Limit: limit})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	msgs := resp.GetMessages()
+	ids := make([]int64, len(msgs))
+	for i, m := range msgs {
+		ids[i] = m.GetUserId()
+	}
+	users := lookupProfiles(c.Request.Context(), h.users, h.logger, ids)
+	out := make([]chatMessageResponse, len(msgs))
+	for i, m := range msgs {
+		out[i] = toChatMessageResponse(m, users[m.GetUserId()])
+	}
+	c.JSON(http.StatusOK, gin.H{"messages": out})
+}
+
+// sendChat: POST /api/v1/live/:id/chat  {"body":"halo","color":"#4FE3C1"}
+// Wajib login. Mode lambat: satu pesan per 3 detik (429 jika lebih cepat).
+func (h *liveHandler) sendChat(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	id, ok := liveIDParam(c)
+	if !ok {
+		return
+	}
+	var req sendChatRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	in := &livev1.SendChatMessageRequest{RequesterId: userID, StreamId: id, Body: req.Body}
+	if req.Color != "" {
+		color, err := parseColor(req.Color)
+		if err != nil {
+			abortError(c, http.StatusBadRequest, "INVALID_ARGUMENT", "color harus berformat #RRGGBB, misalnya #FF0000")
+			return
+		}
+		in.Color = &color
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.SendChatMessage(ctx, in)
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	users := lookupProfiles(c.Request.Context(), h.users, h.logger, []int64{userID})
+	c.JSON(http.StatusCreated, gin.H{"message": toChatMessageResponse(resp.GetMessage(), users[userID])})
+}
+
+// chatLive: GET /api/v1/live/:id/chat/live  (tanpa login)
+//
+// Koneksi Server-Sent Events, sama seperti danmaku video: setiap pesan chat
+// baru dikirim sebagai
+//
+//	event: chat
+//	data: {"id":"15","stream_id":"3","user":{...},"body":"halo",...}
+func (h *liveHandler) chatLive(c *gin.Context) {
+	if h.chatHub == nil {
+		abortError(c, http.StatusServiceUnavailable, "UNAVAILABLE", "chat live sedang tidak tersedia")
+		return
+	}
+	id, ok := liveIDParam(c)
+	if !ok {
+		return
+	}
+	// Pastikan siarannya ada sebelum membuka koneksi yang berumur panjang.
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	_, err := h.client.GetLiveStream(ctx, &livev1.GetLiveStreamRequest{StreamId: id})
+	cancel()
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	serveSSE(c, h.chatHub, id, "chat", h.heartbeat, h.logger)
+}
+
+func liveIDParam(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		abortError(c, http.StatusNotFound, "NOT_FOUND", "siaran tidak ditemukan")
+		return 0, false
+	}
+	return id, true
+}
+
+func toChatMessageResponse(m *livev1.ChatMessage, user *ownerResponse) chatMessageResponse {
+	return chatMessageResponse{
+		ID:        strconv.FormatInt(m.GetId(), 10),
+		StreamID:  strconv.FormatInt(m.GetStreamId(), 10),
+		User:      user,
+		Body:      m.GetBody(),
+		Color:     formatColor(m.GetColor()),
+		CreatedAt: m.GetCreatedAt().AsTime(),
+	}
+}
+
+// Cache profil pengirim chat di NewLiveChatEncoder.
+const (
+	chatProfileTTL     = time.Minute
+	chatProfileMaxSize = 10_000
+)
+
+// NewLiveChatEncoder membuat live.Options.Transform untuk chat: mengubah
+// event NATS live.chat.* menjadi JSON yang sama dengan respons REST,
+// lengkap dengan nama dan foto pengirim.
+//
+// Transform dijalankan sekali per pesan per pod (bukan per penonton), tapi
+// di chat yang ramai orang yang sama mengirim berkali-kali. Profil
+// disimpan sebentar (1 menit) supaya UserService tidak dipanggil untuk
+// setiap pesan. Padanannya: cache in-memory seperti node-cache (Node.js)
+// atau Caffeine (Java).
+func NewLiveChatEncoder(users userv1.UserServiceClient, logger *slog.Logger) func([]byte) ([]byte, error) {
+	type entry struct {
+		user    *ownerResponse
+		expires time.Time
+	}
+	var (
+		mu    sync.Mutex
+		cache = make(map[int64]entry)
+	)
+	profile := func(id int64) *ownerResponse {
+		now := time.Now()
+		mu.Lock()
+		e, ok := cache[id]
+		mu.Unlock()
+		if ok && now.Before(e.expires) {
+			return e.user
+		}
+		u := lookupProfiles(context.Background(), users, logger, []int64{id})[id]
+		if u == nil {
+			// Gagal: jangan disimpan, coba lagi di pesan berikutnya.
+			return nil
+		}
+		mu.Lock()
+		if len(cache) >= chatProfileMaxSize {
+			// Cara paling sederhana membatasi memori: kosongkan semua.
+			clear(cache)
+		}
+		cache[id] = entry{user: u, expires: now.Add(chatProfileTTL)}
+		mu.Unlock()
+		return u
+	}
+	return func(data []byte) ([]byte, error) {
+		var ev events.LiveChatSent
+		if err := json.Unmarshal(data, &ev); err != nil {
+			return nil, fmt.Errorf("decode event chat: %w", err)
+		}
+		return json.Marshal(chatMessageResponse{
+			ID:        strconv.FormatInt(ev.ID, 10),
+			StreamID:  strconv.FormatInt(ev.StreamID, 10),
+			User:      profile(ev.UserID),
+			Body:      ev.Body,
+			Color:     formatColor(ev.Color),
+			CreatedAt: ev.CreatedAt,
+		})
+	}
 }

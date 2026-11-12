@@ -43,7 +43,9 @@ resources:
   - live/deployment.yaml
   - live/service.yaml
   - live/service-rtmp.yaml
+  - live/service-webrtc.yaml
   - live/httproute.yaml
+  - live/httproute-webrtc.yaml
   # Server SMTP palsu untuk development (kotak masuk di
   # http://mail.ice-stream.localhost:4000)
   - mail/deployment.yaml

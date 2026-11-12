@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { ApiError, errorMessage, isAbortError } from '../api/client'
 import { getVideo, listVideos, recordView, saveWatchProgress, setLike } from '../api/endpoints'
-import type { Danmaku, Owner, Profile, Video, VideoDetail } from '../api/types'
+import type { Danmaku, Profile, Video, VideoDetail } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
-import { SubscribeButton } from '../components/channel/SubscribeButton'
+import { ChannelCardHead } from '../components/channel/ChannelCardHead'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
 import { categoryLabel } from '../lib/categories'
@@ -19,34 +19,14 @@ import { PlaylistPanel } from '../components/watch/PlaylistPanel'
 import { ReportDialog } from '../components/watch/ReportDialog'
 import { SaveButton } from '../components/watch/SaveButton'
 import { ShareDialog } from '../components/watch/ShareDialog'
-import { useChannel } from '../hooks/useChannel'
 import { useDanmaku } from '../hooks/useDanmaku'
 import { usePlaylistQueue, type PlaylistQueue } from '../hooks/usePlaylistQueue'
 import { watchInListPath } from '../lib/playlistQueue'
+import { readDanmakuPref, saveDanmakuPref } from '../lib/danmakuPref'
 import { parseStartParam } from '../lib/share'
 
 /** Jumlah video di kolom "Berikutnya". */
 const UP_NEXT_COUNT = 8
-
-/** Pilihan "Danmaku aktif/mati" diingat per browser. */
-const DANMAKU_PREF_KEY = 'ice-danmaku'
-
-function readDanmakuPref(): boolean {
-  try {
-    return localStorage.getItem(DANMAKU_PREF_KEY) !== 'off'
-  } catch {
-    // localStorage bisa diblokir (mode privat tertentu): pakai default.
-    return true
-  }
-}
-
-function saveDanmakuPref(on: boolean): void {
-  try {
-    localStorage.setItem(DANMAKU_PREF_KEY, on ? 'on' : 'off')
-  } catch {
-    // Tidak tersimpan pun tidak apa-apa.
-  }
-}
 
 /** Pilihan "Putar otomatis" di panel playlist, juga diingat per browser. */
 const AUTONEXT_PREF_KEY = 'ice-autonext'
@@ -377,7 +357,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
             ))}
         </div>
         {dialog?.kind === 'share' && (
-          <ShareDialog videoId={video.id} title={video.title} currentSeconds={dialog.seconds} onClose={() => setDialog(null)} />
+          <ShareDialog target={{ videoId: video.id, currentSeconds: dialog.seconds }} title={video.title} onClose={() => setDialog(null)} />
         )}
         {dialog?.kind === 'report' && <ReportDialog videoId={video.id} title={video.title} onClose={() => setDialog(null)} />}
         {likeError && <ErrorBox message={likeError} />}
@@ -410,42 +390,6 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
         <UpNext currentId={video.id} category={video.category} />
       </aside>
     </div>
-  )
-}
-
-/**
- * Avatar, nama, jumlah pengikut, dan tombol Ikuti di kartu kanal
- * (desain Watch.dc.html). Jumlah pengikut tidak ada di data video, jadi
- * profil kanal diambil terpisah lewat GET /users/:username.
- */
-function ChannelCardHead({ owner }: { owner: Owner }) {
-  const { channel, isOwn, applySubscription } = useChannel(owner.username)
-  const name = owner.display_name || owner.username
-  const href = `/channel/${encodeURIComponent(owner.username)}`
-  return (
-    <>
-      <Link to={href} className="channel-avatar-link" aria-label={`Kanal ${name}`}>
-        <Avatar name={name} url={owner.avatar_url} size={52} />
-      </Link>
-      <div className="channel-text">
-        <Link to={href} className="channel-name">
-          {name}
-        </Link>
-        <span className="muted small">
-          @{owner.username}
-          {channel && ` · ${formatCount(channel.user.subscriber_count)} pengikut`}
-        </span>
-      </div>
-      {channel && (
-        <SubscribeButton
-          username={owner.username}
-          subscribed={channel.viewer_subscribed ?? false}
-          subscriberCount={channel.user.subscriber_count}
-          isOwn={isOwn}
-          onChange={applySubscription}
-        />
-      )}
-    </>
   )
 }
 

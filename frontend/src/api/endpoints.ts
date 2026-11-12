@@ -17,6 +17,9 @@ import type {
   DanmakuPage,
   HistoryPage,
   LikeResult,
+  LiveChannel,
+  LiveChatMessage,
+  LiveStream,
   MarkReadResult,
   NotificationPage,
   Playlist,
@@ -25,7 +28,9 @@ import type {
   PlaylistVideoResult,
   PlaylistVisibility,
   Profile,
+  PublishToken,
   StatsDays,
+  StreamKeyResult,
   SubscriptionResult,
   TrendingList,
   Video,
@@ -490,6 +495,79 @@ export function listChannelPlaylists(username: string, pageToken: string, signal
     auth: 'optional',
     signal,
   })
+}
+
+// ---------- Siaran langsung (langkah 25) ----------
+
+export interface LiveFilter {
+  /** 1 sampai 50, default server 20. */
+  limit?: number
+  category?: string
+  /** Cari di judul (tab Live di halaman pencarian). */
+  q?: string
+}
+
+/** Siaran yang sedang LIVE, terbaru dulu. Tanpa login. */
+export async function listLive(filter: LiveFilter = {}, signal?: AbortSignal): Promise<LiveStream[]> {
+  const params = new URLSearchParams()
+  if (filter.limit) params.set('limit', String(filter.limit))
+  if (filter.category) params.set('category', filter.category)
+  if (filter.q) params.set('q', filter.q)
+  const res = await apiRequest<{ streams: LiveStream[] }>(`/live?${params}`, { signal })
+  return res.streams
+}
+
+/** Satu siaran (LIVE atau ENDED). */
+export async function getLive(id: string, signal?: AbortSignal): Promise<LiveStream> {
+  const res = await apiRequest<{ stream: LiveStream }>(`/live/${encodeURIComponent(id)}`, { signal })
+  return res.stream
+}
+
+/** Pengaturan siaran milik sendiri, dibuat otomatis saat pertama kali dibuka. */
+export async function getMyLive(signal?: AbortSignal): Promise<LiveChannel> {
+  const res = await apiRequest<{ channel: LiveChannel }>('/me/live', { auth: 'required', signal })
+  return res.channel
+}
+
+/** Mengubah judul dan kategori (juga siaran yang sedang berjalan). */
+export async function updateMyLive(title: string, category: string): Promise<LiveChannel> {
+  const res = await apiRequest<{ channel: LiveChannel }>('/me/live', {
+    method: 'PATCH',
+    body: { title, category },
+    auth: 'required',
+  })
+  return res.channel
+}
+
+/** Membuat stream key baru untuk OBS. Key lama langsung tidak berlaku. */
+export function resetStreamKey(): Promise<StreamKeyResult> {
+  return apiRequest<StreamKeyResult>('/me/live/stream-key', { method: 'POST', auth: 'required' })
+}
+
+/** Token pendek untuk siaran dari browser (WebRTC lewat WHIP). */
+export function createPublishToken(): Promise<PublishToken> {
+  return apiRequest<PublishToken>('/me/live/publish-token', { method: 'POST', auth: 'required' })
+}
+
+/** Pesan chat terakhir sebuah siaran, urut dari yang paling lama. */
+export async function listLiveChat(streamId: string, signal?: AbortSignal): Promise<LiveChatMessage[]> {
+  const res = await apiRequest<{ messages: LiveChatMessage[] }>(`/live/${encodeURIComponent(streamId)}/chat`, { signal })
+  return res.messages
+}
+
+/** Mengirim pesan chat. Mode lambat: 429 jika kurang dari 3 detik dari pesan sebelumnya. */
+export async function sendLiveChat(streamId: string, body: string, color: string): Promise<LiveChatMessage> {
+  const res = await apiRequest<{ message: LiveChatMessage }>(`/live/${encodeURIComponent(streamId)}/chat`, {
+    method: 'POST',
+    body: { body, color },
+    auth: 'required',
+  })
+  return res.message
+}
+
+/** Alamat Server-Sent Events chat baru sebuah siaran (untuk EventSource). */
+export function liveChatUrl(streamId: string): string {
+  return `${API_BASE}/live/${encodeURIComponent(streamId)}/chat/live`
 }
 
 const PAGE_SIZE = 24

@@ -29,11 +29,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	LiveService_GetMyChannel_FullMethodName    = "/live.v1.LiveService/GetMyChannel"
-	LiveService_UpdateMyChannel_FullMethodName = "/live.v1.LiveService/UpdateMyChannel"
-	LiveService_ResetStreamKey_FullMethodName  = "/live.v1.LiveService/ResetStreamKey"
-	LiveService_ListLiveStreams_FullMethodName = "/live.v1.LiveService/ListLiveStreams"
-	LiveService_GetLiveStream_FullMethodName   = "/live.v1.LiveService/GetLiveStream"
+	LiveService_GetMyChannel_FullMethodName       = "/live.v1.LiveService/GetMyChannel"
+	LiveService_UpdateMyChannel_FullMethodName    = "/live.v1.LiveService/UpdateMyChannel"
+	LiveService_ResetStreamKey_FullMethodName     = "/live.v1.LiveService/ResetStreamKey"
+	LiveService_ListLiveStreams_FullMethodName    = "/live.v1.LiveService/ListLiveStreams"
+	LiveService_GetLiveStream_FullMethodName      = "/live.v1.LiveService/GetLiveStream"
+	LiveService_CreatePublishToken_FullMethodName = "/live.v1.LiveService/CreatePublishToken"
+	LiveService_SendChatMessage_FullMethodName    = "/live.v1.LiveService/SendChatMessage"
+	LiveService_ListChatMessages_FullMethodName   = "/live.v1.LiveService/ListChatMessages"
 )
 
 // LiveServiceClient is the client API for LiveService service.
@@ -57,6 +60,20 @@ type LiveServiceClient interface {
 	// GetLiveStream mengambil satu siaran (LIVE atau ENDED). NOT_FOUND jika
 	// tidak ada. Boleh dipanggil tanpa login.
 	GetLiveStream(ctx context.Context, in *GetLiveStreamRequest, opts ...grpc.CallOption) (*GetLiveStreamResponse, error)
+	// CreatePublishToken membuat token pendek untuk siaran dari browser
+	// (WebRTC lewat WHIP, langkah 25b). Token lama milik requester langsung
+	// tidak berlaku. Seperti stream key, token hanya ada di jawaban ini.
+	CreatePublishToken(ctx context.Context, in *CreatePublishTokenRequest, opts ...grpc.CallOption) (*CreatePublishTokenResponse, error)
+	// SendChatMessage mengirim pesan chat ke siaran yang sedang LIVE, lalu
+	// menyiarkannya ke penonton lain lewat NATS (subject
+	// "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
+	// 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
+	// FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
+	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+	SendChatMessage(ctx context.Context, in *SendChatMessageRequest, opts ...grpc.CallOption) (*SendChatMessageResponse, error)
+	// ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
+	// paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.
+	ListChatMessages(ctx context.Context, in *ListChatMessagesRequest, opts ...grpc.CallOption) (*ListChatMessagesResponse, error)
 }
 
 type liveServiceClient struct {
@@ -117,6 +134,36 @@ func (c *liveServiceClient) GetLiveStream(ctx context.Context, in *GetLiveStream
 	return out, nil
 }
 
+func (c *liveServiceClient) CreatePublishToken(ctx context.Context, in *CreatePublishTokenRequest, opts ...grpc.CallOption) (*CreatePublishTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreatePublishTokenResponse)
+	err := c.cc.Invoke(ctx, LiveService_CreatePublishToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *liveServiceClient) SendChatMessage(ctx context.Context, in *SendChatMessageRequest, opts ...grpc.CallOption) (*SendChatMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendChatMessageResponse)
+	err := c.cc.Invoke(ctx, LiveService_SendChatMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *liveServiceClient) ListChatMessages(ctx context.Context, in *ListChatMessagesRequest, opts ...grpc.CallOption) (*ListChatMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChatMessagesResponse)
+	err := c.cc.Invoke(ctx, LiveService_ListChatMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LiveServiceServer is the server API for LiveService service.
 // All implementations must embed UnimplementedLiveServiceServer
 // for forward compatibility.
@@ -138,6 +185,20 @@ type LiveServiceServer interface {
 	// GetLiveStream mengambil satu siaran (LIVE atau ENDED). NOT_FOUND jika
 	// tidak ada. Boleh dipanggil tanpa login.
 	GetLiveStream(context.Context, *GetLiveStreamRequest) (*GetLiveStreamResponse, error)
+	// CreatePublishToken membuat token pendek untuk siaran dari browser
+	// (WebRTC lewat WHIP, langkah 25b). Token lama milik requester langsung
+	// tidak berlaku. Seperti stream key, token hanya ada di jawaban ini.
+	CreatePublishToken(context.Context, *CreatePublishTokenRequest) (*CreatePublishTokenResponse, error)
+	// SendChatMessage mengirim pesan chat ke siaran yang sedang LIVE, lalu
+	// menyiarkannya ke penonton lain lewat NATS (subject
+	// "live.chat.<stream_id>"). INVALID_ARGUMENT jika isi kosong, lebih dari
+	// 100 karakter, atau berisi baris baru. NOT_FOUND jika siaran tidak ada.
+	// FAILED_PRECONDITION jika siaran sudah selesai. RESOURCE_EXHAUSTED jika
+	// user mengirim lebih cepat dari mode lambat (satu pesan per 3 detik).
+	SendChatMessage(context.Context, *SendChatMessageRequest) (*SendChatMessageResponse, error)
+	// ListChatMessages mengambil pesan terakhir sebuah siaran, urut dari yang
+	// paling lama. Dipakai penonton yang baru masuk. Boleh tanpa login.
+	ListChatMessages(context.Context, *ListChatMessagesRequest) (*ListChatMessagesResponse, error)
 	mustEmbedUnimplementedLiveServiceServer()
 }
 
@@ -162,6 +223,15 @@ func (UnimplementedLiveServiceServer) ListLiveStreams(context.Context, *ListLive
 }
 func (UnimplementedLiveServiceServer) GetLiveStream(context.Context, *GetLiveStreamRequest) (*GetLiveStreamResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLiveStream not implemented")
+}
+func (UnimplementedLiveServiceServer) CreatePublishToken(context.Context, *CreatePublishTokenRequest) (*CreatePublishTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreatePublishToken not implemented")
+}
+func (UnimplementedLiveServiceServer) SendChatMessage(context.Context, *SendChatMessageRequest) (*SendChatMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendChatMessage not implemented")
+}
+func (UnimplementedLiveServiceServer) ListChatMessages(context.Context, *ListChatMessagesRequest) (*ListChatMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListChatMessages not implemented")
 }
 func (UnimplementedLiveServiceServer) mustEmbedUnimplementedLiveServiceServer() {}
 func (UnimplementedLiveServiceServer) testEmbeddedByValue()                     {}
@@ -274,6 +344,60 @@ func _LiveService_GetLiveStream_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LiveService_CreatePublishToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePublishTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LiveServiceServer).CreatePublishToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LiveService_CreatePublishToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LiveServiceServer).CreatePublishToken(ctx, req.(*CreatePublishTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LiveService_SendChatMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendChatMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LiveServiceServer).SendChatMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LiveService_SendChatMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LiveServiceServer).SendChatMessage(ctx, req.(*SendChatMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LiveService_ListChatMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChatMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LiveServiceServer).ListChatMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LiveService_ListChatMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LiveServiceServer).ListChatMessages(ctx, req.(*ListChatMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LiveService_ServiceDesc is the grpc.ServiceDesc for LiveService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -300,6 +424,18 @@ var LiveService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLiveStream",
 			Handler:    _LiveService_GetLiveStream_Handler,
+		},
+		{
+			MethodName: "CreatePublishToken",
+			Handler:    _LiveService_CreatePublishToken_Handler,
+		},
+		{
+			MethodName: "SendChatMessage",
+			Handler:    _LiveService_SendChatMessage_Handler,
+		},
+		{
+			MethodName: "ListChatMessages",
+			Handler:    _LiveService_ListChatMessages_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

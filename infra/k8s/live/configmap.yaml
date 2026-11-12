@@ -3,7 +3,8 @@
 # Semua pilihan lengkap: https://mediamtx.org/docs/references/configuration-file
 #
 # Alurnya:
-#   OBS --RTMP :1935--> MediaMTX --HLS :8888--> browser penonton
+#   OBS ------RTMP :1935------> MediaMTX --HLS :8888--> browser penonton
+#   Studio (browser) --WHIP :8889 + ICE :8189--^  (langkah 25b)
 #                          |
 #                          +-- "boleh siaran?" --> VideoService :8090 (hook)
 #                          +-- Control API :9997 <-- VideoService (status, penonton)
@@ -38,8 +39,8 @@ data:
     api: yes
     apiAddress: :9997
 
-    # Hanya RTMP (dari OBS) dan HLS (ke browser) yang dipakai sekarang.
-    # Siaran dari browser (WebRTC) menyusul di langkah 25b.
+    # RTMP (dari OBS), WebRTC (siaran dari browser, langkah 25b), dan HLS
+    # (ke browser penonton).
     rtmp: yes
     rtmpAddress: :1935
     hls: yes
@@ -48,8 +49,22 @@ data:
     hlsAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000"]
     rtsp: no
     srt: no
-    webrtc: no
     moq: no
+
+    # Siaran dari browser (langkah 25b). Studio mengirim offer SDP ke
+    # http://webrtc.ice-stream.localhost:4000/live/<id>/whip (WHIP, lewat
+    # Gateway), lalu video dan suaranya mengalir langsung ke port 8189.
+    webrtc: yes
+    webrtcAddress: :8889
+    webrtcAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000"]
+    # Port ICE untuk media. UDP lebih cepat; TCP jadi cadangan jika UDP
+    # tidak bisa lewat (dua Service LoadBalancer di service-webrtc.yaml).
+    webrtcLocalUDPAddress: :8189
+    webrtcLocalTCPAddress: :8189
+    # IP Pod (10.x) tidak bisa dihubungi browser di Windows. Yang dikirim ke
+    # browser hanya 127.0.0.1:8189, yaitu port LoadBalancer Docker Desktop.
+    webrtcIPsFromInterfaces: no
+    webrtcAdditionalHosts: ["127.0.0.1"]
 
     pathDefaults:
       # Jika stream sudah berjalan, publisher kedua dengan key yang sama

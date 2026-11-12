@@ -9,12 +9,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/textrule"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/video"
 )
 
@@ -44,6 +46,22 @@ type Repository interface {
 	//   - siaran LIVE yang last_seen_at-nya lebih lama dari staleBefore:
 	//     ditutup (ENDED, ended_at = last_seen_at).
 	Sync(ctx context.Context, online []Online, now, staleBefore time.Time) (started, ended int, err error)
+	// SetPublishToken menyimpan hash token siaran browser beserta batas
+	// waktunya, menggantikan token sebelumnya.
+	SetPublishToken(ctx context.Context, ownerID int64, hash string, expiresAt, now time.Time) error
+	// CreateChat menyimpan pesan chat dan mengisi ID-nya.
+	CreateChat(ctx context.Context, m ChatMessage) (ChatMessage, error)
+	// ListChat mengambil limit pesan terakhir sebuah siaran, urut dari yang
+	// paling lama.
+	ListChat(ctx context.Context, streamID int64, limit int) ([]ChatMessage, error)
+	// CountChatSince menghitung pesan chat userID sesudah waktu since.
+	CountChatSince(ctx context.Context, userID int64, since time.Time) (int64, error)
+}
+
+// ChatPublisher menyiarkan pesan chat yang baru tersimpan ke penonton lain.
+// Implementasi NATS ada di nats.go.
+type ChatPublisher interface {
+	PublishChat(ctx context.Context, m ChatMessage) error
 }
 
 // Options adalah pengaturan Service.
@@ -58,6 +76,18 @@ type Options struct {
 	// Grace adalah batas tenggang: stream yang hilang lebih singkat dari
 	// ini dianggap siaran yang sama (koneksi kreator sempat putus).
 	Grace time.Duration
+	// WHIPBaseURL adalah alamat publik WebRTC MediaMTX untuk siaran dari
+	// browser, misalnya "http://webrtc.ice-stream.localhost:4000". Alamat
+	// WHIP = WHIPBaseURL + "/live/<owner_id>/whip".
+	WHIPBaseURL string
+	// PublishTokenTTL adalah lama token siaran browser berlaku. Token hanya
+	// diperiksa saat siaran dimulai, jadi cukup beberapa menit.
+	PublishTokenTTL time.Duration
+	// Publisher menyiarkan chat baru. Boleh nil (test): chat tetap
+	// tersimpan, hanya tidak disiarkan.
+	Publisher ChatPublisher
+	// Logger boleh nil.
+	Logger *slog.Logger
 }
 
 // Service berisi aturan bisnis LiveService.
@@ -70,8 +100,15 @@ type Service struct {
 // NewService membuat Service.
 func NewService(repo Repository, opts Options) *Service {
 	opts.PlaybackBaseURL = strings.TrimRight(opts.PlaybackBaseURL, "/")
+	opts.WHIPBaseURL = strings.TrimRight(opts.WHIPBaseURL, "/")
 	if opts.Grace <= 0 {
 		opts.Grace = 15 * time.Second
+	}
+	if opts.PublishTokenTTL <= 0 {
+		opts.PublishTokenTTL = 5 * time.Minute
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
 	}
 	return &Service{repo: repo, opts: opts, now: func() time.Time { return time.Now().UTC() }}
 }
@@ -84,7 +121,17 @@ type ChannelView struct {
 	Current *Stream
 }
 
-const maxTitleRunes = 100
+const (
+	maxTitleRunes = 100
+	maxQueryRunes = 100
+	// Pesan chat mengikuti aturan danmaku: satu baris, maksimal 100 huruf.
+	maxChatRunes = 100
+	// Mode lambat chat: satu pesan per 3 detik per user (desain Live.dc.html).
+	chatSlowMode = 3 * time.Second
+	// Awalan rahasia: stream key OBS dan token siaran browser.
+	keyPrefix   = "isk_"
+	tokenPrefix = "ipt_"
+)
 
 // GetMyChannel mengambil (atau membuat) pengaturan siaran requester.
 func (s *Service) GetMyChannel(ctx context.Context, requesterID int64) (ChannelView, error) {
@@ -133,7 +180,7 @@ func (s *Service) ResetStreamKey(ctx context.Context, requesterID int64) (Channe
 	if _, err := s.repo.GetOrCreateChannel(ctx, requesterID, now); err != nil {
 		return ChannelView{}, "", err
 	}
-	secret, err := newSecret()
+	secret, err := newSecret(keyPrefix)
 	if err != nil {
 		return ChannelView{}, "", err
 	}
@@ -163,6 +210,10 @@ func (s *Service) ListLive(ctx context.Context, f ListFilter) ([]Stream, error) 
 	if len(f.OwnerIDs) > 100 {
 		return nil, &ValidationError{"owner_ids", "maksimal 100"}
 	}
+	f.Query = strings.Join(strings.Fields(f.Query), " ")
+	if utf8.RuneCountInString(f.Query) > maxQueryRunes {
+		return nil, &ValidationError{"query", "maksimal 100 karakter"}
+	}
 	return s.repo.ListLive(ctx, f)
 }
 
@@ -182,18 +233,26 @@ func (s *Service) PlaybackURL(st Stream) string {
 	return s.opts.PlaybackBaseURL + "/" + PathFor(st.OwnerID) + "/index.m3u8"
 }
 
-// AuthorizePublish dipanggil hook MediaMTX saat OBS mulai mengirim video.
-// path adalah nama stream ("live/7"), query adalah sisa URL ("key=...").
-func (s *Service) AuthorizePublish(ctx context.Context, path, query string) (int64, error) {
-	ownerID, ok := OwnerFromPath(path)
+// AuthorizePublish dipanggil hook MediaMTX saat kreator mulai mengirim
+// video. Ada dua cara yang diterima:
+//   - OBS (RTMP): stream key di query, "key=isk_...";
+//   - browser (WHIP): token pendek dari CreatePublishToken di header
+//     Authorization, yang diteruskan MediaMTX sebagai Token.
+func (s *Service) AuthorizePublish(ctx context.Context, req PublishRequest) (int64, error) {
+	ownerID, ok := OwnerFromPath(req.Path)
 	if !ok {
 		return 0, ErrForbidden
 	}
-	q, err := url.ParseQuery(query)
-	if err != nil {
-		return 0, ErrForbidden
+	// Token siaran browser hanya diterima lewat header Authorization (WHIP),
+	// tidak lewat query RTMP. Stream key boleh lewat keduanya.
+	secret, fromHeader := req.Token, req.Token != ""
+	if !fromHeader {
+		q, err := url.ParseQuery(req.Query)
+		if err != nil {
+			return 0, ErrForbidden
+		}
+		secret = q.Get("key")
 	}
-	secret := q.Get("key")
 	if secret == "" {
 		return 0, ErrForbidden
 	}
@@ -204,12 +263,114 @@ func (s *Service) AuthorizePublish(ctx context.Context, path, query string) (int
 	if err != nil {
 		return 0, err
 	}
-	// ConstantTimeCompare: lama perbandingan tidak bergantung pada berapa
-	// huruf yang cocok, jadi key tidak bisa ditebak dari waktu respons.
-	if ch.StreamKeyHash == "" || subtle.ConstantTimeCompare([]byte(ch.StreamKeyHash), []byte(hashSecret(secret))) != 1 {
+	switch {
+	case strings.HasPrefix(secret, keyPrefix) && sameHash(ch.StreamKeyHash, secret):
+		return ownerID, nil
+	case fromHeader && strings.HasPrefix(secret, tokenPrefix) && sameHash(ch.PublishTokenHash, secret) && s.now().Before(ch.PublishTokenExpiresAt):
+		return ownerID, nil
+	default:
 		return 0, ErrForbidden
 	}
-	return ownerID, nil
+}
+
+// PublishToken adalah jawaban CreatePublishToken.
+type PublishToken struct {
+	WHIPURL   string
+	Token     string
+	ExpiresAt time.Time
+}
+
+// CreatePublishToken membuat token siaran browser untuk requester.
+func (s *Service) CreatePublishToken(ctx context.Context, requesterID int64) (PublishToken, error) {
+	now := s.now()
+	if _, err := s.repo.GetOrCreateChannel(ctx, requesterID, now); err != nil {
+		return PublishToken{}, err
+	}
+	token, err := newSecret(tokenPrefix)
+	if err != nil {
+		return PublishToken{}, err
+	}
+	expires := now.Add(s.opts.PublishTokenTTL)
+	if err := s.repo.SetPublishToken(ctx, requesterID, hashSecret(token), expires, now); err != nil {
+		return PublishToken{}, err
+	}
+	return PublishToken{
+		WHIPURL:   s.opts.WHIPBaseURL + "/" + PathFor(requesterID) + "/whip",
+		Token:     token,
+		ExpiresAt: expires,
+	}, nil
+}
+
+// SendChatInput adalah isi SendChatMessage.
+type SendChatInput struct {
+	RequesterID int64
+	StreamID    int64
+	Body        string
+	// Color nil = putih.
+	Color *uint32
+}
+
+// SendChat memeriksa dan menyimpan pesan chat, lalu menyiarkannya. Siaran
+// bersifat "best effort", sama seperti danmaku: jika NATS sedang mati,
+// pesan tetap tersimpan dan terlihat oleh penonton yang memuat ulang.
+func (s *Service) SendChat(ctx context.Context, in SendChatInput) (ChatMessage, error) {
+	if in.RequesterID <= 0 {
+		// Gateway selalu mengisi requester dari access token, jadi ini bug.
+		return ChatMessage{}, errors.New("requester id kosong")
+	}
+	body, err := textrule.SingleLine(in.Body, maxChatRunes)
+	if err != nil {
+		return ChatMessage{}, &ValidationError{"body", err.Error()}
+	}
+	color := ColorWhite
+	if in.Color != nil {
+		if *in.Color > ColorWhite {
+			return ChatMessage{}, &ValidationError{"color", "harus warna RGB 0x000000 sampai 0xFFFFFF"}
+		}
+		color = *in.Color
+	}
+	st, err := s.GetStream(ctx, in.StreamID)
+	if err != nil {
+		return ChatMessage{}, err
+	}
+	if st.Status != StatusLive {
+		return ChatMessage{}, ErrStreamEnded
+	}
+	now := s.now()
+	// Mode lambat: satu pesan per chatSlowMode per user. Dua request yang
+	// datang bersamaan bisa sama-sama lolos; untuk mencegah spam itu cukup.
+	recent, err := s.repo.CountChatSince(ctx, in.RequesterID, now.Add(-chatSlowMode))
+	if err != nil {
+		return ChatMessage{}, err
+	}
+	if recent > 0 {
+		return ChatMessage{}, ErrRateLimited
+	}
+	saved, err := s.repo.CreateChat(ctx, ChatMessage{StreamID: st.ID, UserID: in.RequesterID, Body: body, Color: color, CreatedAt: now})
+	if err != nil {
+		return ChatMessage{}, err
+	}
+	if s.opts.Publisher != nil {
+		if err := s.opts.Publisher.PublishChat(ctx, saved); err != nil {
+			s.opts.Logger.WarnContext(ctx, "chat tersimpan tapi gagal disiarkan",
+				slog.Int64("message_id", saved.ID), slog.Any("error", err))
+		}
+	}
+	return saved, nil
+}
+
+// ListChat mengambil pesan terakhir sebuah siaran (LIVE atau ENDED).
+func (s *Service) ListChat(ctx context.Context, streamID int64, limit int) ([]ChatMessage, error) {
+	switch {
+	case limit == 0:
+		limit = 50
+	case limit < 1 || limit > 100:
+		return nil, &ValidationError{"limit", "harus antara 1 dan 100"}
+	}
+	if _, err := s.GetStream(ctx, streamID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListChat(ctx, streamID, limit)
 }
 
 // Sync menyamakan status siaran dengan daftar stream dari MediaMTX.
@@ -252,15 +413,23 @@ func OwnerFromPath(path string) (int64, bool) {
 	return id, true
 }
 
-// newSecret membuat rahasia stream key: "isk_" + 32 byte acak (base64url).
-// Awalan "isk_" (Ice-Stream Key) memudahkan alat pemindai rahasia, seperti
-// GitHub secret scanning, mengenali key yang tidak sengaja di-commit.
-func newSecret() (string, error) {
+// newSecret membuat rahasia: awalan + 32 byte acak (base64url). Awalan
+// "isk_" (Ice-Stream Key) dan "ipt_" (Ice-Stream Publish Token) memudahkan
+// alat pemindai rahasia, seperti GitHub secret scanning, mengenali rahasia
+// yang tidak sengaja di-commit.
+func newSecret(prefix string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("membuat stream key: %w", err)
+		return "", fmt.Errorf("membuat rahasia: %w", err)
 	}
-	return "isk_" + base64.RawURLEncoding.EncodeToString(b), nil
+	return prefix + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// sameHash membandingkan hash tersimpan dengan hash secret.
+// ConstantTimeCompare: lama perbandingan tidak bergantung pada berapa huruf
+// yang cocok, jadi rahasia tidak bisa ditebak dari waktu respons.
+func sameHash(stored, secret string) bool {
+	return stored != "" && subtle.ConstantTimeCompare([]byte(stored), []byte(hashSecret(secret))) == 1
 }
 
 func hashSecret(secret string) string {

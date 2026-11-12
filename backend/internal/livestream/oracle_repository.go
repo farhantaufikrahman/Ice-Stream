@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/godror/godror"
@@ -17,8 +18,11 @@ type channelRow struct {
 	Category           *string    `gorm:"column:category"`
 	StreamKeyHash      *string    `gorm:"column:stream_key_hash"`
 	StreamKeyCreatedAt *time.Time `gorm:"column:stream_key_created_at"`
-	CreatedAt          time.Time  `gorm:"column:created_at"`
-	UpdatedAt          time.Time  `gorm:"column:updated_at"`
+	// Kolom token siaran browser (migrasi V19).
+	PublishTokenHash      *string    `gorm:"column:publish_token_hash"`
+	PublishTokenExpiresAt *time.Time `gorm:"column:publish_token_expires_at"`
+	CreatedAt             time.Time  `gorm:"column:created_at"`
+	UpdatedAt             time.Time  `gorm:"column:updated_at"`
 }
 
 func (channelRow) TableName() string { return "live_channels" }
@@ -28,7 +32,27 @@ func (r channelRow) toChannel() Channel {
 	if r.StreamKeyCreatedAt != nil {
 		c.StreamKeyCreatedAt = r.StreamKeyCreatedAt.UTC()
 	}
+	c.PublishTokenHash = deref(r.PublishTokenHash)
+	if r.PublishTokenExpiresAt != nil {
+		c.PublishTokenExpiresAt = r.PublishTokenExpiresAt.UTC()
+	}
 	return c
+}
+
+// chatRow memetakan tabel LIVE_CHAT_MESSAGES (migrasi V19).
+type chatRow struct {
+	ID        int64     `gorm:"column:id;primaryKey;autoIncrement"`
+	StreamID  int64     `gorm:"column:stream_id"`
+	UserID    int64     `gorm:"column:user_id"`
+	Body      string    `gorm:"column:body"`
+	Color     int64     `gorm:"column:color"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (chatRow) TableName() string { return "live_chat_messages" }
+
+func (r chatRow) toMessage() ChatMessage {
+	return ChatMessage{ID: r.ID, StreamID: r.StreamID, UserID: r.UserID, Body: r.Body, Color: uint32(r.Color), CreatedAt: r.CreatedAt.UTC()}
 }
 
 // streamRow memetakan tabel LIVE_STREAMS (migrasi V18).
@@ -181,6 +205,10 @@ func (r *OracleRepository) ListLive(ctx context.Context, f ListFilter) ([]Stream
 	if len(f.OwnerIDs) > 0 {
 		q = q.Where("owner_id IN ?", f.OwnerIDs)
 	}
+	if f.Query != "" {
+		// % dan _ di teks pencarian dianggap huruf biasa, bukan wildcard.
+		q = q.Where(`UPPER(title) LIKE UPPER(?) ESCAPE '\'`, "%"+escapeLike(f.Query)+"%")
+	}
 	var rows []streamRow
 	if err := q.Order("started_at DESC, id DESC").Limit(f.Limit).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("select siaran live: %w", err)
@@ -253,6 +281,60 @@ func (r *OracleRepository) Sync(ctx context.Context, online []Online, now, stale
 		return 0, 0, err
 	}
 	return started, ended, nil
+}
+
+// SetPublishToken menyimpan hash token siaran browser.
+func (r *OracleRepository) SetPublishToken(ctx context.Context, ownerID int64, hash string, expiresAt, now time.Time) error {
+	res := r.db.WithContext(ctx).Model(&channelRow{}).Where("owner_id = ?", ownerID).
+		Updates(map[string]any{"publish_token_hash": hash, "publish_token_expires_at": expiresAt, "updated_at": now})
+	if res.Error != nil {
+		return fmt.Errorf("simpan token siaran: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CreateChat menyimpan satu pesan chat. ID diisi Oracle (identity column)
+// lewat RETURNING, yang dibuat GORM secara otomatis.
+func (r *OracleRepository) CreateChat(ctx context.Context, m ChatMessage) (ChatMessage, error) {
+	row := chatRow{StreamID: m.StreamID, UserID: m.UserID, Body: m.Body, Color: int64(m.Color), CreatedAt: m.CreatedAt}
+	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+		return ChatMessage{}, fmt.Errorf("simpan chat: %w", err)
+	}
+	return row.toMessage(), nil
+}
+
+// ListChat mengambil limit pesan terakhir (index live_chat_stream_ix),
+// lalu membaliknya supaya urut dari yang paling lama.
+func (r *OracleRepository) ListChat(ctx context.Context, streamID int64, limit int) ([]ChatMessage, error) {
+	var rows []chatRow
+	err := r.db.WithContext(ctx).Where("stream_id = ?", streamID).Order("id DESC").Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("select chat: %w", err)
+	}
+	out := make([]ChatMessage, len(rows))
+	for i, row := range rows {
+		out[len(rows)-1-i] = row.toMessage()
+	}
+	return out, nil
+}
+
+// CountChatSince menghitung pesan userID sesudah since (index
+// live_chat_user_time_ix).
+func (r *OracleRepository) CountChatSince(ctx context.Context, userID int64, since time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&chatRow{}).Where("user_id = ? AND created_at > ?", userID, since).Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("hitung chat: %w", err)
+	}
+	return n, nil
+}
+
+// escapeLike menandai \, %, dan _ supaya dibaca sebagai huruf biasa di LIKE.
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
 }
 
 func isUniqueViolation(err error) bool {

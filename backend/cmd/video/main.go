@@ -164,10 +164,16 @@ func run(logger *slog.Logger) error {
 
 	// LiveService (langkah 25a): stream key dan status siaran. Videonya
 	// sendiri diurus MediaMTX; di sini hanya hook auth dan pembacaan status.
+	// Langkah 25b-25c: token siaran browser dan chat (disiarkan lewat koneksi
+	// NATS yang sama dengan danmaku).
 	lives := livestream.NewService(livestream.NewOracleRepository(db), livestream.Options{
 		IngestURL:       cfg.Live.IngestURL,
 		PlaybackBaseURL: cfg.Live.PlaybackURL,
 		Grace:           cfg.Live.Grace,
+		WHIPBaseURL:     cfg.Live.WHIPURL,
+		PublishTokenTTL: cfg.Live.PublishTokenTTL,
+		Publisher:       livestream.NewNATSPublisher(nc),
+		Logger:          logger,
 	})
 	livev1.RegisterLiveServiceServer(srv, livestream.NewGRPCServer(lives, logger))
 	hookSrv := &http.Server{
@@ -214,6 +220,7 @@ func run(logger *slog.Logger) error {
 		slog.String("auth_addr", cfg.AuthGRPCAddr),
 		slog.String("mediamtx_api", cfg.Live.MediaMTXAPIURL),
 		slog.String("live_hook_addr", cfg.Live.HookAddr),
+		slog.String("live_whip_url", cfg.Live.WHIPURL),
 	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/textrule"
 )
 
 // Repository adalah semua akses database yang dibutuhkan Service.
@@ -147,29 +147,14 @@ func validateInput(in SendInput) (Danmaku, error) {
 
 // normalizeBody membuang spasi di awal dan akhir, lalu memeriksa isi
 // danmaku: 1 sampai 100 huruf, satu baris, tanpa karakter kontrol tak
-// terlihat (aturan yang sama dengan komentar, tapi baris baru dan tab juga
-// ditolak karena danmaku selalu tampil satu baris).
+// terlihat. Aturannya ada di paket textrule supaya sama dengan chat siaran
+// langsung (langkah 25c).
 func normalizeBody(body string) (string, error) {
-	if !utf8.ValidString(body) {
-		return "", &ValidationError{"body", "bukan teks UTF-8 yang valid"}
+	clean, err := textrule.SingleLine(body, maxBodyRunes)
+	if err != nil {
+		return "", &ValidationError{"body", err.Error()}
 	}
-	body = strings.TrimSpace(body)
-	n := utf8.RuneCountInString(body)
-	if n == 0 || n > maxBodyRunes {
-		return "", &ValidationError{"body", fmt.Sprintf("wajib diisi, maksimal %d karakter", maxBodyRunes)}
-	}
-	for _, r := range body {
-		if r == '\n' || r == '\r' || r == '\t' {
-			return "", &ValidationError{"body", "harus satu baris"}
-		}
-		// Cc = karakter kontrol, Cf = karakter format tak terlihat (misalnya
-		// U+202E pembalik arah teks). U+200D (zero width joiner) tetap boleh
-		// karena dipakai untuk menyusun emoji.
-		if unicode.Is(unicode.Cc, r) || (unicode.Is(unicode.Cf, r) && r != '‍') {
-			return "", &ValidationError{"body", "berisi karakter yang tidak diizinkan"}
-		}
-	}
-	return body, nil
+	return clean, nil
 }
 
 // List mengambil danmaku dalam rentang posisi fromMs sampai toMs.

@@ -179,3 +179,28 @@ type DanmakuSent struct {
 	Mode      string    `json:"mode"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// Chat siaran langsung (langkah 25c) memakai core NATS seperti danmaku:
+//
+//	VideoService --live.chat.<stream_id>--> semua pod API gateway yang
+//	                                       punya penonton siaran itu
+//
+// Tidak diawali "videos.", jadi tidak ikut tersimpan di stream VIDEOS.
+const subjectLiveChatPrefix = "live.chat."
+
+// SubjectLiveChat mengembalikan subject chat satu siaran, misalnya
+// "live.chat.3".
+func SubjectLiveChat(streamID int64) string {
+	return subjectLiveChatPrefix + strconv.FormatInt(streamID, 10)
+}
+
+// LiveChatSent dikirim VideoService setelah satu pesan chat tersimpan.
+type LiveChatSent struct {
+	ID       int64  `json:"id"`
+	StreamID int64  `json:"stream_id"`
+	UserID   int64  `json:"user_id"`
+	Body     string `json:"body"`
+	// Color adalah warna RGB, 0x000000 sampai 0xFFFFFF.
+	Color     uint32    `json:"color"`
+	CreatedAt time.Time `json:"created_at"`
+}

@@ -58,7 +58,7 @@ func (s *GRPCServer) ResetStreamKey(ctx context.Context, req *livev1.ResetStream
 }
 
 func (s *GRPCServer) ListLiveStreams(ctx context.Context, req *livev1.ListLiveStreamsRequest) (*livev1.ListLiveStreamsResponse, error) {
-	streams, err := s.svc.ListLive(ctx, ListFilter{Category: req.GetCategory(), OwnerIDs: req.GetOwnerIds(), Limit: int(req.GetLimit())})
+	streams, err := s.svc.ListLive(ctx, ListFilter{Category: req.GetCategory(), OwnerIDs: req.GetOwnerIds(), Query: req.GetQuery(), Limit: int(req.GetLimit())})
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -77,6 +77,56 @@ func (s *GRPCServer) GetLiveStream(ctx context.Context, req *livev1.GetLiveStrea
 	return &livev1.GetLiveStreamResponse{Stream: s.streamProto(st)}, nil
 }
 
+func (s *GRPCServer) CreatePublishToken(ctx context.Context, req *livev1.CreatePublishTokenRequest) (*livev1.CreatePublishTokenResponse, error) {
+	if req.GetRequesterId() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "requester_id wajib diisi")
+	}
+	t, err := s.svc.CreatePublishToken(ctx, req.GetRequesterId())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &livev1.CreatePublishTokenResponse{WhipUrl: t.WHIPURL, Token: t.Token, ExpiresAt: timestamppb.New(t.ExpiresAt)}, nil
+}
+
+func (s *GRPCServer) SendChatMessage(ctx context.Context, req *livev1.SendChatMessageRequest) (*livev1.SendChatMessageResponse, error) {
+	if req.GetRequesterId() <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "requester_id wajib diisi")
+	}
+	m, err := s.svc.SendChat(ctx, SendChatInput{
+		RequesterID: req.GetRequesterId(),
+		StreamID:    req.GetStreamId(),
+		Body:        req.GetBody(),
+		Color:       req.Color,
+	})
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &livev1.SendChatMessageResponse{Message: chatProto(m)}, nil
+}
+
+func (s *GRPCServer) ListChatMessages(ctx context.Context, req *livev1.ListChatMessagesRequest) (*livev1.ListChatMessagesResponse, error) {
+	msgs, err := s.svc.ListChat(ctx, req.GetStreamId(), int(req.GetLimit()))
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &livev1.ListChatMessagesResponse{Messages: make([]*livev1.ChatMessage, len(msgs))}
+	for i, m := range msgs {
+		resp.Messages[i] = chatProto(m)
+	}
+	return resp, nil
+}
+
+func chatProto(m ChatMessage) *livev1.ChatMessage {
+	return &livev1.ChatMessage{
+		Id:        m.ID,
+		StreamId:  m.StreamID,
+		UserId:    m.UserID,
+		Body:      m.Body,
+		Color:     m.Color,
+		CreatedAt: timestamppb.New(m.CreatedAt),
+	}
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError
@@ -85,6 +135,10 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.InvalidArgument, verr.Error())
 	case errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrStreamEnded):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, ErrRateLimited):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, context.Canceled):
 		return status.Error(codes.Canceled, "request dibatalkan")
 	case errors.Is(err, context.DeadlineExceeded):

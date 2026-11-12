@@ -14,6 +14,11 @@ export function shareUrl(origin: string, videoId: string, startSeconds = 0): str
   return url.toString()
 }
 
+/** Tautan siaran langsung, misalnya https://situs/live/3 (langkah 25c). */
+export function liveShareUrl(origin: string, liveId: string): string {
+  return new URL(`/live/${encodeURIComponent(liveId)}`, origin).toString()
+}
+
 /**
  * Membaca ?t= dari alamat, dalam detik. Menerima angka detik ("83") dan
  * bentuk seperti YouTube ("1m23s", "1h2m", "45s"). Nilai lain, termasuk
