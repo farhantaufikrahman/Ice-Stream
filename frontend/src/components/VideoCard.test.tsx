@@ -18,6 +18,7 @@ const video: Video = {
   view_count: 1500,
   comment_count: 0,
   like_count: 3,
+  danmaku_count: 0,
   category: 'game',
   tags: [],
   owner: { id: '7', username: 'budi', display_name: 'Budi', avatar_url: '' },

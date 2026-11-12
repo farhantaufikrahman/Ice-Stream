@@ -31,6 +31,8 @@ export interface Video {
   view_count: number
   comment_count: number
   like_count: number
+  /** Langkah 24a: jumlah danmaku yang pernah dikirim ke video ini. */
+  danmaku_count: number
   /** Langkah 23. "" jika video tidak punya kategori. */
   category: string
   /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
@@ -42,6 +44,16 @@ export interface VideoPage {
   videos: Video[]
   /** "" jika tidak ada halaman berikutnya. */
   next_page_token: string
+}
+
+/** Satu video Trending (GET /trending/videos). */
+export interface TrendingVideo extends Video {
+  /** Tayangan 7 hari terakhir (termasuk hari ini, tanggal WIB): angka urutannya. */
+  recent_views: number
+}
+
+export interface TrendingList {
+  videos: TrendingVideo[]
 }
 
 export interface VideoDetail {

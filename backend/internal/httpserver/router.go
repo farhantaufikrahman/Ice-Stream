@@ -101,6 +101,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 	v1.GET("/search/videos", videos.search)
+	v1.GET("/trending/videos", videos.trending)
 	v1.GET("/me/history", requireAuth, videos.history)
 	v1.DELETE("/me/history", requireAuth, videos.clearHistory)
 	v1.PUT("/me/history/:id", requireAuth, limitBody(maxHistoryBodyBytes), videos.saveProgress)

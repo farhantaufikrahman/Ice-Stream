@@ -2658,3 +2658,265 @@ a.channel-result-name:hover {
   color: var(--fg);
   font-weight: 600;
 }
+
+/* ---------- Langkah 24a: urutan, filter durasi, Trending ---------- */
+/* Tombol kecil "Urutkan"/"Durasi" (desain Search.dc.html) dan Terbaru/Terpopuler (Channel.dc.html). */
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.8125rem;
+}
+.filter-group,
+.sort-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+.sort-toggle {
+  gap: 6px;
+  font-size: 0.8125rem;
+}
+.filter-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+}
+.filter-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--soft);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.filter-btn:hover {
+  border-color: var(--accent-text);
+}
+/* Urutan aktif: blok terbalik (gelap/terang). */
+.filter-btn.is-active {
+  border-color: var(--inv-bg);
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+  font-weight: 700;
+}
+/* Durasi aktif: garis mint, karena bisa dilepas (bukan pilihan wajib). */
+.filter-btn.is-picked {
+  border-color: var(--mint);
+  color: var(--accent-text);
+}
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.section-head .section-title {
+  margin: 0;
+}
+
+/* Beranda: Sorotan minggu ini + Trending (desain Home.dc.html). */
+.home-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+.spotlight {
+  flex: 2 1 560px;
+  min-width: 0;
+  position: relative;
+  min-height: 340px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #1c3a52;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: #e8eef8;
+  text-decoration: none;
+}
+.spotlight .thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+/* Gradasi supaya teks putih tetap terbaca di atas thumbnail terang. */
+.spotlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgb(11 18 32 / 0.85) 0%, rgb(11 18 32 / 0.55) 55%, rgb(11 18 32 / 0) 100%),
+    linear-gradient(to top, rgb(11 18 32 / 0.9) 0%, rgb(11 18 32 / 0.3) 50%, rgb(11 18 32 / 0) 100%);
+}
+.spotlight-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 620px;
+  padding: 32px;
+}
+.spotlight-badge {
+  align-self: flex-start;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--amber);
+  color: #0b1220;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.spotlight-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.6vw, 2.75rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 12px rgb(11 18 32 / 0.6);
+}
+.spotlight-meta {
+  margin: 0;
+  color: #c9d3e3;
+  font-size: 0.95rem;
+}
+.spotlight-cta {
+  align-self: flex-start;
+  margin-top: 6px;
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 12px;
+  background: var(--mint);
+  color: #0b1220;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spotlight:hover .spotlight-cta {
+  filter: brightness(1.08);
+}
+.trending-box {
+  flex: 1 1 320px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.trending-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.trending-head .section-title {
+  margin: 0;
+}
+.trending-list,
+.trending-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trending-item {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.trending-rank {
+  flex: none;
+  width: 28px;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  color: var(--faint);
+}
+.trending-rank.is-top {
+  color: var(--amber-text);
+}
+.trending-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.trending-title {
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+a.trending-title:hover {
+  color: var(--accent-text);
+}
+
+/* Halaman /trending: baris berperingkat dengan thumbnail. */
+.trending-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.trending-page .page-title {
+  margin-bottom: 4px;
+}
+.trending-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.trending-row:hover {
+  background: var(--surface);
+}
+.trending-row-thumb {
+  position: relative;
+  flex: none;
+  width: clamp(120px, 28vw, 220px);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.trending-row .trending-title {
+  font-size: 1rem;
+}
+@media (max-width: 560px) {
+  .spotlight {
+    min-height: 260px;
+  }
+  .spotlight-text {
+    padding: 20px;
+  }
+  .trending-row {
+    gap: 10px;
+    padding: 8px 0;
+  }
+  .filter-divider {
+    display: none;
+  }
+}

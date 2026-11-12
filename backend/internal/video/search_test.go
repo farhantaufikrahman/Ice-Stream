@@ -3,6 +3,7 @@ package video
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 // Search versi memori: aturan yang sama dengan query SQL di
 // OracleRepository.Search (semua kata harus cocok di awal kata, skor =
 // jumlah bobot, lalu views, lalu id).
-func (r *fakeRepo) Search(_ context.Context, terms []string, offset, limit int) ([]Video, error) {
+func (r *fakeRepo) Search(_ context.Context, terms []string, opts SearchOptions, offset, limit int) ([]Video, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	type hit struct {
@@ -26,6 +27,9 @@ func (r *fakeRepo) Search(_ context.Context, terms []string, offset, limit int) 
 	for id, vt := range r.terms {
 		v := r.videos[id]
 		if v.Status != StatusReady {
+			continue
+		}
+		if minMs, maxMs := opts.Duration.durationRange(); v.DurationMs < minMs || (maxMs > 0 && v.DurationMs >= maxMs) {
 			continue
 		}
 		score, all := 0, true
@@ -46,15 +50,22 @@ func (r *fakeRepo) Search(_ context.Context, terms []string, offset, limit int) 
 			hits = append(hits, hit{v, score})
 		}
 	}
+	// Sama dengan searchOrder di oracle_repository.go: setiap urutan
+	// adalah daftar nilai yang dibandingkan dari kiri, id paling akhir.
+	key := func(h hit) []int64 {
+		switch opts.Sort {
+		case SortNewest:
+			return []int64{h.v.ProcessedAt.UnixMicro(), h.v.ID}
+		case SortMostViewed:
+			return []int64{h.v.ViewCount, h.v.ID}
+		case SortMostDanmaku:
+			return []int64{h.v.DanmakuCount, h.v.ViewCount, h.v.ID}
+		default:
+			return []int64{int64(h.score), h.v.ViewCount, h.v.ID}
+		}
+	}
 	sort.Slice(hits, func(i, j int) bool {
-		a, b := hits[i], hits[j]
-		if a.score != b.score {
-			return a.score > b.score
-		}
-		if a.v.ViewCount != b.v.ViewCount {
-			return a.v.ViewCount > b.v.ViewCount
-		}
-		return a.v.ID > b.v.ID
+		return slices.Compare(key(hits[i]), key(hits[j])) > 0
 	})
 	var out []Video
 	for i := offset; i < len(hits) && len(out) < limit; i++ {
@@ -155,7 +166,7 @@ func TestSearchVideos(t *testing.T) {
 	pending, err := svc.CreateUpload(ctx, CreateUploadInput{OwnerID: 7, Title: "Golang rahasia", ContentType: "video/mp4", SizeBytes: 1})
 	require.NoError(t, err)
 
-	got, next, err := svc.SearchVideos(ctx, "golang", 0, "")
+	got, next, err := svc.SearchVideos(ctx, "golang", SearchOptions{}, 0, "")
 	require.NoError(t, err)
 	// a dan c cocok di judul (skor 2), b hanya di deskripsi (skor 1). Skor
 	// sama diurutkan views terbanyak.
@@ -163,24 +174,24 @@ func TestSearchVideos(t *testing.T) {
 	assert.NotContains(t, ids(got), pending.Video.ID)
 	assert.Empty(t, next)
 
-	got, _, err = svc.SearchVideos(ctx, "Go", 0, "")
+	got, _, err = svc.SearchVideos(ctx, "Go", SearchOptions{}, 0, "")
 	require.NoError(t, err)
 	assert.Len(t, got, 3, "awalan kata: go cocok dengan golang, goreng, goroutine")
 
-	got, _, err = svc.SearchVideos(ctx, "golang nol", 0, "")
+	got, _, err = svc.SearchVideos(ctx, "golang nol", SearchOptions{}, 0, "")
 	require.NoError(t, err)
 	assert.Equal(t, []int64{a.ID}, ids(got), "semua kata harus cocok")
 
-	got, _, err = svc.SearchVideos(ctx, "tidakada", 0, "")
+	got, _, err = svc.SearchVideos(ctx, "tidakada", SearchOptions{}, 0, "")
 	require.NoError(t, err)
 	assert.Empty(t, got)
 
 	// Halaman berikutnya.
-	page1, next, err := svc.SearchVideos(ctx, "golang", 2, "")
+	page1, next, err := svc.SearchVideos(ctx, "golang", SearchOptions{}, 2, "")
 	require.NoError(t, err)
 	assert.Equal(t, []int64{a.ID, c.ID}, ids(page1))
 	require.NotEmpty(t, next)
-	page2, next, err := svc.SearchVideos(ctx, "golang", 2, next)
+	page2, next, err := svc.SearchVideos(ctx, "golang", SearchOptions{}, 2, next)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{b.ID}, ids(page2))
 	assert.Empty(t, next)
@@ -194,7 +205,7 @@ func TestSearchVideosPageLimit(t *testing.T) {
 	}
 	token, pages := "", 0
 	for {
-		got, next, err := svc.SearchVideos(ctx, "golang", 1, token)
+		got, next, err := svc.SearchVideos(ctx, "golang", SearchOptions{}, 1, token)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		pages++
@@ -209,12 +220,12 @@ func TestSearchVideosPageLimit(t *testing.T) {
 func TestSearchVideosValidation(t *testing.T) {
 	svc, _, _ := newTestService()
 	var verr *ValidationError
-	_, _, err := svc.SearchVideos(context.Background(), "", 0, "")
+	_, _, err := svc.SearchVideos(context.Background(), "", SearchOptions{}, 0, "")
 	assert.ErrorAs(t, err, &verr)
-	_, _, err = svc.SearchVideos(context.Background(), "golang", 51, "")
+	_, _, err = svc.SearchVideos(context.Background(), "golang", SearchOptions{}, 51, "")
 	assert.ErrorAs(t, err, &verr)
 	for _, token := range []string{"!!!", encodeRaw("1"), encodeRaw("s0"), encodeRaw("s10"), encodeRaw("sx"), encodeFeedCursor(FeedCursor{ProcessedAt: time.Now(), ID: 1})} {
-		_, _, err = svc.SearchVideos(context.Background(), "golang", 0, token)
+		_, _, err = svc.SearchVideos(context.Background(), "golang", SearchOptions{}, 0, token)
 		assert.ErrorAs(t, err, &verr, "token %q", token)
 	}
 }
@@ -232,7 +243,7 @@ func TestIndexPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 250, n)
 
-	got, _, err := svc.SearchVideos(ctx, "lama", 50, "")
+	got, _, err := svc.SearchVideos(ctx, "lama", SearchOptions{}, 50, "")
 	require.NoError(t, err)
 	assert.Len(t, got, 50)
 

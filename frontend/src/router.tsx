@@ -15,6 +15,7 @@ import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StudioDashboardPage } from './pages/StudioDashboardPage'
 import { StudioPage } from './pages/StudioPage'
+import { TrendingPage } from './pages/TrendingPage'
 import { UploadPage } from './pages/UploadPage'
 import { WatchLaterPage } from './pages/WatchLaterPage'
 import { WatchPage } from './pages/WatchPage'
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <HomePage /> },
           { path: '/search', element: <SearchPage /> },
+          { path: '/trending', element: <TrendingPage /> },
           { path: '/watch/:id', element: <WatchPage /> },
           { path: '/channel/:username', element: <ChannelPage /> },
           // Boleh tanpa login: playlist PUBLIC bisa dibuka siapa saja.

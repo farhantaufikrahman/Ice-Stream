@@ -75,6 +75,8 @@ type videoResponse struct {
 	CommentCount int64 `json:"comment_count"`
 	// LikeCount adalah jumlah like (selalu ada).
 	LikeCount int64 `json:"like_count"`
+	// DanmakuCount adalah jumlah danmaku (selalu ada, langkah 24a).
+	DanmakuCount int64 `json:"danmaku_count"`
 	// Category selalu ada; "" jika video tidak punya kategori.
 	Category string `json:"category"`
 	// Tags selalu berupa array (bisa kosong), tanpa "#".
@@ -261,7 +263,11 @@ func (h *videoHandler) listMine(c *gin.Context) {
 }
 
 // search: GET /api/v1/search/videos?q=belajar+golang&page_size=20&page_token=...
-// Tanpa login. Hasilnya berbentuk sama dengan feed, urut paling relevan.
+// Tanpa login. Hasilnya berbentuk sama dengan feed. Langkah 24a:
+// ?sort=relevance|newest|views|danmaku (bawaan relevance) dan
+// ?duration=short|medium|long (kurang dari 10 menit, 10-30 menit, lebih
+// dari 30 menit). Halaman berikutnya harus mengirim sort dan duration
+// yang sama.
 // Path-nya /search/videos (bukan /videos/search) supaya tidak tertukar
 // dengan /videos/:id, dan nanti bisa ditambah /search/channels.
 func (h *videoHandler) search(c *gin.Context) {
@@ -274,6 +280,14 @@ func (h *videoHandler) search(c *gin.Context) {
 	if !ok {
 		return
 	}
+	sort, ok := enumQuery(c, "sort", searchSortParams, "relevance, newest, views, danmaku")
+	if !ok {
+		return
+	}
+	duration, ok := enumQuery(c, "duration", durationParams, "short, medium, long")
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
 	defer cancel()
 
@@ -281,6 +295,8 @@ func (h *videoHandler) search(c *gin.Context) {
 		Query:     q,
 		PageSize:  pageSize,
 		PageToken: c.Query("page_token"),
+		Sort:      sort,
+		Duration:  duration,
 	})
 	if err != nil {
 		writeGRPCError(c, h.logger, err)
@@ -495,6 +511,7 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		ViewCount:     v.GetViewCount(),
 		CommentCount:  v.GetCommentCount(),
 		LikeCount:     v.GetLikeCount(),
+		DanmakuCount:  v.GetDanmakuCount(),
 		Category:      v.GetCategory(),
 		// Selalu array, bukan null, supaya frontend bisa langsung
 		// video.tags.map(...).

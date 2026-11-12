@@ -26,6 +26,178 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Urutan hasil pencarian video (desain Search: "Urutkan").
+type SearchSort int32
+
+const (
+	// Sama dengan SEARCH_SORT_RELEVANCE.
+	SearchSort_SEARCH_SORT_UNSPECIFIED SearchSort = 0
+	// Skor kecocokan kata, lalu tayangan terbanyak.
+	SearchSort_SEARCH_SORT_RELEVANCE SearchSort = 1
+	// Paling baru tayang lebih dulu.
+	SearchSort_SEARCH_SORT_NEWEST SearchSort = 2
+	// Tayangan sepanjang masa terbanyak lebih dulu.
+	SearchSort_SEARCH_SORT_MOST_VIEWED SearchSort = 3
+	// Danmaku terbanyak lebih dulu.
+	SearchSort_SEARCH_SORT_MOST_DANMAKU SearchSort = 4
+)
+
+// Enum value maps for SearchSort.
+var (
+	SearchSort_name = map[int32]string{
+		0: "SEARCH_SORT_UNSPECIFIED",
+		1: "SEARCH_SORT_RELEVANCE",
+		2: "SEARCH_SORT_NEWEST",
+		3: "SEARCH_SORT_MOST_VIEWED",
+		4: "SEARCH_SORT_MOST_DANMAKU",
+	}
+	SearchSort_value = map[string]int32{
+		"SEARCH_SORT_UNSPECIFIED":  0,
+		"SEARCH_SORT_RELEVANCE":    1,
+		"SEARCH_SORT_NEWEST":       2,
+		"SEARCH_SORT_MOST_VIEWED":  3,
+		"SEARCH_SORT_MOST_DANMAKU": 4,
+	}
+)
+
+func (x SearchSort) Enum() *SearchSort {
+	p := new(SearchSort)
+	*p = x
+	return p
+}
+
+func (x SearchSort) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SearchSort) Descriptor() protoreflect.EnumDescriptor {
+	return file_video_v1_video_proto_enumTypes[0].Descriptor()
+}
+
+func (SearchSort) Type() protoreflect.EnumType {
+	return &file_video_v1_video_proto_enumTypes[0]
+}
+
+func (x SearchSort) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SearchSort.Descriptor instead.
+func (SearchSort) EnumDescriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{0}
+}
+
+// Filter durasi pencarian (desain Search: "Durasi").
+type DurationFilter int32
+
+const (
+	// Semua durasi.
+	DurationFilter_DURATION_FILTER_UNSPECIFIED DurationFilter = 0
+	// Kurang dari 10 menit.
+	DurationFilter_DURATION_FILTER_SHORT DurationFilter = 1
+	// 10 sampai 30 menit.
+	DurationFilter_DURATION_FILTER_MEDIUM DurationFilter = 2
+	// Lebih dari 30 menit.
+	DurationFilter_DURATION_FILTER_LONG DurationFilter = 3
+)
+
+// Enum value maps for DurationFilter.
+var (
+	DurationFilter_name = map[int32]string{
+		0: "DURATION_FILTER_UNSPECIFIED",
+		1: "DURATION_FILTER_SHORT",
+		2: "DURATION_FILTER_MEDIUM",
+		3: "DURATION_FILTER_LONG",
+	}
+	DurationFilter_value = map[string]int32{
+		"DURATION_FILTER_UNSPECIFIED": 0,
+		"DURATION_FILTER_SHORT":       1,
+		"DURATION_FILTER_MEDIUM":      2,
+		"DURATION_FILTER_LONG":        3,
+	}
+)
+
+func (x DurationFilter) Enum() *DurationFilter {
+	p := new(DurationFilter)
+	*p = x
+	return p
+}
+
+func (x DurationFilter) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DurationFilter) Descriptor() protoreflect.EnumDescriptor {
+	return file_video_v1_video_proto_enumTypes[1].Descriptor()
+}
+
+func (DurationFilter) Type() protoreflect.EnumType {
+	return &file_video_v1_video_proto_enumTypes[1]
+}
+
+func (x DurationFilter) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DurationFilter.Descriptor instead.
+func (DurationFilter) EnumDescriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{1}
+}
+
+// Urutan ListVideos.
+type VideoSort int32
+
+const (
+	// Sama dengan VIDEO_SORT_NEWEST.
+	VideoSort_VIDEO_SORT_UNSPECIFIED VideoSort = 0
+	// Paling baru tayang lebih dulu (feed biasa).
+	VideoSort_VIDEO_SORT_NEWEST VideoSort = 1
+	// Tayangan terbanyak lebih dulu (tab Terpopuler di halaman channel).
+	// Hanya untuk tepat satu pemilik (owner_id), tanpa category.
+	VideoSort_VIDEO_SORT_POPULAR VideoSort = 2
+)
+
+// Enum value maps for VideoSort.
+var (
+	VideoSort_name = map[int32]string{
+		0: "VIDEO_SORT_UNSPECIFIED",
+		1: "VIDEO_SORT_NEWEST",
+		2: "VIDEO_SORT_POPULAR",
+	}
+	VideoSort_value = map[string]int32{
+		"VIDEO_SORT_UNSPECIFIED": 0,
+		"VIDEO_SORT_NEWEST":      1,
+		"VIDEO_SORT_POPULAR":     2,
+	}
+)
+
+func (x VideoSort) Enum() *VideoSort {
+	p := new(VideoSort)
+	*p = x
+	return p
+}
+
+func (x VideoSort) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VideoSort) Descriptor() protoreflect.EnumDescriptor {
+	return file_video_v1_video_proto_enumTypes[2].Descriptor()
+}
+
+func (VideoSort) Type() protoreflect.EnumType {
+	return &file_video_v1_video_proto_enumTypes[2]
+}
+
+func (x VideoSort) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VideoSort.Descriptor instead.
+func (VideoSort) EnumDescriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{2}
+}
+
 type VideoStatus int32
 
 const (
@@ -73,11 +245,11 @@ func (x VideoStatus) String() string {
 }
 
 func (VideoStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_video_v1_video_proto_enumTypes[0].Descriptor()
+	return file_video_v1_video_proto_enumTypes[3].Descriptor()
 }
 
 func (VideoStatus) Type() protoreflect.EnumType {
-	return &file_video_v1_video_proto_enumTypes[0]
+	return &file_video_v1_video_proto_enumTypes[3]
 }
 
 func (x VideoStatus) Number() protoreflect.EnumNumber {
@@ -86,7 +258,7 @@ func (x VideoStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VideoStatus.Descriptor instead.
 func (VideoStatus) EnumDescriptor() ([]byte, []int) {
-	return file_video_v1_video_proto_rawDescGZIP(), []int{0}
+	return file_video_v1_video_proto_rawDescGZIP(), []int{3}
 }
 
 type PlaylistVisibility int32
@@ -124,11 +296,11 @@ func (x PlaylistVisibility) String() string {
 }
 
 func (PlaylistVisibility) Descriptor() protoreflect.EnumDescriptor {
-	return file_video_v1_video_proto_enumTypes[1].Descriptor()
+	return file_video_v1_video_proto_enumTypes[4].Descriptor()
 }
 
 func (PlaylistVisibility) Type() protoreflect.EnumType {
-	return &file_video_v1_video_proto_enumTypes[1]
+	return &file_video_v1_video_proto_enumTypes[4]
 }
 
 func (x PlaylistVisibility) Number() protoreflect.EnumNumber {
@@ -137,7 +309,7 @@ func (x PlaylistVisibility) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PlaylistVisibility.Descriptor instead.
 func (PlaylistVisibility) EnumDescriptor() ([]byte, []int) {
-	return file_video_v1_video_proto_rawDescGZIP(), []int{1}
+	return file_video_v1_video_proto_rawDescGZIP(), []int{4}
 }
 
 type Video struct {
@@ -177,7 +349,9 @@ type Video struct {
 	Category string `protobuf:"bytes,19,opt,name=category,proto3" json:"category,omitempty"`
 	// Tag tanpa "#", sesuai urutan yang diketik kreator, misalnya
 	// ["esKrim", "anakKos"]. Maksimal 10.
-	Tags          []string `protobuf:"bytes,20,rep,name=tags,proto3" json:"tags,omitempty"`
+	Tags []string `protobuf:"bytes,20,rep,name=tags,proto3" json:"tags,omitempty"`
+	// Jumlah danmaku (langkah 24a).
+	DanmakuCount  int64 `protobuf:"varint,21,opt,name=danmaku_count,json=danmakuCount,proto3" json:"danmaku_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,6 +524,13 @@ func (x *Video) GetTags() []string {
 		return x.Tags
 	}
 	return nil
+}
+
+func (x *Video) GetDanmakuCount() int64 {
+	if x != nil {
+		return x.DanmakuCount
+	}
+	return 0
 }
 
 type CreateUploadRequest struct {
@@ -903,7 +1084,9 @@ type ListVideosRequest struct {
 	// Maksimal 1000 id. Boleh digabung dengan owner_id.
 	OwnerIds []int64 `protobuf:"varint,4,rep,packed,name=owner_ids,json=ownerIds,proto3" json:"owner_ids,omitempty"`
 	// Jika diisi, hanya video kategori ini (chip di beranda). Kosong = semua.
-	Category      string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	Category string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	// Bawaan: terbaru. Token halaman berbeda untuk setiap urutan.
+	Sort          VideoSort `protobuf:"varint,6,opt,name=sort,proto3,enum=video.v1.VideoSort" json:"sort,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -973,6 +1156,13 @@ func (x *ListVideosRequest) GetCategory() string {
 	return ""
 }
 
+func (x *ListVideosRequest) GetSort() VideoSort {
+	if x != nil {
+		return x.Sort
+	}
+	return VideoSort_VIDEO_SORT_UNSPECIFIED
+}
+
 type ListVideosResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Videos []*Video               `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
@@ -1034,7 +1224,10 @@ type SearchVideosRequest struct {
 	// Jumlah maksimal per halaman (1 sampai 50, default 20).
 	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// Kosong untuk halaman pertama, lalu isi dengan next_page_token.
-	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Halaman berikutnya harus memakai sort dan duration yang sama.
+	Sort          SearchSort     `protobuf:"varint,4,opt,name=sort,proto3,enum=video.v1.SearchSort" json:"sort,omitempty"`
+	Duration      DurationFilter `protobuf:"varint,5,opt,name=duration,proto3,enum=video.v1.DurationFilter" json:"duration,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1088,6 +1281,20 @@ func (x *SearchVideosRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *SearchVideosRequest) GetSort() SearchSort {
+	if x != nil {
+		return x.Sort
+	}
+	return SearchSort_SEARCH_SORT_UNSPECIFIED
+}
+
+func (x *SearchVideosRequest) GetDuration() DurationFilter {
+	if x != nil {
+		return x.Duration
+	}
+	return DurationFilter_DURATION_FILTER_UNSPECIFIED
 }
 
 type SearchVideosResponse struct {
@@ -4374,11 +4581,162 @@ func (x *SearchPlaylistsResponse) GetNextPageToken() string {
 	return ""
 }
 
+type ListTrendingVideosRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Jika diisi, hanya video kategori ini. Kosong = semua kategori.
+	Category string `protobuf:"bytes,1,opt,name=category,proto3" json:"category,omitempty"`
+	// Jumlah maksimal (1 sampai 50, default 10).
+	Limit         int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTrendingVideosRequest) Reset() {
+	*x = ListTrendingVideosRequest{}
+	mi := &file_video_v1_video_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTrendingVideosRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTrendingVideosRequest) ProtoMessage() {}
+
+func (x *ListTrendingVideosRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTrendingVideosRequest.ProtoReflect.Descriptor instead.
+func (*ListTrendingVideosRequest) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *ListTrendingVideosRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ListTrendingVideosRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListTrendingVideosResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Videos        []*TrendingVideo       `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTrendingVideosResponse) Reset() {
+	*x = ListTrendingVideosResponse{}
+	mi := &file_video_v1_video_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTrendingVideosResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTrendingVideosResponse) ProtoMessage() {}
+
+func (x *ListTrendingVideosResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTrendingVideosResponse.ProtoReflect.Descriptor instead.
+func (*ListTrendingVideosResponse) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *ListTrendingVideosResponse) GetVideos() []*TrendingVideo {
+	if x != nil {
+		return x.Videos
+	}
+	return nil
+}
+
+type TrendingVideo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Video *Video                 `protobuf:"bytes,1,opt,name=video,proto3" json:"video,omitempty"`
+	// Tayangan 7 hari terakhir, angka yang dipakai untuk mengurutkan.
+	RecentViews   int64 `protobuf:"varint,2,opt,name=recent_views,json=recentViews,proto3" json:"recent_views,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrendingVideo) Reset() {
+	*x = TrendingVideo{}
+	mi := &file_video_v1_video_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrendingVideo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrendingVideo) ProtoMessage() {}
+
+func (x *TrendingVideo) ProtoReflect() protoreflect.Message {
+	mi := &file_video_v1_video_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrendingVideo.ProtoReflect.Descriptor instead.
+func (*TrendingVideo) Descriptor() ([]byte, []int) {
+	return file_video_v1_video_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *TrendingVideo) GetVideo() *Video {
+	if x != nil {
+		return x.Video
+	}
+	return nil
+}
+
+func (x *TrendingVideo) GetRecentViews() int64 {
+	if x != nil {
+		return x.RecentViews
+	}
+	return 0
+}
+
 var File_video_v1_video_proto protoreflect.FileDescriptor
 
 const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
-	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x05\n" +
+	"\x14video/v1/video.proto\x12\bvideo.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf0\x05\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bowner_id\x18\x02 \x01(\x03R\aownerId\x12\x14\n" +
@@ -4408,7 +4766,8 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\n" +
 	"like_count\x18\x12 \x01(\x03R\tlikeCount\x12\x1a\n" +
 	"\bcategory\x18\x13 \x01(\tR\bcategory\x12\x12\n" +
-	"\x04tags\x18\x14 \x03(\tR\x04tags\"\xe2\x01\n" +
+	"\x04tags\x18\x14 \x03(\tR\x04tags\x12#\n" +
+	"\rdanmaku_count\x18\x15 \x01(\x03R\fdanmakuCount\"\xe2\x01\n" +
 	"\x13CreateUploadRequest\x12!\n" +
 	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -4450,22 +4809,25 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"g\n" +
 	"\x14ListMyVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa3\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xcc\x01\n" +
 	"\x11ListVideosRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\x12\x19\n" +
 	"\bowner_id\x18\x03 \x01(\x03R\aownerId\x12\x1b\n" +
 	"\towner_ids\x18\x04 \x03(\x03R\bownerIds\x12\x1a\n" +
-	"\bcategory\x18\x05 \x01(\tR\bcategory\"e\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\x12'\n" +
+	"\x04sort\x18\x06 \x01(\x0e2\x13.video.v1.VideoSortR\x04sort\"e\n" +
 	"\x12ListVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"g\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xc7\x01\n" +
 	"\x13SearchVideosRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"g\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12(\n" +
+	"\x04sort\x18\x04 \x01(\x0e2\x14.video.v1.SearchSortR\x04sort\x124\n" +
+	"\bduration\x18\x05 \x01(\x0e2\x18.video.v1.DurationFilterR\bduration\"g\n" +
 	"\x14SearchVideosResponse\x12'\n" +
 	"\x06videos\x18\x01 \x03(\v2\x0f.video.v1.VideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"M\n" +
@@ -4697,7 +5059,31 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"s\n" +
 	"\x17SearchPlaylistsResponse\x120\n" +
 	"\tplaylists\x18\x01 \x03(\v2\x12.video.v1.PlaylistR\tplaylists\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xb5\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"M\n" +
+	"\x19ListTrendingVideosRequest\x12\x1a\n" +
+	"\bcategory\x18\x01 \x01(\tR\bcategory\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"M\n" +
+	"\x1aListTrendingVideosResponse\x12/\n" +
+	"\x06videos\x18\x01 \x03(\v2\x17.video.v1.TrendingVideoR\x06videos\"Y\n" +
+	"\rTrendingVideo\x12%\n" +
+	"\x05video\x18\x01 \x01(\v2\x0f.video.v1.VideoR\x05video\x12!\n" +
+	"\frecent_views\x18\x02 \x01(\x03R\vrecentViews*\x97\x01\n" +
+	"\n" +
+	"SearchSort\x12\x1b\n" +
+	"\x17SEARCH_SORT_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15SEARCH_SORT_RELEVANCE\x10\x01\x12\x16\n" +
+	"\x12SEARCH_SORT_NEWEST\x10\x02\x12\x1b\n" +
+	"\x17SEARCH_SORT_MOST_VIEWED\x10\x03\x12\x1c\n" +
+	"\x18SEARCH_SORT_MOST_DANMAKU\x10\x04*\x82\x01\n" +
+	"\x0eDurationFilter\x12\x1f\n" +
+	"\x1bDURATION_FILTER_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15DURATION_FILTER_SHORT\x10\x01\x12\x1a\n" +
+	"\x16DURATION_FILTER_MEDIUM\x10\x02\x12\x18\n" +
+	"\x14DURATION_FILTER_LONG\x10\x03*V\n" +
+	"\tVideoSort\x12\x1a\n" +
+	"\x16VIDEO_SORT_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11VIDEO_SORT_NEWEST\x10\x01\x12\x16\n" +
+	"\x12VIDEO_SORT_POPULAR\x10\x02*\xb5\x01\n" +
 	"\vVideoStatus\x12\x1c\n" +
 	"\x18VIDEO_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bVIDEO_STATUS_PENDING_UPLOAD\x10\x01\x12\x19\n" +
@@ -4708,7 +5094,7 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\x12PlaylistVisibility\x12#\n" +
 	"\x1fPLAYLIST_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aPLAYLIST_VISIBILITY_PUBLIC\x10\x01\x12\x1f\n" +
-	"\x1bPLAYLIST_VISIBILITY_PRIVATE\x10\x022\xf7\x14\n" +
+	"\x1bPLAYLIST_VISIBILITY_PRIVATE\x10\x022\xd8\x15\n" +
 	"\fVideoService\x12M\n" +
 	"\fCreateUpload\x12\x1d.video.v1.CreateUploadRequest\x1a\x1e.video.v1.CreateUploadResponse\x12S\n" +
 	"\x0eCompleteUpload\x12\x1f.video.v1.CompleteUploadRequest\x1a .video.v1.CompleteUploadResponse\x12A\n" +
@@ -4742,7 +5128,8 @@ const file_video_v1_video_proto_rawDesc = "" +
 	"\x12RemoveFromPlaylist\x12#.video.v1.RemoveFromPlaylistRequest\x1a$.video.v1.RemoveFromPlaylistResponse\x12_\n" +
 	"\x12ListPlaylistVideos\x12#.video.v1.ListPlaylistVideosRequest\x1a$.video.v1.ListPlaylistVideosResponse\x12V\n" +
 	"\x0fGetChannelStats\x12 .video.v1.GetChannelStatsRequest\x1a!.video.v1.GetChannelStatsResponse\x12V\n" +
-	"\x0fSearchPlaylists\x12 .video.v1.SearchPlaylistsRequest\x1a!.video.v1.SearchPlaylistsResponseB\xa2\x01\n" +
+	"\x0fSearchPlaylists\x12 .video.v1.SearchPlaylistsRequest\x1a!.video.v1.SearchPlaylistsResponse\x12_\n" +
+	"\x12ListTrendingVideos\x12#.video.v1.ListTrendingVideosRequest\x1a$.video.v1.ListTrendingVideosResponseB\xa2\x01\n" +
 	"\fcom.video.v1B\n" +
 	"VideoProtoP\x01ZEgithub.com/farhantaufikrahman/ice-stream/backend/gen/video/v1;videov1\xa2\x02\x03VXX\xaa\x02\bVideo.V1\xca\x02\bVideo\\V1\xe2\x02\x14Video\\V1\\GPBMetadata\xea\x02\tVideo::V1b\x06proto3"
 
@@ -4758,200 +5145,213 @@ func file_video_v1_video_proto_rawDescGZIP() []byte {
 	return file_video_v1_video_proto_rawDescData
 }
 
-var file_video_v1_video_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_video_v1_video_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
+var file_video_v1_video_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_video_v1_video_proto_msgTypes = make([]protoimpl.MessageInfo, 75)
 var file_video_v1_video_proto_goTypes = []any{
-	(VideoStatus)(0),                         // 0: video.v1.VideoStatus
-	(PlaylistVisibility)(0),                  // 1: video.v1.PlaylistVisibility
-	(*Video)(nil),                            // 2: video.v1.Video
-	(*CreateUploadRequest)(nil),              // 3: video.v1.CreateUploadRequest
-	(*CreateUploadResponse)(nil),             // 4: video.v1.CreateUploadResponse
-	(*CompleteUploadRequest)(nil),            // 5: video.v1.CompleteUploadRequest
-	(*CompleteUploadResponse)(nil),           // 6: video.v1.CompleteUploadResponse
-	(*GetVideoRequest)(nil),                  // 7: video.v1.GetVideoRequest
-	(*GetVideoResponse)(nil),                 // 8: video.v1.GetVideoResponse
-	(*ListMyVideosRequest)(nil),              // 9: video.v1.ListMyVideosRequest
-	(*ListMyVideosResponse)(nil),             // 10: video.v1.ListMyVideosResponse
-	(*ListVideosRequest)(nil),                // 11: video.v1.ListVideosRequest
-	(*ListVideosResponse)(nil),               // 12: video.v1.ListVideosResponse
-	(*SearchVideosRequest)(nil),              // 13: video.v1.SearchVideosRequest
-	(*SearchVideosResponse)(nil),             // 14: video.v1.SearchVideosResponse
-	(*RecordViewRequest)(nil),                // 15: video.v1.RecordViewRequest
-	(*RecordViewResponse)(nil),               // 16: video.v1.RecordViewResponse
-	(*LikeVideoRequest)(nil),                 // 17: video.v1.LikeVideoRequest
-	(*LikeVideoResponse)(nil),                // 18: video.v1.LikeVideoResponse
-	(*UnlikeVideoRequest)(nil),               // 19: video.v1.UnlikeVideoRequest
-	(*UnlikeVideoResponse)(nil),              // 20: video.v1.UnlikeVideoResponse
-	(*SaveWatchProgressRequest)(nil),         // 21: video.v1.SaveWatchProgressRequest
-	(*SaveWatchProgressResponse)(nil),        // 22: video.v1.SaveWatchProgressResponse
-	(*WatchHistoryEntry)(nil),                // 23: video.v1.WatchHistoryEntry
-	(*ListWatchHistoryRequest)(nil),          // 24: video.v1.ListWatchHistoryRequest
-	(*ListWatchHistoryResponse)(nil),         // 25: video.v1.ListWatchHistoryResponse
-	(*DeleteWatchHistoryRequest)(nil),        // 26: video.v1.DeleteWatchHistoryRequest
-	(*DeleteWatchHistoryResponse)(nil),       // 27: video.v1.DeleteWatchHistoryResponse
-	(*ClearWatchHistoryRequest)(nil),         // 28: video.v1.ClearWatchHistoryRequest
-	(*ClearWatchHistoryResponse)(nil),        // 29: video.v1.ClearWatchHistoryResponse
-	(*UpdateVideoRequest)(nil),               // 30: video.v1.UpdateVideoRequest
-	(*TagList)(nil),                          // 31: video.v1.TagList
-	(*UpdateVideoResponse)(nil),              // 32: video.v1.UpdateVideoResponse
-	(*DeleteVideoRequest)(nil),               // 33: video.v1.DeleteVideoRequest
-	(*DeleteVideoResponse)(nil),              // 34: video.v1.DeleteVideoResponse
-	(*Notification)(nil),                     // 35: video.v1.Notification
-	(*ListNotificationsRequest)(nil),         // 36: video.v1.ListNotificationsRequest
-	(*ListNotificationsResponse)(nil),        // 37: video.v1.ListNotificationsResponse
-	(*CountUnreadNotificationsRequest)(nil),  // 38: video.v1.CountUnreadNotificationsRequest
-	(*CountUnreadNotificationsResponse)(nil), // 39: video.v1.CountUnreadNotificationsResponse
-	(*MarkNotificationsReadRequest)(nil),     // 40: video.v1.MarkNotificationsReadRequest
-	(*MarkNotificationsReadResponse)(nil),    // 41: video.v1.MarkNotificationsReadResponse
-	(*WatchLaterEntry)(nil),                  // 42: video.v1.WatchLaterEntry
-	(*AddToWatchLaterRequest)(nil),           // 43: video.v1.AddToWatchLaterRequest
-	(*AddToWatchLaterResponse)(nil),          // 44: video.v1.AddToWatchLaterResponse
-	(*RemoveFromWatchLaterRequest)(nil),      // 45: video.v1.RemoveFromWatchLaterRequest
-	(*RemoveFromWatchLaterResponse)(nil),     // 46: video.v1.RemoveFromWatchLaterResponse
-	(*ListWatchLaterRequest)(nil),            // 47: video.v1.ListWatchLaterRequest
-	(*ListWatchLaterResponse)(nil),           // 48: video.v1.ListWatchLaterResponse
-	(*Playlist)(nil),                         // 49: video.v1.Playlist
-	(*PlaylistEntry)(nil),                    // 50: video.v1.PlaylistEntry
-	(*CreatePlaylistRequest)(nil),            // 51: video.v1.CreatePlaylistRequest
-	(*CreatePlaylistResponse)(nil),           // 52: video.v1.CreatePlaylistResponse
-	(*UpdatePlaylistRequest)(nil),            // 53: video.v1.UpdatePlaylistRequest
-	(*UpdatePlaylistResponse)(nil),           // 54: video.v1.UpdatePlaylistResponse
-	(*DeletePlaylistRequest)(nil),            // 55: video.v1.DeletePlaylistRequest
-	(*DeletePlaylistResponse)(nil),           // 56: video.v1.DeletePlaylistResponse
-	(*GetPlaylistRequest)(nil),               // 57: video.v1.GetPlaylistRequest
-	(*GetPlaylistResponse)(nil),              // 58: video.v1.GetPlaylistResponse
-	(*ListPlaylistsRequest)(nil),             // 59: video.v1.ListPlaylistsRequest
-	(*ListPlaylistsResponse)(nil),            // 60: video.v1.ListPlaylistsResponse
-	(*AddToPlaylistRequest)(nil),             // 61: video.v1.AddToPlaylistRequest
-	(*AddToPlaylistResponse)(nil),            // 62: video.v1.AddToPlaylistResponse
-	(*RemoveFromPlaylistRequest)(nil),        // 63: video.v1.RemoveFromPlaylistRequest
-	(*RemoveFromPlaylistResponse)(nil),       // 64: video.v1.RemoveFromPlaylistResponse
-	(*ListPlaylistVideosRequest)(nil),        // 65: video.v1.ListPlaylistVideosRequest
-	(*ListPlaylistVideosResponse)(nil),       // 66: video.v1.ListPlaylistVideosResponse
-	(*GetChannelStatsRequest)(nil),           // 67: video.v1.GetChannelStatsRequest
-	(*DailyViews)(nil),                       // 68: video.v1.DailyViews
-	(*ChannelTotals)(nil),                    // 69: video.v1.ChannelTotals
-	(*GetChannelStatsResponse)(nil),          // 70: video.v1.GetChannelStatsResponse
-	(*SearchPlaylistsRequest)(nil),           // 71: video.v1.SearchPlaylistsRequest
-	(*SearchPlaylistsResponse)(nil),          // 72: video.v1.SearchPlaylistsResponse
-	nil,                                      // 73: video.v1.CreateUploadResponse.UploadHeadersEntry
-	(*timestamppb.Timestamp)(nil),            // 74: google.protobuf.Timestamp
+	(SearchSort)(0),                          // 0: video.v1.SearchSort
+	(DurationFilter)(0),                      // 1: video.v1.DurationFilter
+	(VideoSort)(0),                           // 2: video.v1.VideoSort
+	(VideoStatus)(0),                         // 3: video.v1.VideoStatus
+	(PlaylistVisibility)(0),                  // 4: video.v1.PlaylistVisibility
+	(*Video)(nil),                            // 5: video.v1.Video
+	(*CreateUploadRequest)(nil),              // 6: video.v1.CreateUploadRequest
+	(*CreateUploadResponse)(nil),             // 7: video.v1.CreateUploadResponse
+	(*CompleteUploadRequest)(nil),            // 8: video.v1.CompleteUploadRequest
+	(*CompleteUploadResponse)(nil),           // 9: video.v1.CompleteUploadResponse
+	(*GetVideoRequest)(nil),                  // 10: video.v1.GetVideoRequest
+	(*GetVideoResponse)(nil),                 // 11: video.v1.GetVideoResponse
+	(*ListMyVideosRequest)(nil),              // 12: video.v1.ListMyVideosRequest
+	(*ListMyVideosResponse)(nil),             // 13: video.v1.ListMyVideosResponse
+	(*ListVideosRequest)(nil),                // 14: video.v1.ListVideosRequest
+	(*ListVideosResponse)(nil),               // 15: video.v1.ListVideosResponse
+	(*SearchVideosRequest)(nil),              // 16: video.v1.SearchVideosRequest
+	(*SearchVideosResponse)(nil),             // 17: video.v1.SearchVideosResponse
+	(*RecordViewRequest)(nil),                // 18: video.v1.RecordViewRequest
+	(*RecordViewResponse)(nil),               // 19: video.v1.RecordViewResponse
+	(*LikeVideoRequest)(nil),                 // 20: video.v1.LikeVideoRequest
+	(*LikeVideoResponse)(nil),                // 21: video.v1.LikeVideoResponse
+	(*UnlikeVideoRequest)(nil),               // 22: video.v1.UnlikeVideoRequest
+	(*UnlikeVideoResponse)(nil),              // 23: video.v1.UnlikeVideoResponse
+	(*SaveWatchProgressRequest)(nil),         // 24: video.v1.SaveWatchProgressRequest
+	(*SaveWatchProgressResponse)(nil),        // 25: video.v1.SaveWatchProgressResponse
+	(*WatchHistoryEntry)(nil),                // 26: video.v1.WatchHistoryEntry
+	(*ListWatchHistoryRequest)(nil),          // 27: video.v1.ListWatchHistoryRequest
+	(*ListWatchHistoryResponse)(nil),         // 28: video.v1.ListWatchHistoryResponse
+	(*DeleteWatchHistoryRequest)(nil),        // 29: video.v1.DeleteWatchHistoryRequest
+	(*DeleteWatchHistoryResponse)(nil),       // 30: video.v1.DeleteWatchHistoryResponse
+	(*ClearWatchHistoryRequest)(nil),         // 31: video.v1.ClearWatchHistoryRequest
+	(*ClearWatchHistoryResponse)(nil),        // 32: video.v1.ClearWatchHistoryResponse
+	(*UpdateVideoRequest)(nil),               // 33: video.v1.UpdateVideoRequest
+	(*TagList)(nil),                          // 34: video.v1.TagList
+	(*UpdateVideoResponse)(nil),              // 35: video.v1.UpdateVideoResponse
+	(*DeleteVideoRequest)(nil),               // 36: video.v1.DeleteVideoRequest
+	(*DeleteVideoResponse)(nil),              // 37: video.v1.DeleteVideoResponse
+	(*Notification)(nil),                     // 38: video.v1.Notification
+	(*ListNotificationsRequest)(nil),         // 39: video.v1.ListNotificationsRequest
+	(*ListNotificationsResponse)(nil),        // 40: video.v1.ListNotificationsResponse
+	(*CountUnreadNotificationsRequest)(nil),  // 41: video.v1.CountUnreadNotificationsRequest
+	(*CountUnreadNotificationsResponse)(nil), // 42: video.v1.CountUnreadNotificationsResponse
+	(*MarkNotificationsReadRequest)(nil),     // 43: video.v1.MarkNotificationsReadRequest
+	(*MarkNotificationsReadResponse)(nil),    // 44: video.v1.MarkNotificationsReadResponse
+	(*WatchLaterEntry)(nil),                  // 45: video.v1.WatchLaterEntry
+	(*AddToWatchLaterRequest)(nil),           // 46: video.v1.AddToWatchLaterRequest
+	(*AddToWatchLaterResponse)(nil),          // 47: video.v1.AddToWatchLaterResponse
+	(*RemoveFromWatchLaterRequest)(nil),      // 48: video.v1.RemoveFromWatchLaterRequest
+	(*RemoveFromWatchLaterResponse)(nil),     // 49: video.v1.RemoveFromWatchLaterResponse
+	(*ListWatchLaterRequest)(nil),            // 50: video.v1.ListWatchLaterRequest
+	(*ListWatchLaterResponse)(nil),           // 51: video.v1.ListWatchLaterResponse
+	(*Playlist)(nil),                         // 52: video.v1.Playlist
+	(*PlaylistEntry)(nil),                    // 53: video.v1.PlaylistEntry
+	(*CreatePlaylistRequest)(nil),            // 54: video.v1.CreatePlaylistRequest
+	(*CreatePlaylistResponse)(nil),           // 55: video.v1.CreatePlaylistResponse
+	(*UpdatePlaylistRequest)(nil),            // 56: video.v1.UpdatePlaylistRequest
+	(*UpdatePlaylistResponse)(nil),           // 57: video.v1.UpdatePlaylistResponse
+	(*DeletePlaylistRequest)(nil),            // 58: video.v1.DeletePlaylistRequest
+	(*DeletePlaylistResponse)(nil),           // 59: video.v1.DeletePlaylistResponse
+	(*GetPlaylistRequest)(nil),               // 60: video.v1.GetPlaylistRequest
+	(*GetPlaylistResponse)(nil),              // 61: video.v1.GetPlaylistResponse
+	(*ListPlaylistsRequest)(nil),             // 62: video.v1.ListPlaylistsRequest
+	(*ListPlaylistsResponse)(nil),            // 63: video.v1.ListPlaylistsResponse
+	(*AddToPlaylistRequest)(nil),             // 64: video.v1.AddToPlaylistRequest
+	(*AddToPlaylistResponse)(nil),            // 65: video.v1.AddToPlaylistResponse
+	(*RemoveFromPlaylistRequest)(nil),        // 66: video.v1.RemoveFromPlaylistRequest
+	(*RemoveFromPlaylistResponse)(nil),       // 67: video.v1.RemoveFromPlaylistResponse
+	(*ListPlaylistVideosRequest)(nil),        // 68: video.v1.ListPlaylistVideosRequest
+	(*ListPlaylistVideosResponse)(nil),       // 69: video.v1.ListPlaylistVideosResponse
+	(*GetChannelStatsRequest)(nil),           // 70: video.v1.GetChannelStatsRequest
+	(*DailyViews)(nil),                       // 71: video.v1.DailyViews
+	(*ChannelTotals)(nil),                    // 72: video.v1.ChannelTotals
+	(*GetChannelStatsResponse)(nil),          // 73: video.v1.GetChannelStatsResponse
+	(*SearchPlaylistsRequest)(nil),           // 74: video.v1.SearchPlaylistsRequest
+	(*SearchPlaylistsResponse)(nil),          // 75: video.v1.SearchPlaylistsResponse
+	(*ListTrendingVideosRequest)(nil),        // 76: video.v1.ListTrendingVideosRequest
+	(*ListTrendingVideosResponse)(nil),       // 77: video.v1.ListTrendingVideosResponse
+	(*TrendingVideo)(nil),                    // 78: video.v1.TrendingVideo
+	nil,                                      // 79: video.v1.CreateUploadResponse.UploadHeadersEntry
+	(*timestamppb.Timestamp)(nil),            // 80: google.protobuf.Timestamp
 }
 var file_video_v1_video_proto_depIdxs = []int32{
-	0,  // 0: video.v1.Video.status:type_name -> video.v1.VideoStatus
-	74, // 1: video.v1.Video.created_at:type_name -> google.protobuf.Timestamp
-	74, // 2: video.v1.Video.uploaded_at:type_name -> google.protobuf.Timestamp
-	74, // 3: video.v1.Video.processed_at:type_name -> google.protobuf.Timestamp
-	2,  // 4: video.v1.CreateUploadResponse.video:type_name -> video.v1.Video
-	74, // 5: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
-	73, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
-	2,  // 7: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
-	2,  // 8: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
-	74, // 9: video.v1.GetVideoResponse.original_url_expires_at:type_name -> google.protobuf.Timestamp
-	2,  // 10: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
-	2,  // 11: video.v1.ListVideosResponse.videos:type_name -> video.v1.Video
-	2,  // 12: video.v1.SearchVideosResponse.videos:type_name -> video.v1.Video
-	74, // 13: video.v1.SaveWatchProgressResponse.watched_at:type_name -> google.protobuf.Timestamp
-	2,  // 14: video.v1.WatchHistoryEntry.video:type_name -> video.v1.Video
-	74, // 15: video.v1.WatchHistoryEntry.watched_at:type_name -> google.protobuf.Timestamp
-	23, // 16: video.v1.ListWatchHistoryResponse.entries:type_name -> video.v1.WatchHistoryEntry
-	31, // 17: video.v1.UpdateVideoRequest.tags:type_name -> video.v1.TagList
-	2,  // 18: video.v1.UpdateVideoResponse.video:type_name -> video.v1.Video
-	2,  // 19: video.v1.Notification.video:type_name -> video.v1.Video
-	74, // 20: video.v1.Notification.created_at:type_name -> google.protobuf.Timestamp
-	74, // 21: video.v1.Notification.read_at:type_name -> google.protobuf.Timestamp
-	35, // 22: video.v1.ListNotificationsResponse.notifications:type_name -> video.v1.Notification
-	2,  // 23: video.v1.WatchLaterEntry.video:type_name -> video.v1.Video
-	74, // 24: video.v1.WatchLaterEntry.added_at:type_name -> google.protobuf.Timestamp
-	74, // 25: video.v1.AddToWatchLaterResponse.added_at:type_name -> google.protobuf.Timestamp
-	42, // 26: video.v1.ListWatchLaterResponse.entries:type_name -> video.v1.WatchLaterEntry
-	1,  // 27: video.v1.Playlist.visibility:type_name -> video.v1.PlaylistVisibility
-	74, // 28: video.v1.Playlist.created_at:type_name -> google.protobuf.Timestamp
-	74, // 29: video.v1.Playlist.updated_at:type_name -> google.protobuf.Timestamp
-	2,  // 30: video.v1.PlaylistEntry.video:type_name -> video.v1.Video
-	74, // 31: video.v1.PlaylistEntry.added_at:type_name -> google.protobuf.Timestamp
-	1,  // 32: video.v1.CreatePlaylistRequest.visibility:type_name -> video.v1.PlaylistVisibility
-	49, // 33: video.v1.CreatePlaylistResponse.playlist:type_name -> video.v1.Playlist
-	1,  // 34: video.v1.UpdatePlaylistRequest.visibility:type_name -> video.v1.PlaylistVisibility
-	49, // 35: video.v1.UpdatePlaylistResponse.playlist:type_name -> video.v1.Playlist
-	49, // 36: video.v1.GetPlaylistResponse.playlist:type_name -> video.v1.Playlist
-	49, // 37: video.v1.ListPlaylistsResponse.playlists:type_name -> video.v1.Playlist
-	74, // 38: video.v1.AddToPlaylistResponse.added_at:type_name -> google.protobuf.Timestamp
-	50, // 39: video.v1.ListPlaylistVideosResponse.entries:type_name -> video.v1.PlaylistEntry
-	68, // 40: video.v1.GetChannelStatsResponse.daily:type_name -> video.v1.DailyViews
-	69, // 41: video.v1.GetChannelStatsResponse.current:type_name -> video.v1.ChannelTotals
-	69, // 42: video.v1.GetChannelStatsResponse.previous:type_name -> video.v1.ChannelTotals
-	74, // 43: video.v1.GetChannelStatsResponse.previous_start:type_name -> google.protobuf.Timestamp
-	74, // 44: video.v1.GetChannelStatsResponse.current_start:type_name -> google.protobuf.Timestamp
-	74, // 45: video.v1.GetChannelStatsResponse.end:type_name -> google.protobuf.Timestamp
-	49, // 46: video.v1.SearchPlaylistsResponse.playlists:type_name -> video.v1.Playlist
-	3,  // 47: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
-	5,  // 48: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
-	7,  // 49: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
-	9,  // 50: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
-	11, // 51: video.v1.VideoService.ListVideos:input_type -> video.v1.ListVideosRequest
-	15, // 52: video.v1.VideoService.RecordView:input_type -> video.v1.RecordViewRequest
-	17, // 53: video.v1.VideoService.LikeVideo:input_type -> video.v1.LikeVideoRequest
-	19, // 54: video.v1.VideoService.UnlikeVideo:input_type -> video.v1.UnlikeVideoRequest
-	13, // 55: video.v1.VideoService.SearchVideos:input_type -> video.v1.SearchVideosRequest
-	21, // 56: video.v1.VideoService.SaveWatchProgress:input_type -> video.v1.SaveWatchProgressRequest
-	24, // 57: video.v1.VideoService.ListWatchHistory:input_type -> video.v1.ListWatchHistoryRequest
-	26, // 58: video.v1.VideoService.DeleteWatchHistory:input_type -> video.v1.DeleteWatchHistoryRequest
-	28, // 59: video.v1.VideoService.ClearWatchHistory:input_type -> video.v1.ClearWatchHistoryRequest
-	30, // 60: video.v1.VideoService.UpdateVideo:input_type -> video.v1.UpdateVideoRequest
-	33, // 61: video.v1.VideoService.DeleteVideo:input_type -> video.v1.DeleteVideoRequest
-	36, // 62: video.v1.VideoService.ListNotifications:input_type -> video.v1.ListNotificationsRequest
-	38, // 63: video.v1.VideoService.CountUnreadNotifications:input_type -> video.v1.CountUnreadNotificationsRequest
-	40, // 64: video.v1.VideoService.MarkNotificationsRead:input_type -> video.v1.MarkNotificationsReadRequest
-	43, // 65: video.v1.VideoService.AddToWatchLater:input_type -> video.v1.AddToWatchLaterRequest
-	45, // 66: video.v1.VideoService.RemoveFromWatchLater:input_type -> video.v1.RemoveFromWatchLaterRequest
-	47, // 67: video.v1.VideoService.ListWatchLater:input_type -> video.v1.ListWatchLaterRequest
-	51, // 68: video.v1.VideoService.CreatePlaylist:input_type -> video.v1.CreatePlaylistRequest
-	53, // 69: video.v1.VideoService.UpdatePlaylist:input_type -> video.v1.UpdatePlaylistRequest
-	55, // 70: video.v1.VideoService.DeletePlaylist:input_type -> video.v1.DeletePlaylistRequest
-	57, // 71: video.v1.VideoService.GetPlaylist:input_type -> video.v1.GetPlaylistRequest
-	59, // 72: video.v1.VideoService.ListPlaylists:input_type -> video.v1.ListPlaylistsRequest
-	61, // 73: video.v1.VideoService.AddToPlaylist:input_type -> video.v1.AddToPlaylistRequest
-	63, // 74: video.v1.VideoService.RemoveFromPlaylist:input_type -> video.v1.RemoveFromPlaylistRequest
-	65, // 75: video.v1.VideoService.ListPlaylistVideos:input_type -> video.v1.ListPlaylistVideosRequest
-	67, // 76: video.v1.VideoService.GetChannelStats:input_type -> video.v1.GetChannelStatsRequest
-	71, // 77: video.v1.VideoService.SearchPlaylists:input_type -> video.v1.SearchPlaylistsRequest
-	4,  // 78: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
-	6,  // 79: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
-	8,  // 80: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
-	10, // 81: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
-	12, // 82: video.v1.VideoService.ListVideos:output_type -> video.v1.ListVideosResponse
-	16, // 83: video.v1.VideoService.RecordView:output_type -> video.v1.RecordViewResponse
-	18, // 84: video.v1.VideoService.LikeVideo:output_type -> video.v1.LikeVideoResponse
-	20, // 85: video.v1.VideoService.UnlikeVideo:output_type -> video.v1.UnlikeVideoResponse
-	14, // 86: video.v1.VideoService.SearchVideos:output_type -> video.v1.SearchVideosResponse
-	22, // 87: video.v1.VideoService.SaveWatchProgress:output_type -> video.v1.SaveWatchProgressResponse
-	25, // 88: video.v1.VideoService.ListWatchHistory:output_type -> video.v1.ListWatchHistoryResponse
-	27, // 89: video.v1.VideoService.DeleteWatchHistory:output_type -> video.v1.DeleteWatchHistoryResponse
-	29, // 90: video.v1.VideoService.ClearWatchHistory:output_type -> video.v1.ClearWatchHistoryResponse
-	32, // 91: video.v1.VideoService.UpdateVideo:output_type -> video.v1.UpdateVideoResponse
-	34, // 92: video.v1.VideoService.DeleteVideo:output_type -> video.v1.DeleteVideoResponse
-	37, // 93: video.v1.VideoService.ListNotifications:output_type -> video.v1.ListNotificationsResponse
-	39, // 94: video.v1.VideoService.CountUnreadNotifications:output_type -> video.v1.CountUnreadNotificationsResponse
-	41, // 95: video.v1.VideoService.MarkNotificationsRead:output_type -> video.v1.MarkNotificationsReadResponse
-	44, // 96: video.v1.VideoService.AddToWatchLater:output_type -> video.v1.AddToWatchLaterResponse
-	46, // 97: video.v1.VideoService.RemoveFromWatchLater:output_type -> video.v1.RemoveFromWatchLaterResponse
-	48, // 98: video.v1.VideoService.ListWatchLater:output_type -> video.v1.ListWatchLaterResponse
-	52, // 99: video.v1.VideoService.CreatePlaylist:output_type -> video.v1.CreatePlaylistResponse
-	54, // 100: video.v1.VideoService.UpdatePlaylist:output_type -> video.v1.UpdatePlaylistResponse
-	56, // 101: video.v1.VideoService.DeletePlaylist:output_type -> video.v1.DeletePlaylistResponse
-	58, // 102: video.v1.VideoService.GetPlaylist:output_type -> video.v1.GetPlaylistResponse
-	60, // 103: video.v1.VideoService.ListPlaylists:output_type -> video.v1.ListPlaylistsResponse
-	62, // 104: video.v1.VideoService.AddToPlaylist:output_type -> video.v1.AddToPlaylistResponse
-	64, // 105: video.v1.VideoService.RemoveFromPlaylist:output_type -> video.v1.RemoveFromPlaylistResponse
-	66, // 106: video.v1.VideoService.ListPlaylistVideos:output_type -> video.v1.ListPlaylistVideosResponse
-	70, // 107: video.v1.VideoService.GetChannelStats:output_type -> video.v1.GetChannelStatsResponse
-	72, // 108: video.v1.VideoService.SearchPlaylists:output_type -> video.v1.SearchPlaylistsResponse
-	78, // [78:109] is the sub-list for method output_type
-	47, // [47:78] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	3,  // 0: video.v1.Video.status:type_name -> video.v1.VideoStatus
+	80, // 1: video.v1.Video.created_at:type_name -> google.protobuf.Timestamp
+	80, // 2: video.v1.Video.uploaded_at:type_name -> google.protobuf.Timestamp
+	80, // 3: video.v1.Video.processed_at:type_name -> google.protobuf.Timestamp
+	5,  // 4: video.v1.CreateUploadResponse.video:type_name -> video.v1.Video
+	80, // 5: video.v1.CreateUploadResponse.upload_url_expires_at:type_name -> google.protobuf.Timestamp
+	79, // 6: video.v1.CreateUploadResponse.upload_headers:type_name -> video.v1.CreateUploadResponse.UploadHeadersEntry
+	5,  // 7: video.v1.CompleteUploadResponse.video:type_name -> video.v1.Video
+	5,  // 8: video.v1.GetVideoResponse.video:type_name -> video.v1.Video
+	80, // 9: video.v1.GetVideoResponse.original_url_expires_at:type_name -> google.protobuf.Timestamp
+	5,  // 10: video.v1.ListMyVideosResponse.videos:type_name -> video.v1.Video
+	2,  // 11: video.v1.ListVideosRequest.sort:type_name -> video.v1.VideoSort
+	5,  // 12: video.v1.ListVideosResponse.videos:type_name -> video.v1.Video
+	0,  // 13: video.v1.SearchVideosRequest.sort:type_name -> video.v1.SearchSort
+	1,  // 14: video.v1.SearchVideosRequest.duration:type_name -> video.v1.DurationFilter
+	5,  // 15: video.v1.SearchVideosResponse.videos:type_name -> video.v1.Video
+	80, // 16: video.v1.SaveWatchProgressResponse.watched_at:type_name -> google.protobuf.Timestamp
+	5,  // 17: video.v1.WatchHistoryEntry.video:type_name -> video.v1.Video
+	80, // 18: video.v1.WatchHistoryEntry.watched_at:type_name -> google.protobuf.Timestamp
+	26, // 19: video.v1.ListWatchHistoryResponse.entries:type_name -> video.v1.WatchHistoryEntry
+	34, // 20: video.v1.UpdateVideoRequest.tags:type_name -> video.v1.TagList
+	5,  // 21: video.v1.UpdateVideoResponse.video:type_name -> video.v1.Video
+	5,  // 22: video.v1.Notification.video:type_name -> video.v1.Video
+	80, // 23: video.v1.Notification.created_at:type_name -> google.protobuf.Timestamp
+	80, // 24: video.v1.Notification.read_at:type_name -> google.protobuf.Timestamp
+	38, // 25: video.v1.ListNotificationsResponse.notifications:type_name -> video.v1.Notification
+	5,  // 26: video.v1.WatchLaterEntry.video:type_name -> video.v1.Video
+	80, // 27: video.v1.WatchLaterEntry.added_at:type_name -> google.protobuf.Timestamp
+	80, // 28: video.v1.AddToWatchLaterResponse.added_at:type_name -> google.protobuf.Timestamp
+	45, // 29: video.v1.ListWatchLaterResponse.entries:type_name -> video.v1.WatchLaterEntry
+	4,  // 30: video.v1.Playlist.visibility:type_name -> video.v1.PlaylistVisibility
+	80, // 31: video.v1.Playlist.created_at:type_name -> google.protobuf.Timestamp
+	80, // 32: video.v1.Playlist.updated_at:type_name -> google.protobuf.Timestamp
+	5,  // 33: video.v1.PlaylistEntry.video:type_name -> video.v1.Video
+	80, // 34: video.v1.PlaylistEntry.added_at:type_name -> google.protobuf.Timestamp
+	4,  // 35: video.v1.CreatePlaylistRequest.visibility:type_name -> video.v1.PlaylistVisibility
+	52, // 36: video.v1.CreatePlaylistResponse.playlist:type_name -> video.v1.Playlist
+	4,  // 37: video.v1.UpdatePlaylistRequest.visibility:type_name -> video.v1.PlaylistVisibility
+	52, // 38: video.v1.UpdatePlaylistResponse.playlist:type_name -> video.v1.Playlist
+	52, // 39: video.v1.GetPlaylistResponse.playlist:type_name -> video.v1.Playlist
+	52, // 40: video.v1.ListPlaylistsResponse.playlists:type_name -> video.v1.Playlist
+	80, // 41: video.v1.AddToPlaylistResponse.added_at:type_name -> google.protobuf.Timestamp
+	53, // 42: video.v1.ListPlaylistVideosResponse.entries:type_name -> video.v1.PlaylistEntry
+	71, // 43: video.v1.GetChannelStatsResponse.daily:type_name -> video.v1.DailyViews
+	72, // 44: video.v1.GetChannelStatsResponse.current:type_name -> video.v1.ChannelTotals
+	72, // 45: video.v1.GetChannelStatsResponse.previous:type_name -> video.v1.ChannelTotals
+	80, // 46: video.v1.GetChannelStatsResponse.previous_start:type_name -> google.protobuf.Timestamp
+	80, // 47: video.v1.GetChannelStatsResponse.current_start:type_name -> google.protobuf.Timestamp
+	80, // 48: video.v1.GetChannelStatsResponse.end:type_name -> google.protobuf.Timestamp
+	52, // 49: video.v1.SearchPlaylistsResponse.playlists:type_name -> video.v1.Playlist
+	78, // 50: video.v1.ListTrendingVideosResponse.videos:type_name -> video.v1.TrendingVideo
+	5,  // 51: video.v1.TrendingVideo.video:type_name -> video.v1.Video
+	6,  // 52: video.v1.VideoService.CreateUpload:input_type -> video.v1.CreateUploadRequest
+	8,  // 53: video.v1.VideoService.CompleteUpload:input_type -> video.v1.CompleteUploadRequest
+	10, // 54: video.v1.VideoService.GetVideo:input_type -> video.v1.GetVideoRequest
+	12, // 55: video.v1.VideoService.ListMyVideos:input_type -> video.v1.ListMyVideosRequest
+	14, // 56: video.v1.VideoService.ListVideos:input_type -> video.v1.ListVideosRequest
+	18, // 57: video.v1.VideoService.RecordView:input_type -> video.v1.RecordViewRequest
+	20, // 58: video.v1.VideoService.LikeVideo:input_type -> video.v1.LikeVideoRequest
+	22, // 59: video.v1.VideoService.UnlikeVideo:input_type -> video.v1.UnlikeVideoRequest
+	16, // 60: video.v1.VideoService.SearchVideos:input_type -> video.v1.SearchVideosRequest
+	24, // 61: video.v1.VideoService.SaveWatchProgress:input_type -> video.v1.SaveWatchProgressRequest
+	27, // 62: video.v1.VideoService.ListWatchHistory:input_type -> video.v1.ListWatchHistoryRequest
+	29, // 63: video.v1.VideoService.DeleteWatchHistory:input_type -> video.v1.DeleteWatchHistoryRequest
+	31, // 64: video.v1.VideoService.ClearWatchHistory:input_type -> video.v1.ClearWatchHistoryRequest
+	33, // 65: video.v1.VideoService.UpdateVideo:input_type -> video.v1.UpdateVideoRequest
+	36, // 66: video.v1.VideoService.DeleteVideo:input_type -> video.v1.DeleteVideoRequest
+	39, // 67: video.v1.VideoService.ListNotifications:input_type -> video.v1.ListNotificationsRequest
+	41, // 68: video.v1.VideoService.CountUnreadNotifications:input_type -> video.v1.CountUnreadNotificationsRequest
+	43, // 69: video.v1.VideoService.MarkNotificationsRead:input_type -> video.v1.MarkNotificationsReadRequest
+	46, // 70: video.v1.VideoService.AddToWatchLater:input_type -> video.v1.AddToWatchLaterRequest
+	48, // 71: video.v1.VideoService.RemoveFromWatchLater:input_type -> video.v1.RemoveFromWatchLaterRequest
+	50, // 72: video.v1.VideoService.ListWatchLater:input_type -> video.v1.ListWatchLaterRequest
+	54, // 73: video.v1.VideoService.CreatePlaylist:input_type -> video.v1.CreatePlaylistRequest
+	56, // 74: video.v1.VideoService.UpdatePlaylist:input_type -> video.v1.UpdatePlaylistRequest
+	58, // 75: video.v1.VideoService.DeletePlaylist:input_type -> video.v1.DeletePlaylistRequest
+	60, // 76: video.v1.VideoService.GetPlaylist:input_type -> video.v1.GetPlaylistRequest
+	62, // 77: video.v1.VideoService.ListPlaylists:input_type -> video.v1.ListPlaylistsRequest
+	64, // 78: video.v1.VideoService.AddToPlaylist:input_type -> video.v1.AddToPlaylistRequest
+	66, // 79: video.v1.VideoService.RemoveFromPlaylist:input_type -> video.v1.RemoveFromPlaylistRequest
+	68, // 80: video.v1.VideoService.ListPlaylistVideos:input_type -> video.v1.ListPlaylistVideosRequest
+	70, // 81: video.v1.VideoService.GetChannelStats:input_type -> video.v1.GetChannelStatsRequest
+	74, // 82: video.v1.VideoService.SearchPlaylists:input_type -> video.v1.SearchPlaylistsRequest
+	76, // 83: video.v1.VideoService.ListTrendingVideos:input_type -> video.v1.ListTrendingVideosRequest
+	7,  // 84: video.v1.VideoService.CreateUpload:output_type -> video.v1.CreateUploadResponse
+	9,  // 85: video.v1.VideoService.CompleteUpload:output_type -> video.v1.CompleteUploadResponse
+	11, // 86: video.v1.VideoService.GetVideo:output_type -> video.v1.GetVideoResponse
+	13, // 87: video.v1.VideoService.ListMyVideos:output_type -> video.v1.ListMyVideosResponse
+	15, // 88: video.v1.VideoService.ListVideos:output_type -> video.v1.ListVideosResponse
+	19, // 89: video.v1.VideoService.RecordView:output_type -> video.v1.RecordViewResponse
+	21, // 90: video.v1.VideoService.LikeVideo:output_type -> video.v1.LikeVideoResponse
+	23, // 91: video.v1.VideoService.UnlikeVideo:output_type -> video.v1.UnlikeVideoResponse
+	17, // 92: video.v1.VideoService.SearchVideos:output_type -> video.v1.SearchVideosResponse
+	25, // 93: video.v1.VideoService.SaveWatchProgress:output_type -> video.v1.SaveWatchProgressResponse
+	28, // 94: video.v1.VideoService.ListWatchHistory:output_type -> video.v1.ListWatchHistoryResponse
+	30, // 95: video.v1.VideoService.DeleteWatchHistory:output_type -> video.v1.DeleteWatchHistoryResponse
+	32, // 96: video.v1.VideoService.ClearWatchHistory:output_type -> video.v1.ClearWatchHistoryResponse
+	35, // 97: video.v1.VideoService.UpdateVideo:output_type -> video.v1.UpdateVideoResponse
+	37, // 98: video.v1.VideoService.DeleteVideo:output_type -> video.v1.DeleteVideoResponse
+	40, // 99: video.v1.VideoService.ListNotifications:output_type -> video.v1.ListNotificationsResponse
+	42, // 100: video.v1.VideoService.CountUnreadNotifications:output_type -> video.v1.CountUnreadNotificationsResponse
+	44, // 101: video.v1.VideoService.MarkNotificationsRead:output_type -> video.v1.MarkNotificationsReadResponse
+	47, // 102: video.v1.VideoService.AddToWatchLater:output_type -> video.v1.AddToWatchLaterResponse
+	49, // 103: video.v1.VideoService.RemoveFromWatchLater:output_type -> video.v1.RemoveFromWatchLaterResponse
+	51, // 104: video.v1.VideoService.ListWatchLater:output_type -> video.v1.ListWatchLaterResponse
+	55, // 105: video.v1.VideoService.CreatePlaylist:output_type -> video.v1.CreatePlaylistResponse
+	57, // 106: video.v1.VideoService.UpdatePlaylist:output_type -> video.v1.UpdatePlaylistResponse
+	59, // 107: video.v1.VideoService.DeletePlaylist:output_type -> video.v1.DeletePlaylistResponse
+	61, // 108: video.v1.VideoService.GetPlaylist:output_type -> video.v1.GetPlaylistResponse
+	63, // 109: video.v1.VideoService.ListPlaylists:output_type -> video.v1.ListPlaylistsResponse
+	65, // 110: video.v1.VideoService.AddToPlaylist:output_type -> video.v1.AddToPlaylistResponse
+	67, // 111: video.v1.VideoService.RemoveFromPlaylist:output_type -> video.v1.RemoveFromPlaylistResponse
+	69, // 112: video.v1.VideoService.ListPlaylistVideos:output_type -> video.v1.ListPlaylistVideosResponse
+	73, // 113: video.v1.VideoService.GetChannelStats:output_type -> video.v1.GetChannelStatsResponse
+	75, // 114: video.v1.VideoService.SearchPlaylists:output_type -> video.v1.SearchPlaylistsResponse
+	77, // 115: video.v1.VideoService.ListTrendingVideos:output_type -> video.v1.ListTrendingVideosResponse
+	84, // [84:116] is the sub-list for method output_type
+	52, // [52:84] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_video_v1_video_proto_init() }
@@ -4966,8 +5366,8 @@ func file_video_v1_video_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_video_v1_video_proto_rawDesc), len(file_video_v1_video_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   72,
+			NumEnums:      5,
+			NumMessages:   75,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -53,8 +53,19 @@ type Repository interface {
 	// statusnya sudah bukan keduanya.
 	MarkFailed(ctx context.Context, id int64, reason string, now time.Time) (bool, error)
 	// Search mengambil video READY yang punya kata berawalan SETIAP kata di
-	// terms, urut skor (jumlah bobot kata yang cocok) lalu views terbanyak.
-	Search(ctx context.Context, terms []string, offset, limit int) ([]Video, error)
+	// terms dan cocok dengan filter durasi, diurutkan sesuai opts.Sort
+	// (bawaan: skor, yaitu jumlah bobot kata yang cocok, lalu views).
+	Search(ctx context.Context, terms []string, opts SearchOptions, offset, limit int) ([]Video, error)
+	// ListPopularByOwner mengambil video READY milik ownerID, view_count
+	// lalu id terbesar lebih dulu, mulai dari baris ke-offset.
+	ListPopularByOwner(ctx context.Context, ownerID int64, offset, limit int) ([]Video, error)
+	// TrendingVideos menjumlahkan tayangan per video sejak tanggal fromDay
+	// ("2006-01-02", WIB) untuk video READY (kategori category jika diisi),
+	// terbanyak lebih dulu. Video tanpa tayangan tidak ikut.
+	TrendingVideos(ctx context.Context, fromDay, category string, limit int) ([]TrendingHit, error)
+	// FindReadyByIDs mengambil video READY dengan id ini, urutan bebas.
+	// Id yang tidak ada atau bukan READY dilewati.
+	FindReadyByIDs(ctx context.Context, ids []int64) ([]Video, error)
 	// ListUnindexed mengambil video yang kata-katanya belum disimpan
 	// (dibuat sebelum fitur pencarian ada), id terkecil lebih dulu.
 	ListUnindexed(ctx context.Context, limit int) ([]Video, error)

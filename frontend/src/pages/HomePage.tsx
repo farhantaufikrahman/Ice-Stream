@@ -4,6 +4,7 @@ import { listFeed, listSubscriptions, listVideos } from '../api/endpoints'
 import type { Profile } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from '../components/Avatar'
+import { TrendingSection } from '../components/home/TrendingSection'
 import { VideoGrid } from '../components/VideoGrid'
 import { usePagedVideos } from '../hooks/usePagedVideos'
 import { CATEGORIES, categoryLabel, isCategory } from '../lib/categories'
@@ -18,6 +19,9 @@ const STRIP_COUNT = 24
  *
  * Pilihan chip disimpan di URL (?category=game atau ?tab=mengikuti),
  * jadi tombol Back dan tautan yang dibagikan membuka chip yang sama.
+ *
+ * Di atas grid ada Trending (langkah 24a), mengikuti kategori yang
+ * dipilih. Chip "Mengikuti" tidak menampilkannya.
  */
 export function HomePage() {
   const { status } = useAuth()
@@ -56,7 +60,14 @@ export function HomePage() {
         {status === 'authenticated' && chip('Mengikuti', following, { tab: 'mengikuti' })}
         {CATEGORIES.map((c) => chip(c.label, category === c.value, { category: c.value }))}
       </div>
-      {following ? <FollowingFeed /> : <LatestFeed category={category} />}
+      {following ? (
+        <FollowingFeed />
+      ) : (
+        <>
+          <TrendingSection category={category} />
+          <LatestFeed category={category} />
+        </>
+      )}
     </>
   )
 }

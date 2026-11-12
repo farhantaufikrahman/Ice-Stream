@@ -2,10 +2,7 @@ package video
 
 import (
 	"context"
-	"encoding/base64"
-	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -160,7 +157,10 @@ func tokenize(text string) []string {
 // feed, karena urutannya berdasarkan skor: tidak ada satu kolom urut yang
 // bisa dipakai sebagai cursor. Offset besar makin berat untuk database,
 // jadi pencarian dibatasi 10 halaman, seperti mesin pencari pada umumnya.
-func (s *Service) SearchVideos(ctx context.Context, query string, pageSize int, pageToken string) ([]Video, string, error) {
+//
+// opts mengatur urutan dan filter durasi (langkah 24a). Halaman berikutnya
+// harus memakai opts yang sama; token halaman tidak menyimpannya.
+func (s *Service) SearchVideos(ctx context.Context, query string, opts SearchOptions, pageSize int, pageToken string) ([]Video, string, error) {
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
@@ -179,9 +179,12 @@ func (s *Service) SearchVideos(ctx context.Context, query string, pageSize int, 
 	if err != nil {
 		return nil, "", err
 	}
+	if err := opts.validate(); err != nil {
+		return nil, "", err
+	}
 
 	// Ambil satu lebih banyak untuk tahu apakah masih ada halaman berikutnya.
-	videos, err := s.repo.Search(ctx, terms, page*pageSize, pageSize+1)
+	videos, err := s.repo.Search(ctx, terms, opts, page*pageSize, pageSize+1)
 	if err != nil {
 		return nil, "", err
 	}
@@ -229,23 +232,9 @@ func (s *Service) IndexPending(ctx context.Context) (int, error) {
 }
 
 // Token halaman berisi nomor halaman, misalnya base64("s2") untuk halaman
-// ketiga. Huruf "s" membedakannya dari token feed.
-func encodeSearchPage(page int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte("s" + strconv.Itoa(page)))
-}
+// ketiga. Huruf "s" membedakannya dari token feed dan tab Terpopuler.
+func encodeSearchPage(page int) string { return encodeOffsetPage("s", page) }
 
 func decodeSearchPage(token string) (int, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return 0, err
-	}
-	numStr, ok := strings.CutPrefix(string(raw), "s")
-	if !ok {
-		return 0, errors.New("bukan token pencarian")
-	}
-	page, err := strconv.Atoi(numStr)
-	if err != nil || page < 1 || page >= searchMaxPages {
-		return 0, errors.New("nomor halaman salah")
-	}
-	return page, nil
+	return decodeOffsetPage(token, "s", searchMaxPages)
 }

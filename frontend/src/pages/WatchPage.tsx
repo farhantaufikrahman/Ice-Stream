@@ -178,8 +178,16 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const layerRef = useRef<DanmakuLayerHandle>(null)
   const [showDanmaku, setShowDanmaku] = useState(readDanmakuPref)
+  // Id danmaku yang masuk setelah halaman dibuka (dikirim sendiri atau
+  // live). Set, karena danmaku sendiri datang dua kali: dari jawaban POST
+  // dan dari siaran live. Jumlah di bawah judul = danmaku_count + ukuran Set.
+  const [newDanmakuIds, setNewDanmakuIds] = useState<ReadonlySet<string>>(() => new Set())
+  const countDanmaku = (d: Danmaku) => setNewDanmakuIds((ids) => (ids.has(d.id) ? ids : new Set(ids).add(d.id)))
   // Danmaku live dari penonton lain langsung ditampilkan di layar.
-  const danmaku = useDanmaku(video.id, videoRef, playable, (d) => layerRef.current?.show(d))
+  const danmaku = useDanmaku(video.id, videoRef, playable, (d) => {
+    layerRef.current?.show(d)
+    countDanmaku(d)
+  })
 
   const toggleDanmaku = () => {
     setShowDanmaku((on) => {
@@ -190,6 +198,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
   const onDanmakuSent = (d: Danmaku) => {
     danmaku.add(d)
     layerRef.current?.show(d, true)
+    countDanmaku(d)
   }
   const seekTo = (ms: number) => {
     const el = videoRef.current
@@ -306,6 +315,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
           <h1 className="watch-title">{video.title}</h1>
           <div className="watch-stats">
             <span>{formatCount(views)} tayangan</span>
+            <span>{formatCount(video.danmaku_count + newDanmakuIds.size)} danmaku</span>
             <span>Diunggah {formatDate(video.created_at)}</span>
             {startAt > 0 && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>
