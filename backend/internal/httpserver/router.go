@@ -85,6 +85,8 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	authGroup.POST("/login", auth.login)
 	authGroup.POST("/refresh", auth.refresh)
 	authGroup.POST("/logout", auth.logout)
+	authGroup.POST("/password/forgot", auth.forgotPassword)
+	authGroup.POST("/password/reset", auth.resetPassword)
 	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
 
 	videos := &videoHandler{client: deps.Videos, users: deps.Users, logger: logger}

@@ -696,6 +696,22 @@ a:focus-visible {
   border-color: var(--accent-text);
   outline: none;
 }
+/* Isian dengan tautan di kanan label, misalnya "Lupa kata sandi?" (24c). */
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 0.82rem;
+}
+.auth-email {
+  overflow-wrap: anywhere;
+}
 
 /* ---------- Unggah & Studio (langkah 17b) ---------- */
 .spacer {

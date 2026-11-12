@@ -60,6 +60,26 @@ export async function register(input: RegisterInput): Promise<void> {
   await apiRequest('/auth/register', { method: 'POST', body: input })
 }
 
+/**
+ * Meminta tautan "Lupa kata sandi?" (langkah 24c). Server selalu menjawab
+ * 202, baik email itu terdaftar atau tidak.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiRequest('/auth/password/forgot', { method: 'POST', body: { email } })
+}
+
+/**
+ * Mengganti kata sandi memakai token dari email. withCredentials supaya
+ * server bisa menghapus cookie refresh lama di browser ini.
+ */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await apiRequest('/auth/password/reset', {
+    method: 'POST',
+    body: { token, new_password: newPassword },
+    withCredentials: true,
+  })
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiRequest('/auth/logout', { method: 'POST', withCredentials: true })

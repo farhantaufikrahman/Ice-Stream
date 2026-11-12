@@ -20,6 +20,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/mail"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/user"
 )
 
@@ -52,10 +53,28 @@ func run(logger *slog.Logger) error {
 	}
 	defer sqlDB.Close()
 
-	svc, err := auth.NewService(auth.NewOracleRepository(db), auth.NewTokenMaker(key, cfg.AccessTokenTTL), cfg.RefreshTokenTTL)
+	authRepo := auth.NewOracleRepository(db)
+	svc, err := auth.NewService(authRepo, auth.NewTokenMaker(key, cfg.AccessTokenTTL), cfg.RefreshTokenTTL)
 	if err != nil {
 		return err
 	}
+	// "Lupa kata sandi?" (langkah 24c). Email dikirim di background; saat
+	// service dimatikan, email yang sedang dikirim ditunggu paling lama
+	// SHUTDOWN_TIMEOUT.
+	if err := svc.EnablePasswordReset(auth.ResetConfig{
+		Repo:    authRepo,
+		Mailer:  mail.SMTPSender{Addr: cfg.Mail.SMTPAddr, From: cfg.Mail.From, Timeout: 10 * time.Second},
+		BaseURL: cfg.Mail.AppBaseURL,
+		TTL:     cfg.Mail.PasswordResetTTL,
+		Logger:  logger,
+	}); err != nil {
+		return err
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		svc.Close(closeCtx)
+	}()
 
 	// Bucket images untuk foto profil disiapkan di background. Berbeda dengan
 	// VideoService, AuthService TIDAK boleh berhenti hanya karena storage
@@ -91,6 +110,8 @@ func run(logger *slog.Logger) error {
 		slog.String("env", cfg.Env),
 		slog.String("avatar_bucket", cfg.Storage.Bucket),
 		slog.String("media_url", cfg.MediaPublicURL),
+		slog.String("smtp_addr", cfg.Mail.SMTPAddr),
+		slog.String("app_base_url", cfg.Mail.AppBaseURL),
 	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }

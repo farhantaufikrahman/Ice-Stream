@@ -28,3 +28,10 @@ data:
   STORAGE_BUCKET: images
   # Alamat publik foto profil (lewat Gateway, storage/httproute.yaml).
   MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/images
+  # Email "Lupa kata sandi?" (langkah 24c). Di cluster lokal semua email
+  # ditangkap Mailpit (mail/deployment.yaml).
+  SMTP_ADDR: mailpit:1025
+  MAIL_FROM: Ice-Stream <no-reply@ice-stream.localhost>
+  # Alamat frontend untuk tautan di email (web/httproute.yaml).
+  APP_BASE_URL: http://ice-stream.localhost:4000
+  PASSWORD_RESET_TTL: 30m

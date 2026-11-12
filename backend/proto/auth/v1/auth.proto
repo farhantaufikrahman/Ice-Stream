@@ -8,6 +8,16 @@ service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // RequestPasswordReset mengirim tautan reset ke email itu jika terdaftar
+  // dan aktif (langkah 24c). Jawabannya selalu sukses, termasuk untuk email
+  // yang tidak terdaftar, supaya tidak bisa dipakai menebak email mana yang
+  // punya akun. INVALID_ARGUMENT hanya jika formatnya bukan email.
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+  // ResetPassword mengganti password memakai token dari email, lalu mencabut
+  // semua refresh token user itu (semua perangkat harus login lagi).
+  // FAILED_PRECONDITION jika token tidak valid, kedaluwarsa, atau sudah
+  // dipakai; INVALID_ARGUMENT jika password baru tidak memenuhi aturan.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 }
 
 message User {
@@ -67,3 +77,18 @@ message LogoutRequest {
 }
 
 message LogoutResponse {}
+message RequestPasswordResetRequest {
+  string email = 1;
+  // ip_address dicatat bersama token; user_agent tidak dipakai.
+  ClientInfo client = 2;
+}
+
+message RequestPasswordResetResponse {}
+
+message ResetPasswordRequest {
+  // Token dari tautan di email (?token=...).
+  string token = 1;
+  string new_password = 2;
+}
+
+message ResetPasswordResponse {}

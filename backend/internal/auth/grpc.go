@@ -61,6 +61,20 @@ func (s *GRPCServer) Logout(ctx context.Context, req *authv1.LogoutRequest) (*au
 	return &authv1.LogoutResponse{}, nil
 }
 
+func (s *GRPCServer) RequestPasswordReset(ctx context.Context, req *authv1.RequestPasswordResetRequest) (*authv1.RequestPasswordResetResponse, error) {
+	if err := s.svc.RequestPasswordReset(ctx, req.GetEmail(), clientInfo(req.GetClient())); err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &authv1.RequestPasswordResetResponse{}, nil
+}
+
+func (s *GRPCServer) ResetPassword(ctx context.Context, req *authv1.ResetPasswordRequest) (*authv1.ResetPasswordResponse, error) {
+	if err := s.svc.ResetPassword(ctx, req.GetToken(), req.GetNewPassword()); err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &authv1.ResetPasswordResponse{}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC. Kode gRPC ini nanti
 // diterjemahkan gateway menjadi kode HTTP (misalnya ALREADY_EXISTS -> 409).
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
@@ -72,6 +86,8 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, ErrInvalidCredentials), errors.Is(err, ErrInvalidRefreshToken):
 		return status.Error(codes.Unauthenticated, err.Error())
+	case errors.Is(err, ErrInvalidResetToken):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrUserBanned):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, context.Canceled):

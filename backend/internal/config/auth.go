@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -30,6 +33,23 @@ type AuthConfig struct {
 	// "http://media.ice-stream.localhost:4000/images". URL foto profil =
 	// MediaPublicURL + "/" + key.
 	MediaPublicURL string
+	// Mail adalah pengaturan email "Lupa kata sandi?" (langkah 24c).
+	Mail MailConfig
+}
+
+// MailConfig adalah pengaturan pengiriman email dan tautan reset password.
+type MailConfig struct {
+	// SMTPAddr adalah host:port server SMTP. Di cluster lokal: Mailpit
+	// ("mailpit:1025"), yang menangkap semua email tanpa mengirimnya.
+	SMTPAddr string
+	// From adalah pengirim email, misalnya
+	// "Ice-Stream <no-reply@ice-stream.localhost>".
+	From string
+	// AppBaseURL adalah alamat frontend untuk tautan di email, misalnya
+	// "http://ice-stream.localhost:4000".
+	AppBaseURL string
+	// PasswordResetTTL adalah umur tautan reset password.
+	PasswordResetTTL time.Duration
 }
 
 // IsProduction mengembalikan true jika service berjalan di mode production.
@@ -56,6 +76,11 @@ func LoadAuth() (AuthConfig, error) {
 		return AuthConfig{}, err
 	}
 
+	resetTTL, err := getDuration("PASSWORD_RESET_TTL", 30*time.Minute)
+	if err != nil {
+		return AuthConfig{}, err
+	}
+
 	storage := loadStorage("images")
 
 	cfg := AuthConfig{
@@ -68,6 +93,12 @@ func LoadAuth() (AuthConfig, error) {
 		RefreshTokenTTL:   refreshTTL,
 		Storage:           storage,
 		MediaPublicURL:    loadMediaURL(storage),
+		Mail: MailConfig{
+			SMTPAddr:         getString("SMTP_ADDR", "localhost:1025"),
+			From:             getString("MAIL_FROM", "Ice-Stream <no-reply@ice-stream.localhost>"),
+			AppBaseURL:       strings.TrimRight(getString("APP_BASE_URL", "http://localhost:5173"), "/"),
+			PasswordResetTTL: resetTTL,
+		},
 	}
 	if err := cfg.validate(); err != nil {
 		return AuthConfig{}, err
@@ -97,5 +128,29 @@ func (c AuthConfig) validate() error {
 	if err := validMediaURL(c.MediaPublicURL, "/images"); err != nil {
 		return err
 	}
+	if err := c.Mail.validate(); err != nil {
+		return err
+	}
 	return c.DB.validate()
+}
+
+func (m MailConfig) validate() error {
+	host, port, err := net.SplitHostPort(m.SMTPAddr)
+	if err != nil || host == "" {
+		return fmt.Errorf("SMTP_ADDR harus berbentuk host:port, dapat %q", m.SMTPAddr)
+	}
+	if err := validPort("SMTP_ADDR", port); err != nil {
+		return err
+	}
+	if _, err := mail.ParseAddress(m.From); err != nil {
+		return fmt.Errorf("MAIL_FROM tidak valid (contoh: Ice-Stream <no-reply@contoh.com>): %w", err)
+	}
+	u, err := url.Parse(m.AppBaseURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") {
+		return fmt.Errorf("APP_BASE_URL harus berupa alamat http(s) tanpa path, dapat %q", m.AppBaseURL)
+	}
+	if m.PasswordResetTTL < 5*time.Minute || m.PasswordResetTTL > 24*time.Hour {
+		return fmt.Errorf("PASSWORD_RESET_TTL harus antara 5m dan 24h, dapat %s", m.PasswordResetTTL)
+	}
+	return nil
 }
