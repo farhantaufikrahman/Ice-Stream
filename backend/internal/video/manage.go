@@ -90,6 +90,12 @@ func (s *Service) UpdateVideo(ctx context.Context, in UpdateInput) (Video, error
 		}
 	}
 	if in.Visibility != nil {
+		if v.Visibility == VisibilityBlocked {
+			// Langkah 28: hanya admin yang bisa memulihkan video yang
+			// diturunkan. Field lain (judul, deskripsi, ...) tetap boleh
+			// diubah, misalnya untuk memperbaiki judul yang menyesatkan.
+			return Video{}, &ValidationError{"visibility", "video ini diturunkan admin, visibilitasnya tidak bisa diubah"}
+		}
 		if d.Visibility, err = cleanVideoVisibility(*in.Visibility); err != nil {
 			return Video{}, err
 		}

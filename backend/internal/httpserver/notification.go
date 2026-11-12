@@ -24,9 +24,12 @@ type notificationHandler struct {
 type notificationResponse struct {
 	// ID dikirim sebagai string, sama seperti id video dan komentar.
 	ID string `json:"id"`
-	// Kind untuk sekarang selalu "NEW_VIDEO".
-	Kind  string        `json:"kind"`
-	Video videoResponse `json:"video"`
+	// Kind: "NEW_VIDEO" (kanal yang diikuti mengunggah video), atau untuk
+	// pemilik video "VIDEO_BLOCKED" / "VIDEO_RESTORED" (langkah 28).
+	Kind string `json:"kind"`
+	// ModerationReason hanya untuk VIDEO_BLOCKED, misalnya "spam".
+	ModerationReason string        `json:"moderation_reason,omitempty"`
+	Video            videoResponse `json:"video"`
 	// Read = false: tampilkan titik "belum dibaca".
 	Read      bool       `json:"read"`
 	ReadAt    *time.Time `json:"read_at,omitempty"`
@@ -86,12 +89,13 @@ func (h *notificationHandler) list(c *gin.Context) {
 		v := toVideoResponse(n.GetVideo())
 		v.Owner = owners[n.GetVideo().GetOwnerId()]
 		body.Notifications = append(body.Notifications, notificationResponse{
-			ID:        strconv.FormatInt(n.GetId(), 10),
-			Kind:      n.GetKind(),
-			Video:     v,
-			Read:      n.GetReadAt() != nil,
-			ReadAt:    optionalTime(n.GetReadAt()),
-			CreatedAt: n.GetCreatedAt().AsTime(),
+			ID:               strconv.FormatInt(n.GetId(), 10),
+			Kind:             n.GetKind(),
+			ModerationReason: reportReasonNames[n.GetModerationReason()],
+			Video:            v,
+			Read:             n.GetReadAt() != nil,
+			ReadAt:           optionalTime(n.GetReadAt()),
+			CreatedAt:        n.GetCreatedAt().AsTime(),
 		})
 	}
 	c.JSON(http.StatusOK, body)

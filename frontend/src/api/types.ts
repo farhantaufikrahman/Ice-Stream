@@ -2,6 +2,8 @@
 // Semua id dikirim sebagai string karena int64 bisa melebihi angka aman
 // JavaScript (Number.MAX_SAFE_INTEGER = 2^53 - 1).
 
+import type { ReportReason } from '../lib/report'
+
 export type VideoStatus = 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED'
 
 /**
@@ -9,6 +11,20 @@ export type VideoStatus = 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING' | 'READY'
  * (hanya lewat tautan), PRIVATE = "Pribadi" (hanya pemilik).
  */
 export type VideoVisibility = 'PUBLIC' | 'UNLISTED' | 'PRIVATE'
+
+/**
+ * Visibilitas yang dikirim server. Langkah 28: "BLOCKED" = diturunkan
+ * admin. Hanya pemilik video (dan admin) yang masih bisa membukanya, dan
+ * pemilik tidak bisa memilih nilai ini sendiri.
+ */
+export type VideoVisibilityState = VideoVisibility | 'BLOCKED'
+
+/** Langkah 28: alasan video diturunkan. Hanya ada jika visibility = "BLOCKED". */
+export interface VideoModeration {
+  reason: ReportReason
+  note: string
+  blocked_at: string
+}
 
 /** Kode bahasa video (ISO 639-1). "" = tidak diisi. */
 export type VideoLanguage = '' | 'id' | 'en' | 'ja'
@@ -55,8 +71,10 @@ export interface Video {
   /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
   tags: string[]
   owner?: Owner
-  /** Langkah 26. */
-  visibility: VideoVisibility
+  /** Langkah 26; "BLOCKED" sejak langkah 28. */
+  visibility: VideoVisibilityState
+  /** Langkah 28: hanya ada di video BLOCKED yang dibuka pemiliknya. */
+  moderation?: VideoModeration
   /** true = disimpan sebagai draf (belum terbit). */
   draft: boolean
   /** Waktu pertama kali terbit; tanggal di kartu video memakai ini. */
@@ -98,6 +116,9 @@ export interface VideoDetail {
   viewer_in_playlist?: boolean
 }
 
+/** Langkah 28: dibaca dari access token. */
+export type UserRole = 'USER' | 'ADMIN'
+
 export interface Profile {
   id: string
   username: string
@@ -107,6 +128,8 @@ export interface Profile {
   created_at: string
   /** Hanya ada di profil milik sendiri (/me/profile). */
   email?: string
+  /** Langkah 28: hanya ada di GET /me/profile. */
+  role?: UserRole
   subscriber_count: number
 }
 
@@ -236,8 +259,14 @@ export interface ChannelPage {
 
 export interface AppNotification {
   id: string
-  /** Untuk sekarang selalu "NEW_VIDEO": kanal yang diikuti mengunggah video. */
-  kind: string
+  /**
+   * "NEW_VIDEO": kanal yang diikuti mengunggah video.
+   * Langkah 28: "VIDEO_BLOCKED" (video milikmu diturunkan admin) dan
+   * "VIDEO_RESTORED" (video milikmu dipulihkan).
+   */
+  kind: 'NEW_VIDEO' | 'VIDEO_BLOCKED' | 'VIDEO_RESTORED'
+  /** Hanya ada pada VIDEO_BLOCKED. */
+  moderation_reason?: ReportReason
   video: Video
   read: boolean
   read_at?: string
@@ -503,4 +532,59 @@ export interface LiveChatMessage {
   /** Format "#RRGGBB". */
   color: string
   created_at: string
+}
+
+// ---------- Moderasi admin (langkah 28) ----------
+
+export interface ReasonCount {
+  reason: ReportReason
+  count: number
+}
+
+/** Satu baris antrean GET /admin/reports. */
+export interface ReportedVideo {
+  video: Video
+  /** Jumlah laporan yang belum ditangani. */
+  open_reports: number
+  /** Jumlah per alasan, terbanyak dulu. */
+  reasons: ReasonCount[]
+  first_reported_at: string
+  last_reported_at: string
+}
+
+export interface ReportedVideoPage {
+  videos: ReportedVideo[]
+  next_page_token: string
+}
+
+/** Satu laporan (GET /admin/reports/:id). */
+export interface VideoReport {
+  /** Tidak ada jika profil pelapor gagal diambil server. */
+  reporter?: Owner
+  reporter_id: string
+  reason: ReportReason
+  details: string
+  reported_at: string
+}
+
+/** Video yang sedang diturunkan (GET /admin/blocked). */
+export interface BlockedVideo {
+  video: Video
+  reason: ReportReason
+  note: string
+  /** Admin yang menurunkan. Tidak ada jika profilnya gagal diambil. */
+  moderator?: Owner
+  blocked_at: string
+}
+
+export interface BlockedVideoPage {
+  videos: BlockedVideo[]
+  next_page_token: string
+}
+
+/** Jawaban POST /admin/videos/:id/block. */
+export interface BlockResult {
+  blocked: BlockedVideo
+  /** Jumlah laporan yang ikut ditutup. */
+  closed_reports: number
 }

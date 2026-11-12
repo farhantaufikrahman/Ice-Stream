@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web k8s-make-admin
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
 
@@ -154,3 +154,12 @@ k8s-forward-storage: ## Buka console RustFS di localhost:9001 (API S3 sudah ada 
 
 k8s-forward-nats: ## Buka NATS di localhost:4222 (client) dan localhost:8222 (pemantauan)
 	kubectl -n ice-stream port-forward svc/nats 4222:4222 8222:8222
+# Langkah 28: halaman Moderasi hanya untuk role ADMIN. Perintah ini
+# menjalankan sqlplus di dalam pod Oracle sebagai auth_svc; password dibaca
+# dari env APP_USER_PASSWORD di pod (tanda $$ = dibaca shell di pod, bukan
+# oleh make), jadi tidak tercetak di terminal. Setelah itu user tersebut
+# harus keluar lalu masuk lagi, karena role dibaca dari access token.
+k8s-make-admin: ## Jadikan user admin: make k8s-make-admin USERNAME=budi
+	@echo "$(USERNAME)" | grep -Eq '^[a-z0-9_]{3,30}$$' || { echo "Isi USERNAME (huruf kecil, angka, _), misalnya: make k8s-make-admin USERNAME=budi"; exit 1; }
+	@printf "SET FEEDBACK ON\nUPDATE users SET role = 'ADMIN', updated_at = SYSTIMESTAMP WHERE username = '%s';\nCOMMIT;\nSELECT username, role FROM users WHERE username = '%s';\nEXIT\n" "$(USERNAME)" "$(USERNAME)" | \
+		kubectl -n ice-stream exec -i oracle-0 -c oracle -- bash -c 'sqlplus -s "$$APP_USER/$$APP_USER_PASSWORD@FREEPDB1"'

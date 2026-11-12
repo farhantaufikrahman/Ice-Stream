@@ -36,6 +36,10 @@ spec:
             # Hook auth MediaMTX ("boleh siaran?"), langkah 25a.
             - name: live-hook
               containerPort: 8090
+            # Metrik Prometheus (langkah 28): GET /metrics. Tidak dibuka di
+            # Service maupun HTTPRoute, jadi hanya bisa diambil dari dalam cluster.
+            - name: metrics
+              containerPort: 9092
           envFrom:
             - configMapRef:
                 name: video-config

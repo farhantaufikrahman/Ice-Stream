@@ -5,6 +5,8 @@ import { API_BASE, apiRequest, setAccessToken } from './client'
 import type {
   AccessToken,
   AppNotification,
+  BlockedVideoPage,
+  BlockResult,
   ChannelDetail,
   ChannelPage,
   ChannelSearchPage,
@@ -33,6 +35,7 @@ import type {
   PlaylistVisibility,
   Profile,
   PublishToken,
+  ReportedVideoPage,
   SearchCounts,
   StatsDays,
   StreamKeyResult,
@@ -43,6 +46,7 @@ import type {
   VideoLanguage,
   VideoPage,
   VideoVisibility,
+  VideoReport,
   ViewResult,
   WatchLaterPage,
   WatchLaterResult,
@@ -696,6 +700,51 @@ export async function sendLiveChat(streamId: string, body: string, color: string
 /** Alamat Server-Sent Events chat baru sebuah siaran (untuk EventSource). */
 export function liveChatUrl(streamId: string): string {
   return `${API_BASE}/live/${encodeURIComponent(streamId)}/chat/live`
+}
+
+// ---------- Moderasi admin (langkah 28) ----------
+// Semua endpoint /admin menjawab 403 jika user bukan admin.
+
+/** Antrean video yang punya laporan terbuka, laporan terbanyak dulu. */
+export function listReportedVideos(pageToken: string, signal?: AbortSignal): Promise<ReportedVideoPage> {
+  return apiRequest<ReportedVideoPage>(`/admin/reports?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
+}
+
+/** Laporan terbuka untuk satu video, terbaru dulu. */
+export async function listVideoReports(videoId: string, signal?: AbortSignal): Promise<VideoReport[]> {
+  const res = await apiRequest<{ reports: VideoReport[] }>(`/admin/reports/${encodeURIComponent(videoId)}`, { auth: 'required', signal })
+  return res.reports
+}
+
+/** Menurunkan video. note wajib untuk alasan "other", maksimal 500 karakter. */
+export function blockVideo(videoId: string, reason: ReportReason, note: string): Promise<BlockResult> {
+  return apiRequest<BlockResult>(`/admin/videos/${encodeURIComponent(videoId)}/block`, {
+    method: 'POST',
+    body: { reason, note },
+    auth: 'required',
+  })
+}
+
+/** Menolak semua laporan terbuka sebuah video (videonya tetap tayang). */
+export function dismissReports(videoId: string): Promise<{ closed_reports: number }> {
+  return apiRequest<{ closed_reports: number }>(`/admin/videos/${encodeURIComponent(videoId)}/dismiss`, {
+    method: 'POST',
+    auth: 'required',
+  })
+}
+
+/** Memulihkan video ke visibilitas sebelum diturunkan. */
+export async function unblockVideo(videoId: string): Promise<Video> {
+  const res = await apiRequest<{ video: Video }>(`/admin/videos/${encodeURIComponent(videoId)}/unblock`, {
+    method: 'POST',
+    auth: 'required',
+  })
+  return res.video
+}
+
+/** Video yang sedang diturunkan, terbaru dulu. */
+export function listBlockedVideos(pageToken: string, signal?: AbortSignal): Promise<BlockedVideoPage> {
+  return apiRequest<BlockedVideoPage>(`/admin/blocked?${pageQuery(pageToken, LIST_PAGE_SIZE)}`, { auth: 'required', signal })
 }
 
 const PAGE_SIZE = 24

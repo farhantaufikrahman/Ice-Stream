@@ -10,7 +10,7 @@ import (
 
 func TestLoadAuthDefaults(t *testing.T) {
 	for _, key := range []string{
-		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
+		"APP_ENV", "GRPC_PORT", "METRICS_PORT", "SHUTDOWN_TIMEOUT", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
 		"DB_HOST", "DB_PORT", "DB_SERVICE", "DB_USER", "DB_MAX_OPEN_CONNS",
 		"STORAGE_ENDPOINT", "STORAGE_PUBLIC_ENDPOINT", "STORAGE_BUCKET", "MEDIA_PUBLIC_URL",
 		"SMTP_ADDR", "MAIL_FROM", "APP_BASE_URL", "PASSWORD_RESET_TTL",
@@ -23,6 +23,7 @@ func TestLoadAuthDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ":50051", cfg.GRPCAddr)
+	assert.Equal(t, ":9091", cfg.MetricsAddr)
 	assert.Equal(t, 15*time.Minute, cfg.AccessTokenTTL)
 	assert.Equal(t, 30*24*time.Hour, cfg.RefreshTokenTTL)
 	assert.Equal(t, "/secrets/jwt-private.pem", cfg.JWTPrivateKeyFile)
@@ -52,6 +53,7 @@ func setAuthRequired(t *testing.T) {
 func TestLoadAuthInvalid(t *testing.T) {
 	tests := map[string]struct{ key, value string }{
 		"GRPC_PORT salah":               {"GRPC_PORT", "abc"},
+		"METRICS_PORT bentrok":          {"METRICS_PORT", "50051"},
 		"JWT_PRIVATE_KEY_FILE kosong":   {"JWT_PRIVATE_KEY_FILE", ""},
 		"ACCESS_TOKEN_TTL terlalu lama": {"ACCESS_TOKEN_TTL", "2h"},
 		"REFRESH lebih pendek":          {"REFRESH_TOKEN_TTL", "10m"},

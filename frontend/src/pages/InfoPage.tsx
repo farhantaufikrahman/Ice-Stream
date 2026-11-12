@@ -77,6 +77,10 @@ const PAGES: Record<InfoTopic, { title: string; body: ReactNode }> = {
           Tekan <strong>Laporkan</strong> di bawah video, pilih alasannya, dan tambahkan keterangan jika perlu. Setiap akun punya satu laporan
           per video; melapor lagi memperbarui laporan sebelumnya. Laporan disimpan untuk ditinjau.
         </p>
+        <p>
+          Admin meninjau laporan. Video yang melanggar diturunkan: video itu hilang dari beranda, pencarian, kanal, dan tautannya, lalu
+          pemiliknya mendapat notifikasi beserta alasannya. Jika laporannya tidak terbukti, laporan ditolak dan video tetap tayang.
+        </p>
       </>
     ),
   },

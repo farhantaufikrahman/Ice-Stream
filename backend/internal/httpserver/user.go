@@ -50,6 +50,10 @@ type profileResponse struct {
 	Email     string    `json:"email,omitempty"`
 	// SubscriberCount adalah jumlah subscriber (selalu ada).
 	SubscriberCount int64 `json:"subscriber_count"`
+	// Role hanya ada di GET /me/profile (langkah 28): "USER" atau "ADMIN",
+	// dibaca dari access token. Frontend memakainya untuk menampilkan menu
+	// moderasi; izin yang sebenarnya tetap dicek RequireAdmin di server.
+	Role string `json:"role,omitempty"`
 }
 
 // subscriptionResponse adalah jawaban PUT dan DELETE
@@ -299,7 +303,11 @@ func (h *userHandler) me(c *gin.Context) {
 		writeGRPCError(c, h.logger, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"user": toProfileResponse(resp.GetProfile())})
+	out := toProfileResponse(resp.GetProfile())
+	if claims, ok := CurrentUser(c); ok {
+		out.Role = claims.Role
+	}
+	c.JSON(http.StatusOK, gin.H{"user": out})
 }
 
 // update: PATCH /api/v1/me/profile {"display_name": "...", "bio": "..."}

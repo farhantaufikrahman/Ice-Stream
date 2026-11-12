@@ -8,6 +8,7 @@ import { Avatar } from '../components/Avatar'
 import { ChannelCardHead } from '../components/channel/ChannelCardHead'
 import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
+import { ModerationNotice } from '../components/moderation/ModerationNotice'
 import { categoryLabel } from '../lib/categories'
 import { formatCount, formatDate } from '../lib/format'
 import { languageLabel, visibilityLabel } from '../lib/visibility'
@@ -301,6 +302,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
           />
         )}
 
+        <ModerationNotice video={video} />
         <div className="watch-heading">
           <h1 className="watch-title">{video.title}</h1>
           <div className="watch-stats">
@@ -309,7 +311,9 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
             <span>{video.published_at ? `Diterbitkan ${formatDate(video.published_at)}` : `Diunggah ${formatDate(video.created_at)}`}</span>
             {languageLabel(video.language) && <span>{languageLabel(video.language)}</span>}
             {(video.draft || video.visibility !== 'PUBLIC') && (
-              <span className="chip chip-amber">{video.draft ? 'Draf' : visibilityLabel(video.visibility)}</span>
+              <span className={video.visibility === 'BLOCKED' ? 'chip chip-pink' : 'chip chip-amber'}>
+                {video.draft && video.visibility !== 'BLOCKED' ? 'Draf' : visibilityLabel(video.visibility)}
+              </span>
             )}
             {startAt > 0 && !fromLink && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>

@@ -150,15 +150,19 @@ func TestFeedAndDetailIncludeOwner(t *testing.T) {
 }
 
 func TestMyProfile(t *testing.T) {
-	verifier, as := newTokenSigner(t)
+	verifier, as, asAdmin := newRoleTokenSigner(t)
 	users := &fakeUserClient{}
 	r := newTestRouter(t, Deps{Users: users, Verifier: verifier})
 
 	rec := do(r, http.MethodGet, "/api/v1/me/profile", "", as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"email":"budi@example.com"`)
+	assert.Contains(t, rec.Body.String(), `"role":"USER"`)
 	assert.Equal(t, int64(7), users.lastGet.GetUserId())
 	assert.Equal(t, int64(7), users.lastGet.GetViewerId())
+
+	rec = do(r, http.MethodGet, "/api/v1/me/profile", "", asAdmin(7))
+	assert.Contains(t, rec.Body.String(), `"role":"ADMIN"`)
 
 	rec = do(r, http.MethodGet, "/api/v1/me/profile", "")
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)

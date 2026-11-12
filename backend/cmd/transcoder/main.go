@@ -17,9 +17,11 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/metrics"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/transcoder"
 )
 
@@ -85,6 +87,10 @@ func run(logger *slog.Logger) error {
 		transcoder.JetStreamPublisher{JS: js},
 		cfg.WorkDir, cfg.JobTimeout, logger,
 	)
+	// Metrik Prometheus (langkah 28): dilayani di port health yang sama
+	// (GET /metrics), karena port ini tidak pernah dibuka ke luar cluster.
+	reg := metrics.NewRegistry()
+	worker.EnableMetrics(reg)
 	cc, err := cons.Consume(func(msg jetstream.Msg) {
 		worker.Handle(ctx, msg)
 	}, jetstream.PullMaxMessages(1))
@@ -94,7 +100,7 @@ func run(logger *slog.Logger) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           healthHandler(nc, storage),
+		Handler:           healthHandler(nc, storage, reg),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -128,13 +134,15 @@ func run(logger *slog.Logger) error {
 	return nil
 }
 
-// healthHandler melayani dua endpoint untuk Kubernetes:
+// healthHandler melayani endpoint untuk Kubernetes dan Prometheus:
 //   - GET /livez:   proses masih hidup (livenessProbe). Sengaja tidak
 //     memeriksa NATS/storage, karena restart pod tidak membuat keduanya sembuh.
 //   - GET /healthz: NATS dan storage bisa dihubungi (readinessProbe). Kalau
 //     gagal, pod tampil 0/1 di `kubectl get pods`, jadi masalahnya kelihatan.
-func healthHandler(nc *nats.Conn, storage *transcoder.S3Storage) http.Handler {
+//   - GET /metrics: metrik Prometheus (langkah 28).
+func healthHandler(nc *nats.Conn, storage *transcoder.S3Storage, reg *prometheus.Registry) http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", metrics.Handler(reg))
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})

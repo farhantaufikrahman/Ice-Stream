@@ -3678,3 +3678,80 @@ a.trending-title:hover {
 .search-summary strong {
   color: var(--fg);
 }
+
+/* ---------- Moderasi admin (langkah 28) ---------- */
+.moderation-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--strawberry) 40%, transparent);
+  background: var(--chip-pink);
+  color: var(--pink-text);
+  font-size: 0.9rem;
+}
+.moderation-notice a {
+  color: inherit;
+  text-decoration: underline;
+}
+.moderation-item .studio-thumb {
+  width: 140px;
+}
+.moderation-item .link-btn {
+  align-self: flex-start;
+}
+.moderation-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.moderation-done {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--chip-mint);
+  color: var(--accent-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.report-details {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notif-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  background: var(--chip-mint);
+  color: var(--accent-text);
+}
+.notif-icon.is-blocked {
+  background: var(--chip-pink);
+  color: var(--pink-text);
+}
+@media (max-width: 640px) {
+  .moderation-item {
+    flex-wrap: wrap;
+  }
+  .moderation-item .studio-thumb {
+    width: 96px;
+  }
+  .moderation-actions {
+    flex-direction: row;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

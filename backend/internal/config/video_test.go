@@ -17,7 +17,7 @@ func setVideoRequired(t *testing.T) {
 
 func TestLoadVideoDefaults(t *testing.T) {
 	for _, key := range []string{
-		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "DB_USER", "STORAGE_ENDPOINT",
+		"APP_ENV", "GRPC_PORT", "METRICS_PORT", "SHUTDOWN_TIMEOUT", "DB_USER", "STORAGE_ENDPOINT",
 		"STORAGE_PUBLIC_ENDPOINT", "STORAGE_REGION", "STORAGE_BUCKET", "MAX_UPLOAD_MB",
 		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS", "NATS_URL", "MEDIA_PUBLIC_URL",
 		"VIEW_DEDUP_WINDOW", "AUTH_GRPC_ADDR",
@@ -31,6 +31,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ":50052", cfg.GRPCAddr)
+	assert.Equal(t, ":9092", cfg.MetricsAddr)
 	assert.Equal(t, "video_svc", cfg.DB.User)
 	assert.Equal(t, "http://localhost:9000", cfg.Storage.Endpoint)
 	// Jika tidak diisi, alamat publik sama dengan alamat internal.
@@ -71,6 +72,7 @@ func TestLoadVideoMediaPublicURL(t *testing.T) {
 func TestLoadVideoInvalid(t *testing.T) {
 	tests := map[string]struct{ key, value string }{
 		"GRPC_PORT salah":                   {"GRPC_PORT", "abc"},
+		"METRICS_PORT bentrok dengan hook":  {"METRICS_PORT", "8090"},
 		"DB_PASSWORD kosong":                {"DB_PASSWORD", ""},
 		"access key kosong":                 {"STORAGE_ACCESS_KEY", ""},
 		"secret key kosong":                 {"STORAGE_SECRET_KEY", ""},

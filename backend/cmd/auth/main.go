@@ -21,6 +21,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/mail"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/metrics"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/user"
 )
 
@@ -88,7 +89,10 @@ func run(logger *slog.Logger) error {
 	go ensureAvatarBucket(ctx, store, logger)
 	users := user.NewService(user.NewOracleRepository(db), store, logger, cfg.MediaPublicURL)
 
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger)))
+	// Metrik Prometheus (langkah 28) di port terpisah (METRICS_PORT).
+	reg := metrics.NewRegistry()
+	go metrics.Serve(ctx, cfg.MetricsAddr, reg, logger)
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger), metrics.NewGRPC(reg).Unary()))
 	authv1.RegisterAuthServiceServer(srv, auth.NewGRPCServer(svc, logger))
 	// UserService berjalan di proses yang sama (port 50051). Satu server gRPC
 	// boleh melayani beberapa service, mirip satu aplikasi Spring Boot dengan

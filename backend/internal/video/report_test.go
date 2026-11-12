@@ -19,6 +19,8 @@ func (r *fakeRepo) SaveReport(_ context.Context, rep Report) error {
 		r.reports = map[[2]int64]Report{}
 	}
 	r.reports[[2]int64{rep.VideoID, rep.ReporterID}] = rep
+	// Sama dengan MERGE: laporan yang sudah ditinjau dibuka lagi.
+	delete(r.resolved, [2]int64{rep.VideoID, rep.ReporterID})
 	return nil
 }
 

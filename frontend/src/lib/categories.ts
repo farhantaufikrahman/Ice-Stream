@@ -3,7 +3,7 @@
 // pengecekan di sini hanya supaya kreator langsung tahu salahnya.
 
 import type { VideoChanges } from '../api/endpoints'
-import type { VideoLanguage, VideoVisibility } from '../api/types'
+import type { VideoLanguage, VideoVisibilityState } from '../api/types'
 
 /** Urutan sama dengan chip di beranda (desain Home.dc.html). */
 export const CATEGORIES = [
@@ -92,8 +92,12 @@ export interface DetailsForm {
   description: string
   category: string
   tags: string[]
-  /** Langkah 26. Tidak diisi = tidak dibandingkan (form tanpa pilihan ini). */
-  visibility?: VideoVisibility
+  /**
+   * Langkah 26. Tidak diisi = tidak dibandingkan (form tanpa pilihan ini).
+   * "BLOCKED" (langkah 28) tidak pernah dikirim: hanya admin yang bisa
+   * memulihkan video yang diturunkan.
+   */
+  visibility?: VideoVisibilityState
   language?: VideoLanguage
   draft?: boolean
 }
@@ -108,7 +112,9 @@ export function detailsChanges(saved: DetailsForm, form: DetailsForm): VideoChan
   if (form.description.trim() !== saved.description) changes.description = form.description.trim()
   if (form.category !== saved.category) changes.category = form.category
   if (!sameTags(form.tags, saved.tags)) changes.tags = form.tags
-  if (form.visibility !== undefined && form.visibility !== saved.visibility) changes.visibility = form.visibility
+  if (form.visibility !== undefined && form.visibility !== 'BLOCKED' && saved.visibility !== 'BLOCKED' && form.visibility !== saved.visibility) {
+    changes.visibility = form.visibility
+  }
   if (form.language !== undefined && form.language !== saved.language) changes.language = form.language
   if (form.draft !== undefined && form.draft !== saved.draft) changes.draft = form.draft
   return changes

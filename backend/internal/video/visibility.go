@@ -12,6 +12,8 @@ import (
 //   - PUBLIC: tampil di feed, pencarian, Trending, dan kanal;
 //   - PRIVATE: "Pribadi", hanya pemiliknya.
 //
+// VisibilityBlocked (langkah 28) ada di moderation.go.
+//
 // VisibilityUnlisted hanya untuk video: "Tidak publik", bisa dibuka siapa
 // saja yang punya tautannya, tapi tidak tampil di daftar mana pun.
 const VisibilityUnlisted = "UNLISTED"

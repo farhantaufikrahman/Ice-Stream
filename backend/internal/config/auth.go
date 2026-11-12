@@ -15,6 +15,8 @@ type AuthConfig struct {
 	Env string
 	// GRPCAddr adalah alamat server gRPC, misalnya ":50051".
 	GRPCAddr string
+	// MetricsAddr adalah alamat server /metrics Prometheus (langkah 28).
+	MetricsAddr string
 	// ShutdownTimeout adalah batas waktu menunggu RPC yang sedang berjalan
 	// selesai saat server dimatikan.
 	ShutdownTimeout time.Duration
@@ -86,6 +88,7 @@ func LoadAuth() (AuthConfig, error) {
 	cfg := AuthConfig{
 		Env:               getString("APP_ENV", "development"),
 		GRPCAddr:          ":" + getString("GRPC_PORT", "50051"),
+		MetricsAddr:       ":" + getString("METRICS_PORT", "9091"),
 		ShutdownTimeout:   shutdownTimeout,
 		DB:                db,
 		JWTPrivateKeyFile: getString("JWT_PRIVATE_KEY_FILE", ""),
@@ -111,6 +114,9 @@ func (c AuthConfig) validate() error {
 		return fmt.Errorf("APP_ENV harus \"development\" atau \"production\", dapat %q", c.Env)
 	}
 	if err := validPort("GRPC_PORT", strings.TrimPrefix(c.GRPCAddr, ":")); err != nil {
+		return err
+	}
+	if err := validMetricsPort(c.MetricsAddr, c.GRPCAddr); err != nil {
 		return err
 	}
 	if c.JWTPrivateKeyFile == "" {

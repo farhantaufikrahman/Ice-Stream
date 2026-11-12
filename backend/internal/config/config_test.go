@@ -14,7 +14,7 @@ func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"APP_ENV", "HTTP_PORT", "CORS_ALLOWED_ORIGINS", "SHUTDOWN_TIMEOUT",
 		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "VIDEO_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
-		"NATS_URL", "LIVE_MAX_CLIENTS", "OAUTH_REDIRECT_BASE_URL", "APP_BASE_URL",
+		"NATS_URL", "LIVE_MAX_CLIENTS", "OAUTH_REDIRECT_BASE_URL", "APP_BASE_URL", "RATE_LIMIT_ENABLED", "METRICS_PORT",
 		"OAUTH_GOOGLE_CLIENT_ID", "OAUTH_GOOGLE_CLIENT_SECRET", "OAUTH_GITHUB_CLIENT_ID", "OAUTH_GITHUB_CLIENT_SECRET",
 	} {
 		t.Setenv(key, "")
@@ -35,6 +35,9 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "/secrets/jwt-public.pem", cfg.JWTPublicKeyFile)
 	assert.Equal(t, "nats://localhost:4222", cfg.NATSURL)
 	assert.Equal(t, 5000, cfg.LiveMaxClients)
+	// Langkah 28: rate limit menyala, metrik di port 9090.
+	assert.True(t, cfg.RateLimitEnabled)
+	assert.Equal(t, ":9090", cfg.MetricsAddr)
 	// Di development cookie tidak Secure, karena localhost memakai http.
 	assert.Equal(t, CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode}, cfg.Cookie)
 	// Login Google/GitHub mati sampai kredensialnya diisi.
@@ -56,6 +59,8 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("COOKIE_SAMESITE", "None")
 	t.Setenv("NATS_URL", "nats://nats:4222")
 	t.Setenv("LIVE_MAX_CLIENTS", "200")
+	t.Setenv("RATE_LIMIT_ENABLED", "false")
+	t.Setenv("METRICS_PORT", "9190")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -70,6 +75,8 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "/etc/ice-stream/jwt/jwt-public.pem", cfg.JWTPublicKeyFile)
 	assert.Equal(t, "nats://nats:4222", cfg.NATSURL)
 	assert.Equal(t, 200, cfg.LiveMaxClients)
+	assert.False(t, cfg.RateLimitEnabled)
+	assert.Equal(t, ":9190", cfg.MetricsAddr)
 	// Di production Secure otomatis true.
 	assert.Equal(t, CookieConfig{Secure: true, SameSite: http.SameSiteNoneMode}, cfg.Cookie)
 }
@@ -87,6 +94,9 @@ func TestLoadInvalid(t *testing.T) {
 		"NATS_URL salah":               {"NATS_URL": "http://nats:4222"},
 		"LIVE_MAX_CLIENTS nol":         {"LIVE_MAX_CLIENTS": "0"},
 		"LIVE_MAX_CLIENTS bukan angka": {"LIVE_MAX_CLIENTS": "banyak"},
+		"RATE_LIMIT_ENABLED salah":     {"RATE_LIMIT_ENABLED": "kadang"},
+		"METRICS_PORT sama":            {"METRICS_PORT": "8080", "HTTP_PORT": "8080"},
+		"METRICS_PORT bukan angka":     {"METRICS_PORT": "abc"},
 		"OAUTH redirect dengan path":   {"OAUTH_REDIRECT_BASE_URL": "http://localhost:4000/api"},
 		"APP_BASE_URL tanpa skema":     {"APP_BASE_URL": "ice-stream.localhost:4000"},
 		"Google tanpa secret":          {"OAUTH_GOOGLE_CLIENT_ID": "abc.apps.googleusercontent.com", "OAUTH_GOOGLE_CLIENT_SECRET": ""},

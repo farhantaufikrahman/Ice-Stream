@@ -166,21 +166,31 @@ func (f *fakeVideoClient) RecordView(_ context.Context, in *videov1.RecordViewRe
 // newTokenSigner membuat Verifier dan fungsi untuk menandatangani access
 // token user tertentu, supaya test bisa memanggil endpoint yang butuh login.
 func newTokenSigner(t *testing.T) (*accesstoken.Verifier, func(userID int64) func(*http.Request)) {
+	verifier, as, _ := newRoleTokenSigner(t)
+	return verifier, as
+}
+
+// newRoleTokenSigner sama dengan newTokenSigner, ditambah asAdmin untuk
+// access token dengan role ADMIN (langkah 28).
+func newRoleTokenSigner(t *testing.T) (*accesstoken.Verifier, func(userID int64) func(*http.Request), func(userID int64) func(*http.Request)) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	return accesstoken.NewVerifier(pub), func(userID int64) func(*http.Request) {
-		now := time.Now()
-		token, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, accesstoken.Claims{
-			Role: "USER",
-			RegisteredClaims: jwt.RegisteredClaims{
-				Issuer: accesstoken.Issuer, Subject: strconv.FormatInt(userID, 10), Audience: jwt.ClaimStrings{accesstoken.Audience},
-				IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
-			},
-		}).SignedString(priv)
-		require.NoError(t, err)
-		return func(req *http.Request) { req.Header.Set("Authorization", "Bearer "+token) }
+	sign := func(role string) func(userID int64) func(*http.Request) {
+		return func(userID int64) func(*http.Request) {
+			now := time.Now()
+			token, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, accesstoken.Claims{
+				Role: role,
+				RegisteredClaims: jwt.RegisteredClaims{
+					Issuer: accesstoken.Issuer, Subject: strconv.FormatInt(userID, 10), Audience: jwt.ClaimStrings{accesstoken.Audience},
+					IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+				},
+			}).SignedString(priv)
+			require.NoError(t, err)
+			return func(req *http.Request) { req.Header.Set("Authorization", "Bearer "+token) }
+		}
 	}
+	return accesstoken.NewVerifier(pub), sign("USER"), sign("ADMIN")
 }
 
 func TestCreateVideo(t *testing.T) {

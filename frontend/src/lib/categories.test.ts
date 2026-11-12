@@ -73,4 +73,9 @@ describe('detailsChanges', () => {
       draft: false,
     })
   })
+  it('video BLOCKED (langkah 28): visibilitas tidak pernah dikirim', () => {
+    const blocked = { ...saved, visibility: 'BLOCKED' as const }
+    expect(detailsChanges(blocked, { ...blocked, visibility: 'PUBLIC' })).toEqual({})
+    expect(detailsChanges(blocked, { ...blocked, title: 'Gelato baru' })).toEqual({ title: 'Gelato baru' })
+  })
 })

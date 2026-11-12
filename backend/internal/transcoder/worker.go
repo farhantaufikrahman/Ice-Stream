@@ -65,6 +65,8 @@ type Worker struct {
 	workDir    string
 	jobTimeout time.Duration
 	logger     *slog.Logger
+	// metrics boleh nil (lihat EnableMetrics).
+	metrics *jobMetrics
 }
 
 // NewWorker membuat Worker.
@@ -94,6 +96,7 @@ func (w *Worker) Handle(ctx context.Context, msg jetstream.Msg) {
 	if err := json.Unmarshal(msg.Data(), &ev); err != nil || ev.VideoID <= 0 || ev.ObjectKey == "" {
 		w.logger.Error("pesan videos.uploaded tidak valid, dibuang", slog.String("data", string(msg.Data())))
 		_ = msg.TermWithReason("payload tidak valid")
+		w.countJob(resultInvalid)
 		return
 	}
 	attempt := uint64(1)
@@ -120,6 +123,8 @@ func (w *Worker) Handle(ctx context.Context, msg jetstream.Msg) {
 		if err == nil {
 			log.Info("transcoding selesai", slog.Duration("lama", time.Since(start)), slog.Any("resolusi", result.Renditions))
 			_ = msg.Ack()
+			w.countJob(resultSucceeded)
+			w.observeSuccess(time.Since(start))
 			return
 		}
 	}
@@ -130,6 +135,7 @@ func (w *Worker) Handle(ctx context.Context, msg jetstream.Msg) {
 		// Pod sedang dimatikan: kembalikan tugas supaya dikerjakan lagi nanti.
 		log.Warn("transcoding dihentikan karena pod berhenti, akan diulang")
 		_ = msg.Nak()
+		w.countJob(resultInterrupted)
 	case errors.As(err, &perm) || attempt >= MaxAttempts:
 		log.Error("transcoding gagal, video ditandai FAILED", slog.Any("error", err))
 		reason := fmt.Sprintf("transcoding gagal setelah %d kali percobaan", attempt)
@@ -143,9 +149,11 @@ func (w *Worker) Handle(ctx context.Context, msg jetstream.Msg) {
 			return
 		}
 		_ = msg.TermWithReason("transcoding gagal")
+		w.countJob(resultFailed)
 	default:
 		log.Warn("transcoding gagal, akan dicoba lagi", slog.Any("error", err), slog.Duration("jeda", retryDelay))
 		_ = msg.NakWithDelay(retryDelay)
+		w.countJob(resultRetry)
 	}
 }
 

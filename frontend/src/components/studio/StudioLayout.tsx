@@ -10,6 +10,7 @@ import { ThemeToggle } from '../ThemeToggle'
  * kanan, dengan urutan menu sama seperti desain.
  */
 export function StudioLayout({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
   return (
     <div className="studio">
       <nav className="studio-nav" aria-label="Menu Creator Studio">
@@ -41,6 +42,12 @@ export function StudioLayout({ children }: { children: ReactNode }) {
         <NavLink to="/studio/settings" className="studio-link">
           Pengaturan
         </NavLink>
+        {/* Langkah 28: hanya untuk admin. Server tetap mengecek role di setiap request. */}
+        {user?.role === 'ADMIN' && (
+          <NavLink to="/studio/moderation" className="studio-link">
+            Moderasi
+          </NavLink>
+        )}
         <Link to="/" className="studio-link">
           Kembali ke beranda
         </Link>

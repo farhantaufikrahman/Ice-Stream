@@ -43,6 +43,12 @@ type Config struct {
 	Cookie CookieConfig
 	// OAuth mengatur login Google/GitHub (langkah 26, oauth.go).
 	OAuth OAuthConfig
+	// RateLimitEnabled menyalakan rate limit gateway (langkah 28). Default
+	// true; matikan hanya untuk uji beban di laptop.
+	RateLimitEnabled bool
+	// MetricsAddr adalah alamat server /metrics Prometheus (langkah 28),
+	// terpisah dari HTTPAddr supaya tidak terbuka ke internet.
+	MetricsAddr string
 }
 
 // CookieConfig mengatur cookie refresh token.
@@ -92,6 +98,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	rateLimit, err := getBool("RATE_LIMIT_ENABLED", true)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Env:                env,
@@ -106,6 +116,8 @@ func Load() (Config, error) {
 		LiveMaxClients:     liveMax,
 		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
 		OAuth:              loadOAuth(),
+		RateLimitEnabled:   rateLimit,
+		MetricsAddr:        ":" + getString("METRICS_PORT", "9090"),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -119,6 +131,9 @@ func (c Config) validate() error {
 		return fmt.Errorf("APP_ENV harus \"development\" atau \"production\", dapat %q", c.Env)
 	}
 	if err := validPort("HTTP_PORT", strings.TrimPrefix(c.HTTPAddr, ":")); err != nil {
+		return err
+	}
+	if err := validMetricsPort(c.MetricsAddr, c.HTTPAddr); err != nil {
 		return err
 	}
 	if len(c.CORSAllowedOrigins) == 0 {
@@ -190,6 +205,20 @@ func (d DBConfig) validate() error {
 }
 
 // validPort memeriksa bahwa nilai port berupa angka 1 sampai 65535.
+// validMetricsPort memeriksa METRICS_PORT (langkah 28): angka port yang
+// sah dan tidak bentrok dengan port lain di proses yang sama.
+func validMetricsPort(metricsAddr string, others ...string) error {
+	if err := validPort("METRICS_PORT", strings.TrimPrefix(metricsAddr, ":")); err != nil {
+		return err
+	}
+	for _, o := range others {
+		if o == metricsAddr {
+			return fmt.Errorf("METRICS_PORT %s bentrok dengan port lain di service ini", strings.TrimPrefix(metricsAddr, ":"))
+		}
+	}
+	return nil
+}
+
 func validPort(key, port string) error {
 	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
 		return fmt.Errorf("%s tidak valid: %q", key, port)

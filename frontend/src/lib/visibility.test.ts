@@ -4,6 +4,7 @@ import { isListed, languageLabel, thumbnailFileError, videoDate, visibilityLabel
 describe('visibility', () => {
   it('label visibilitas dan bahasa', () => {
     expect(visibilityLabel('UNLISTED')).toBe('Tidak publik')
+    expect(visibilityLabel('BLOCKED')).toBe('Diturunkan')
     expect(languageLabel('ja')).toBe('日本語')
     expect(languageLabel('')).toBeNull()
     expect(languageLabel('fr')).toBeNull()

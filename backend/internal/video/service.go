@@ -155,6 +155,27 @@ type Repository interface {
 	// dan statusnya kembali OPEN.
 	SaveReport(ctx context.Context, r Report) error
 
+	// Moderasi admin (langkah 28, moderation_repository.go).
+	//
+	// ListReportedVideos: video yang punya laporan OPEN, laporan terbanyak
+	// lalu terlama dulu, mulai dari baris ke-offset.
+	ListReportedVideos(ctx context.Context, offset, limit int) ([]ReportedVideo, error)
+	// ListVideoReports: laporan OPEN satu video, terbaru dulu.
+	ListVideoReports(ctx context.Context, videoID int64, limit int) ([]Report, error)
+	// BlockVideo menurunkan video, menutup laporan OPEN-nya (BLOCKED), dan
+	// memberi notifikasi pemiliknya, dalam satu transaksi. ErrNotFound jika
+	// video tidak ada, ErrAlreadyBlocked jika sudah diturunkan.
+	BlockVideo(ctx context.Context, in BlockInput, now time.Time) (BlockedVideo, int64, error)
+	// ResolveReports menutup laporan OPEN satu video dengan resolution.
+	ResolveReports(ctx context.Context, videoID, moderatorID int64, resolution string, now time.Time) (int64, error)
+	// UnblockVideo mengembalikan visibilitas sebelum diturunkan dan memberi
+	// notifikasi pemiliknya. ErrNotBlocked jika tidak sedang diturunkan.
+	UnblockVideo(ctx context.Context, videoID, moderatorID int64, now time.Time) (Video, error)
+	// ListBlockedVideos: video yang sedang diturunkan, terbaru dulu.
+	ListBlockedVideos(ctx context.Context, offset, limit int) ([]BlockedVideo, error)
+	// FindModerations membaca catatan moderasi beberapa video.
+	FindModerations(ctx context.Context, ids []int64) (map[int64]Moderation, error)
+
 	// Playlist (playlist_repository.go).
 
 	// CreatePlaylist menyimpan playlist baru tanpa isi.
@@ -602,6 +623,13 @@ func (s *Service) GetVideo(ctx context.Context, viewerID, videoID int64) (VideoD
 	if !isOwner || v.Status == StatusPendingUpload {
 		return d, nil
 	}
+	if v.Visibility == VisibilityBlocked {
+		one := []Video{d.Video}
+		if err := s.attachModeration(ctx, one); err != nil {
+			return VideoDetail{}, err
+		}
+		d.Video = one[0]
+	}
 	if d.Original, err = s.store.PresignGet(ctx, v.ObjectKey, s.opts.PlaybackURLTTL); err != nil {
 		return VideoDetail{}, err
 	}
@@ -644,6 +672,9 @@ func (s *Service) ListMyVideos(ctx context.Context, ownerID int64, pageSize int,
 	if len(videos) > pageSize {
 		videos = videos[:pageSize]
 		next = strconv.FormatInt(videos[pageSize-1].ID, 10)
+	}
+	if err := s.attachModeration(ctx, videos); err != nil {
+		return nil, "", err
 	}
 	return videos, next, nil
 }

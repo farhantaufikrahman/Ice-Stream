@@ -182,6 +182,19 @@ enum VideoVisibility {
   VIDEO_VISIBILITY_UNLISTED = 2;
   // "Pribadi": hanya pemiliknya.
   VIDEO_VISIBILITY_PRIVATE = 3;
+  // "Diturunkan" oleh admin (langkah 28, ModerationService): hanya
+  // pemiliknya yang bisa melihatnya, dan pemilik tidak bisa mengubah
+  // visibilitasnya. Tidak pernah diterima di CreateUpload/UpdateVideo.
+  VIDEO_VISIBILITY_BLOCKED = 4;
+}
+
+// VideoModeration: keterangan untuk pemilik video yang diturunkan admin
+// (langkah 28). Hanya diisi jika visibility = BLOCKED.
+message VideoModeration {
+  ReportReason reason = 1;
+  // Catatan admin untuk pemilik. Boleh kosong.
+  string note = 2;
+  google.protobuf.Timestamp blocked_at = 3;
 }
 
 // ThumbnailFrame adalah satu bingkai pilihan thumbnail.
@@ -340,6 +353,8 @@ message Video {
   repeated ThumbnailFrame thumbnail_frames = 26;
   // true jika thumbnail adalah gambar yang diunggah kreator.
   bool custom_thumbnail = 27;
+  // Langkah 28: diisi untuk pemilik video jika visibility = BLOCKED.
+  VideoModeration moderation = 28;
 }
 
 message CreateUploadRequest {
@@ -606,14 +621,18 @@ message DeleteVideoResponse {}
 
 message Notification {
   int64 id = 1;
-  // Jenis notifikasi. Untuk sekarang selalu "NEW_VIDEO": channel yang
-  // di-subscribe merilis video baru.
+  // Jenis notifikasi:
+  //   - "NEW_VIDEO": channel yang di-subscribe merilis video baru;
+  //   - "VIDEO_BLOCKED": video milikmu diturunkan admin (langkah 28);
+  //   - "VIDEO_RESTORED": video milikmu dipulihkan admin (langkah 28).
   string kind = 2;
   // Video yang dibicarakan. Pemiliknya (owner_id) adalah channel-nya.
   Video video = 3;
   google.protobuf.Timestamp created_at = 4;
   // Kosong jika belum dibaca.
   google.protobuf.Timestamp read_at = 5;
+  // Untuk VIDEO_BLOCKED: alasan penurunan. UNSPECIFIED untuk jenis lain.
+  ReportReason moderation_reason = 6;
 }
 
 message ListNotificationsRequest {

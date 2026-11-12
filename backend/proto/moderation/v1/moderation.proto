@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+// Kontrak gRPC ModerationService: halaman moderasi admin (langkah 28).
+// Berjalan di proses yang sama dengan VideoService (cmd/video, port 50052)
+// dan memakai schema VIDEO_SVC (tabel video_reports dan video_moderation).
+//
+// Hanya dipanggil oleh API gateway, dan HANYA untuk user dengan role ADMIN.
+// Pemeriksaan role ada di gateway (klaim "role" di access token), karena
+// data role ada di schema AUTH_SVC. moderator_id adalah id admin itu.
+package moderation.v1;
+
+import "google/protobuf/timestamp.proto";
+import "video/v1/video.proto";
+
+service ModerationService {
+  // ListReportedVideos: antrean laporan. Satu baris per video yang punya
+  // laporan OPEN, urut dari laporan terbanyak lalu laporan tertua.
+  rpc ListReportedVideos(ListReportedVideosRequest) returns (ListReportedVideosResponse);
+  // ListVideoReports: semua laporan OPEN satu video, terbaru dulu.
+  rpc ListVideoReports(ListVideoReportsRequest) returns (ListVideoReportsResponse);
+  // BlockVideo menurunkan video dan menutup semua laporan OPEN-nya.
+  // NOT_FOUND jika video tidak ada atau sudah dihapus, FAILED_PRECONDITION
+  // jika video sudah diturunkan.
+  rpc BlockVideo(BlockVideoRequest) returns (BlockVideoResponse);
+  // DismissReports menutup semua laporan OPEN satu video tanpa mengubah
+  // videonya. closed = jumlah laporan yang ditutup (0 jika tidak ada).
+  rpc DismissReports(DismissReportsRequest) returns (DismissReportsResponse);
+  // UnblockVideo memulihkan video yang diturunkan ke visibilitas
+  // sebelumnya. FAILED_PRECONDITION jika video tidak sedang diturunkan.
+  rpc UnblockVideo(UnblockVideoRequest) returns (UnblockVideoResponse);
+  // ListBlockedVideos: video yang sedang diturunkan, terbaru dulu.
+  rpc ListBlockedVideos(ListBlockedVideosRequest) returns (ListBlockedVideosResponse);
+}
+
+// ReasonCount: jumlah laporan OPEN untuk satu alasan.
+message ReasonCount {
+  video.v1.ReportReason reason = 1;
+  int64 count = 2;
+}
+
+message ReportedVideo {
+  video.v1.Video video = 1;
+  // Jumlah laporan OPEN.
+  int64 open_reports = 2;
+  // Rincian per alasan, terbanyak dulu.
+  repeated ReasonCount reasons = 3;
+  google.protobuf.Timestamp first_reported_at = 4;
+  google.protobuf.Timestamp last_reported_at = 5;
+}
+
+message ListReportedVideosRequest {
+  // 1 sampai 50. 0 = 20.
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListReportedVideosResponse {
+  repeated ReportedVideo videos = 1;
+  string next_page_token = 2;
+}
+
+message VideoReport {
+  int64 reporter_id = 1;
+  video.v1.ReportReason reason = 2;
+  string details = 3;
+  google.protobuf.Timestamp reported_at = 4;
+}
+
+message ListVideoReportsRequest {
+  int64 video_id = 1;
+}
+
+message ListVideoReportsResponse {
+  // Maksimal 100 laporan terbaru.
+  repeated VideoReport reports = 1;
+}
+
+message BlockVideoRequest {
+  int64 moderator_id = 1;
+  int64 video_id = 2;
+  // Wajib. Memakai pilihan alasan yang sama dengan laporan.
+  video.v1.ReportReason reason = 3;
+  // Catatan untuk pemilik video, maksimal 500 karakter. Wajib jika
+  // reason = OTHER.
+  string note = 4;
+}
+
+message BlockVideoResponse {
+  BlockedVideo blocked = 1;
+  // Jumlah laporan OPEN yang ikut ditutup.
+  int64 closed_reports = 2;
+}
+
+message DismissReportsRequest {
+  int64 moderator_id = 1;
+  int64 video_id = 2;
+}
+
+message DismissReportsResponse {
+  int64 closed_reports = 1;
+}
+
+message UnblockVideoRequest {
+  int64 moderator_id = 1;
+  int64 video_id = 2;
+}
+
+message UnblockVideoResponse {
+  video.v1.Video video = 1;
+}
+
+message BlockedVideo {
+  video.v1.Video video = 1;
+  video.v1.ReportReason reason = 2;
+  string note = 3;
+  int64 moderator_id = 4;
+  google.protobuf.Timestamp blocked_at = 5;
+}
+
+message ListBlockedVideosRequest {
+  // 1 sampai 50. 0 = 20.
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListBlockedVideosResponse {
+  repeated BlockedVideo videos = 1;
+  string next_page_token = 2;
+}

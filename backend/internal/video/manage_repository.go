@@ -41,9 +41,12 @@ func (r *OracleRepository) UpdateDetails(ctx context.Context, id, ownerID int64,
 			"description": nullIfEmpty(d.Description),
 			"category":    nullIfEmpty(d.Category),
 			"tags":        nullIfEmpty(joinTags(d.Tags)),
-			"visibility":  d.Visibility,
-			"draft":       boolToInt(d.Draft),
-			"language":    nullIfEmpty(d.Language),
+			// Video yang diturunkan admin (langkah 28) tetap BLOCKED,
+			// termasuk jika admin menurunkannya di antara FindByID dan
+			// UPDATE ini.
+			"visibility": gorm.Expr("CASE WHEN visibility = ? THEN visibility ELSE ? END", VisibilityBlocked, d.Visibility),
+			"draft":      boolToInt(d.Draft),
+			"language":   nullIfEmpty(d.Language),
 			// Waktu terbit diisi sekali saja: menyembunyikan lalu
 			// menerbitkan ulang tidak membuat video lama naik ke atas feed.
 			"published_at": gorm.Expr("CASE WHEN ? = 0 AND status = ? THEN COALESCE(published_at, ?) ELSE published_at END",
