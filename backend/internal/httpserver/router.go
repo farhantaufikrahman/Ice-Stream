@@ -10,16 +10,19 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
+	moderationv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/moderation/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/metrics"
 )
 
 // ReadinessCheck memeriksa satu dependensi (Oracle, NATS, dan seterusnya).
@@ -43,6 +46,9 @@ type Deps struct {
 	// Danmaku adalah klien gRPC ke DanmakuService (berjalan di proses
 	// VideoService).
 	Danmaku danmakuv1.DanmakuServiceClient
+	// Moderation adalah klien gRPC ke ModerationService (halaman moderasi
+	// admin, langkah 28, berjalan di proses VideoService).
+	Moderation moderationv1.ModerationServiceClient
 	// LiveStreams adalah klien gRPC ke LiveService (siaran langsung,
 	// berjalan di proses VideoService).
 	LiveStreams livev1.LiveServiceClient
@@ -54,6 +60,9 @@ type Deps struct {
 	LiveChat *live.Hub
 	// Verifier memeriksa access token di endpoint yang butuh login.
 	Verifier *accesstoken.Verifier
+	// Metrics adalah registry Prometheus (langkah 28). Boleh nil di test:
+	// metrik HTTP tidak dicatat.
+	Metrics prometheus.Registerer
 }
 
 // NewRouter membuat router dengan middleware dan semua route.
@@ -69,6 +78,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 		return nil, fmt.Errorf("TRUSTED_PROXIES tidak valid: %w", err)
 	}
 	r.Use(gin.Recovery(), requestLogger(logger))
+	if deps.Metrics != nil {
+		r.Use(metrics.NewHTTP(deps.Metrics).Middleware())
+	}
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
@@ -86,21 +98,31 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
+	// Rate limit (langkah 28, ratelimit.go). Satu middleware = satu ember
+	// bersama, jadi login dan daftar memakai jatah per IP yang sama.
+	rl := newRateLimiter(cfg.RateLimitEnabled, deps.Metrics)
+	authLimit := rl.perIP(ruleAuth)
+	uploadLimit := rl.perUser(ruleUpload)
+	imageLimit := rl.perUser(ruleImage)
+	commentLimit := rl.perUser(ruleComment)
+	chatLimit := rl.perUser(ruleChat)
+	reportLimit := rl.perUser(ruleReport)
+
 	auth := &authHandler{client: deps.Auth, cookie: cfg.Cookie, logger: logger}
 	authGroup := v1.Group("/auth", limitBody(maxAuthBodyBytes))
-	authGroup.POST("/register", auth.register)
-	authGroup.POST("/login", auth.login)
-	authGroup.POST("/refresh", auth.refresh)
+	authGroup.POST("/register", authLimit, auth.register)
+	authGroup.POST("/login", authLimit, auth.login)
+	authGroup.POST("/refresh", rl.perIP(ruleRefresh), auth.refresh)
 	authGroup.POST("/logout", auth.logout)
-	authGroup.POST("/password/forgot", auth.forgotPassword)
-	authGroup.POST("/password/reset", auth.resetPassword)
+	authGroup.POST("/password/forgot", authLimit, auth.forgotPassword)
+	authGroup.POST("/password/reset", authLimit, auth.resetPassword)
 	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
 	// Masuk dengan Google / GitHub (langkah 26, oauth.go).
 	oauth := newOAuthHandler(cfg.OAuth, deps.Auth, auth, logger)
 	authGroup.GET("/oauth/providers", oauth.listProviders)
 	authGroup.GET("/oauth/:provider/start", oauth.start)
 	authGroup.GET("/oauth/:provider/callback", oauth.callback)
-	authGroup.POST("/oauth/exchange", oauth.exchange)
+	authGroup.POST("/oauth/exchange", authLimit, oauth.exchange)
 
 	videos := &videoHandler{client: deps.Videos, users: deps.Users, logger: logger}
 	requireAuth := RequireAuth(deps.Verifier)
@@ -109,7 +131,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	// Rekomendasi Beranda (langkah 27). Route statis ini didahulukan Gin
 	// daripada /:id.
 	videoGroup.GET("/recommended", OptionalAuth(deps.Verifier), videos.recommended)
-	videoGroup.POST("", requireAuth, videos.create)
+	videoGroup.POST("", requireAuth, uploadLimit, videos.create)
 	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
 	videoGroup.PATCH("/:id", requireAuth, videos.update)
@@ -117,11 +139,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/views", OptionalAuth(deps.Verifier), videos.recordView)
 	videoGroup.PUT("/:id/like", requireAuth, videos.like)
 	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
-	videoGroup.POST("/:id/reports", requireAuth, videos.report)
+	videoGroup.POST("/:id/reports", requireAuth, reportLimit, videos.report)
 	// Thumbnail (langkah 26). Gambar bisa sampai 2 MiB, jadi tidak
 	// memakai batas 16 KiB videoGroup; batasnya dicek di handler.
 	videoGroup.PUT("/:id/thumbnail/frame", requireAuth, videos.chooseThumbnailFrame)
-	v1.PUT("/videos/:id/thumbnail", requireAuth, videos.uploadThumbnail)
+	v1.PUT("/videos/:id/thumbnail", requireAuth, imageLimit, videos.uploadThumbnail)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 	v1.GET("/search/videos", videos.search)
 	v1.GET("/trending/videos", videos.trending)
@@ -150,7 +172,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 
 	comments := &commentHandler{client: deps.Comments, users: deps.Users, logger: logger}
 	videoGroup.GET("/:id/comments", comments.list)
-	videoGroup.POST("/:id/comments", requireAuth, comments.create)
+	videoGroup.POST("/:id/comments", requireAuth, commentLimit, comments.create)
 	videoGroup.GET("/:id/comments/:commentId/replies", comments.listReplies)
 	videoGroup.DELETE("/:id/comments/:commentId", requireAuth, comments.remove)
 	// Halaman Komentar di Creator Studio (langkah 26).
@@ -158,7 +180,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 
 	danmaku := &danmakuHandler{client: deps.Danmaku, videos: deps.Videos, hub: deps.Live, heartbeat: liveHeartbeat, logger: logger}
 	videoGroup.GET("/:id/danmaku", danmaku.list)
-	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
+	videoGroup.POST("/:id/danmaku", requireAuth, chatLimit, danmaku.send)
 	videoGroup.GET("/:id/danmaku/live", danmaku.live)
 	// Halaman Danmaku di Creator Studio (langkah 26).
 	studioDanmaku := &studioDanmakuHandler{danmakuHandler: danmaku, users: deps.Users}
@@ -171,7 +193,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	liveGroup := v1.Group("/live/:id", limitBody(maxLiveBodyBytes))
 	liveGroup.GET("", lives.get)
 	liveGroup.GET("/chat", lives.listChat)
-	liveGroup.POST("/chat", requireAuth, lives.sendChat)
+	liveGroup.POST("/chat", requireAuth, chatLimit, lives.sendChat)
 	liveGroup.GET("/chat/live", lives.chatLive)
 	meLive := v1.Group("/me/live", requireAuth, limitBody(maxLiveBodyBytes))
 	meLive.GET("", lives.myChannel)
@@ -202,8 +224,18 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	v1.GET("/me/profile", requireAuth, users.me)
 	v1.PATCH("/me/profile", requireAuth, limitBody(maxProfileBodyBytes), users.update)
 	// Batas 2 MiB dicek di handler, supaya pesan errornya jelas.
-	v1.PUT("/me/avatar", requireAuth, users.uploadAvatar)
+	v1.PUT("/me/avatar", requireAuth, imageLimit, users.uploadAvatar)
 	v1.DELETE("/me/avatar", requireAuth, users.removeAvatar)
+
+	// Halaman moderasi admin (langkah 28, moderation.go).
+	moderation := &moderationHandler{client: deps.Moderation, users: deps.Users, logger: logger}
+	admin := v1.Group("/admin", requireAuth, RequireAdmin(), limitBody(maxModerationBodyBytes))
+	admin.GET("/reports", moderation.listReports)
+	admin.GET("/reports/:id", moderation.listVideoReports)
+	admin.GET("/blocked", moderation.listBlocked)
+	admin.POST("/videos/:id/block", moderation.block)
+	admin.POST("/videos/:id/dismiss", moderation.dismiss)
+	admin.POST("/videos/:id/unblock", moderation.unblock)
 
 	return r, nil
 }

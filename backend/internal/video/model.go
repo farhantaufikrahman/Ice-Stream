@@ -77,8 +77,9 @@ type Video struct {
 	Category string
 	// Tags sesuai urutan yang diketik kreator, tanpa "#".
 	Tags []string
-	// Visibility: VisibilityPublic, VisibilityUnlisted, atau
-	// VisibilityPrivate (langkah 26, lihat visibility.go).
+	// Visibility: VisibilityPublic, VisibilityUnlisted, VisibilityPrivate
+	// (langkah 26, lihat visibility.go), atau VisibilityBlocked jika
+	// diturunkan admin (langkah 28, lihat moderation.go).
 	Visibility string
 	// Draft bernilai true jika kreator menekan "Simpan draf" dan belum
 	// menerbitkannya. Video draf hanya terlihat oleh pemiliknya.
@@ -93,6 +94,9 @@ type Video struct {
 	// yang dibuat transcoder. Kosong untuk video lama dan video yang belum
 	// READY. Lokasi filenya lihat FrameKey.
 	ThumbnailFrames []int64
+	// Moderation hanya diisi untuk pemilik video yang diturunkan admin
+	// (Visibility = VisibilityBlocked, langkah 28, lihat moderation.go).
+	Moderation *Moderation
 }
 
 // TranscodeResult adalah hasil transcoding yang dilaporkan transcoder.
@@ -159,4 +163,6 @@ type Notification struct {
 	CreatedAt time.Time
 	// ReadAt bernilai nil jika belum dibaca.
 	ReadAt *time.Time
+	// ModerationReason diisi untuk VIDEO_BLOCKED (langkah 28).
+	ModerationReason ReportReason
 }

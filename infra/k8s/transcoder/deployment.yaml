@@ -36,6 +36,7 @@ spec:
           image: farhanrahman27/ice-stream-transcoder:dev
           imagePullPolicy: Always
           ports:
+            # /livez, /healthz, dan /metrics Prometheus (langkah 28).
             - name: http
               containerPort: 8080
           envFrom:

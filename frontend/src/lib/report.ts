@@ -23,3 +23,8 @@ export function reportDetailsError(reason: ReportReason | null, details: string,
   if (reason === 'other' && details.trim() === '') return 'Ceritakan singkat apa masalahnya.'
   return null
 }
+
+/** "spam" -> "Spam atau penipuan". Nilai yang tidak dikenal ditampilkan apa adanya. */
+export function reportReasonLabel(reason: string): string {
+  return REPORT_REASONS.find((r) => r.value === reason)?.label ?? reason
+}

@@ -14,6 +14,8 @@ type VideoConfig struct {
 	Env string
 	// GRPCAddr adalah alamat server gRPC, misalnya ":50052".
 	GRPCAddr string
+	// MetricsAddr adalah alamat server /metrics Prometheus (langkah 28).
+	MetricsAddr string
 	// ShutdownTimeout adalah batas waktu menunggu RPC yang sedang berjalan
 	// selesai saat server dimatikan.
 	ShutdownTimeout time.Duration
@@ -143,6 +145,7 @@ func LoadVideo() (VideoConfig, error) {
 	cfg := VideoConfig{
 		Env:             getString("APP_ENV", "development"),
 		GRPCAddr:        ":" + getString("GRPC_PORT", "50052"),
+		MetricsAddr:     ":" + getString("METRICS_PORT", "9092"),
 		ShutdownTimeout: shutdownTimeout,
 		DB:              db,
 		Storage:         storage,
@@ -178,6 +181,9 @@ func (c VideoConfig) validate() error {
 		return fmt.Errorf("APP_ENV harus \"development\" atau \"production\", dapat %q", c.Env)
 	}
 	if err := validPort("GRPC_PORT", strings.TrimPrefix(c.GRPCAddr, ":")); err != nil {
+		return err
+	}
+	if err := validMetricsPort(c.MetricsAddr, c.GRPCAddr, c.Live.HookAddr); err != nil {
 		return err
 	}
 	// Batas 5 GiB: ukuran terbesar satu kali PUT di API S3. File yang lebih

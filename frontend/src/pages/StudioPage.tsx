@@ -15,6 +15,7 @@ import { usePagedVideos } from '../hooks/usePagedVideos'
 import { useVideoPoll } from '../hooks/useVideoPoll'
 import { formatCount, formatDate, formatDuration } from '../lib/format'
 import { canDelete, isProcessing } from '../lib/upload'
+import { reportReasonLabel } from '../lib/report'
 import { videoDate, visibilityLabel } from '../lib/visibility'
 
 type Dialog = { kind: 'edit' | 'delete'; video: Video } | null
@@ -170,13 +171,23 @@ function StudioRow({ video: v, onUpdate, onEdit, onDelete }: RowProps) {
             )}
             {v.status === 'FAILED' && v.failure_reason && <span className="small pink">{v.failure_reason}</span>}
             {v.status === 'PENDING_UPLOAD' && <span className="small muted">Unggahan tidak selesai. Hapus lalu unggah ulang.</span>}
+            {v.moderation && (
+              <span className="small pink">
+                Diturunkan admin: {reportReasonLabel(v.moderation.reason)}
+                {v.moderation.note && ` · ${v.moderation.note}`}
+              </span>
+            )}
           </div>
         </div>
       </td>
       <td>
         <div className="chip-row">
           <StatusChip status={v.status} />
-          <span className={v.draft ? 'chip chip-amber' : 'chip'}>{v.draft ? 'Draf' : visibilityLabel(v.visibility)}</span>
+          {v.visibility === 'BLOCKED' ? (
+            <span className="chip chip-pink">{visibilityLabel(v.visibility)}</span>
+          ) : (
+            <span className={v.draft ? 'chip chip-amber' : 'chip'}>{v.draft ? 'Draf' : visibilityLabel(v.visibility)}</span>
+          )}
         </div>
       </td>
       <td className="nowrap muted">{formatDate(videoDate(v))}</td>

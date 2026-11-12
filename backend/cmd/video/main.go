@@ -22,6 +22,7 @@ import (
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
+	moderationv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/moderation/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/comment"
@@ -31,6 +32,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/livestream"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/metrics"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/video"
 )
 
@@ -151,8 +153,14 @@ func run(logger *slog.Logger) error {
 	}
 	defer notifyConsumer.Stop()
 
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger)))
+	// Metrik Prometheus (langkah 28) di port terpisah (METRICS_PORT).
+	reg := metrics.NewRegistry()
+	go metrics.Serve(ctx, cfg.MetricsAddr, reg, logger)
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.LogUnary(logger), metrics.NewGRPC(reg).Unary()))
 	videov1.RegisterVideoServiceServer(srv, video.NewGRPCServer(svc, logger))
+	// ModerationService (langkah 28): halaman moderasi admin. Memakai
+	// Service yang sama karena tabelnya ada di schema VIDEO_SVC.
+	moderationv1.RegisterModerationServiceServer(srv, video.NewModerationGRPCServer(svc, logger))
 	// CommentService berjalan di proses yang sama (port 50052) dan memakai
 	// koneksi Oracle yang sama, karena tabel comments ada di schema VIDEO_SVC.
 	comments := comment.NewService(comment.NewOracleRepository(db))

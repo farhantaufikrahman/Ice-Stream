@@ -47,6 +47,11 @@ type fakeRepo struct {
 	reports map[[2]int64]Report
 	// featured[ownerID] = Video unggulan (lihat channel_test.go).
 	featured map[int64]int64
+	// resolved[{videoID, reporterID}] = resolution laporan yang sudah
+	// ditinjau; laporan yang tidak ada di sini masih OPEN. moderation =
+	// catatan penurunan (lihat moderation_test.go).
+	resolved   map[[2]int64]string
+	moderation map[int64]fakeModeration
 }
 
 func newFakeRepo() *fakeRepo {

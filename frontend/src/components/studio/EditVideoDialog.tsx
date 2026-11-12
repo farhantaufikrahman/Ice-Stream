@@ -108,7 +108,15 @@ export function EditVideoDialog({ video: initial, onClose, onSaved, onThumbnailC
             onThumbnailChange(v)
           }}
         />
-        <VisibilityFields idPrefix="edit" value={visibility} onChange={setVisibility} disabled={busy} />
+        {visibility === 'BLOCKED' ? (
+          // Langkah 28: pemilik tidak bisa mengubah visibilitas video yang diturunkan admin.
+          <div className="field">
+            <span className="field-label">Visibilitas</span>
+            <p className="muted small">Video ini diturunkan admin, jadi visibilitasnya tidak bisa diubah. Judul, deskripsi, dan lainnya tetap bisa kamu perbaiki.</p>
+          </div>
+        ) : (
+          <VisibilityFields idPrefix="edit" value={visibility} onChange={setVisibility} disabled={busy} />
+        )}
         {error && <ErrorBox message={error} />}
         <div className="form-actions">
           <button type="button" className="btn" onClick={onClose} disabled={busy}>

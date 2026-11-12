@@ -23,6 +23,7 @@ import { StudioCommentsPage } from './pages/StudioCommentsPage'
 import { StudioDanmakuPage } from './pages/StudioDanmakuPage'
 import { StudioDashboardPage } from './pages/StudioDashboardPage'
 import { StudioLivePage } from './pages/StudioLivePage'
+import { StudioModerationPage } from './pages/StudioModerationPage'
 import { StudioPage } from './pages/StudioPage'
 import { TrendingPage } from './pages/TrendingPage'
 import { UploadPage } from './pages/UploadPage'
@@ -94,6 +95,8 @@ export const router = createBrowserRouter([
           { path: '/studio/comments', element: <StudioCommentsPage /> },
           { path: '/studio/danmaku', element: <StudioDanmakuPage /> },
           { path: '/studio/settings', element: <SettingsPage /> },
+          // Moderasi admin (langkah 28). Halaman sendiri yang mengecek role.
+          { path: '/studio/moderation', element: <StudioModerationPage /> },
           { path: '/upload', element: <UploadPage /> },
         ],
       },

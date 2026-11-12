@@ -36,6 +36,10 @@ spec:
           ports:
             - name: grpc
               containerPort: 50051
+            # Metrik Prometheus (langkah 28): GET /metrics. Tidak dibuka di
+            # Service maupun HTTPRoute, jadi hanya bisa diambil dari dalam cluster.
+            - name: metrics
+              containerPort: 9091
           envFrom:
             - configMapRef:
                 name: auth-config

@@ -99,8 +99,9 @@ type videoResponse struct {
 	// Owner berisi nama dan foto pemilik video (feed, detail, channel).
 	// Tidak ada di /me/videos, dan kosong jika UserService sedang mati.
 	Owner *ownerResponse `json:"owner,omitempty"`
-	// Langkah 26. Visibility selalu ada: "PUBLIC", "UNLISTED", atau
-	// "PRIVATE". PublishedAt = waktu video pertama kali terbit (bukan
+	// Langkah 26. Visibility selalu ada: "PUBLIC", "UNLISTED", "PRIVATE",
+	// atau "BLOCKED" (diturunkan admin, langkah 28; hanya terlihat oleh
+	// pemiliknya dan admin). PublishedAt = waktu video pertama kali terbit (bukan
 	// draf dan selesai diproses); tanggal di kartu video memakai ini.
 	Visibility  string     `json:"visibility"`
 	Draft       bool       `json:"draft"`
@@ -111,6 +112,17 @@ type videoResponse struct {
 	// ThumbnailFrames hanya untuk pemilik video (lihat
 	// toOwnerVideoResponse): pilihan bingkai buatan transcoder.
 	ThumbnailFrames []thumbnailFrameResponse `json:"thumbnail_frames,omitempty"`
+	// Moderation hanya ada jika visibility = "BLOCKED" (langkah 28):
+	// alasan dan catatan admin untuk pemilik video.
+	Moderation *videoModerationResponse `json:"moderation,omitempty"`
+}
+
+// videoModerationResponse: keterangan video yang diturunkan admin.
+type videoModerationResponse struct {
+	// Reason memakai nilai yang sama dengan alasan laporan ("spam", ...).
+	Reason    string    `json:"reason"`
+	Note      string    `json:"note"`
+	BlockedAt time.Time `json:"blocked_at"`
 }
 
 // listVideosResponse dipakai GET /videos (feed publik) dan GET /me/videos.
@@ -563,6 +575,18 @@ func toVideoResponse(v *videov1.Video) videoResponse {
 		PublishedAt:     optionalTime(v.GetPublishedAt()),
 		Language:        v.GetLanguage(),
 		CustomThumbnail: v.GetCustomThumbnail(),
+		Moderation:      toVideoModerationResponse(v.GetModeration()),
+	}
+}
+
+func toVideoModerationResponse(m *videov1.VideoModeration) *videoModerationResponse {
+	if m == nil {
+		return nil
+	}
+	return &videoModerationResponse{
+		Reason:    reportReasonNames[m.GetReason()],
+		Note:      m.GetNote(),
+		BlockedAt: m.GetBlockedAt().AsTime(),
 	}
 }
 
@@ -587,6 +611,7 @@ var videoVisibilityNames = map[videov1.VideoVisibility]string{
 	videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC:      "PUBLIC",
 	videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED:    "UNLISTED",
 	videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE:     "PRIVATE",
+	videov1.VideoVisibility_VIDEO_VISIBILITY_BLOCKED:     "BLOCKED",
 }
 
 // parseVideoVisibility: "" = tidak dipilih (VideoService memakai PUBLIC).

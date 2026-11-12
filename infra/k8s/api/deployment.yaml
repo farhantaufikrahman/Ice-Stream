@@ -34,6 +34,10 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            # Metrik Prometheus (langkah 28): GET /metrics. Tidak dibuka di
+            # Service maupun HTTPRoute, jadi hanya bisa diambil dari dalam cluster.
+            - name: metrics
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: api-config

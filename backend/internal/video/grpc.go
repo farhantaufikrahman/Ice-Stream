@@ -275,6 +275,9 @@ func (s *GRPCServer) ListNotifications(ctx context.Context, req *videov1.ListNot
 			Video:     s.toProtoVideo(n.Video),
 			CreatedAt: timestamppb.New(n.CreatedAt),
 		}
+		if n.ModerationReason != "" {
+			pn.ModerationReason = toProtoReportReason(n.ModerationReason)
+		}
 		if n.ReadAt != nil {
 			pn.ReadAt = timestamppb.New(*n.ReadAt)
 		}
@@ -309,7 +312,7 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, ErrVideoBusy):
+	case errors.Is(err, ErrVideoBusy), errors.Is(err, ErrAlreadyBlocked), errors.Is(err, ErrNotBlocked):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrEventsUnavailable):
 		// UNAVAILABLE = boleh dicoba lagi. Detail error NATS cukup di log.
@@ -357,6 +360,13 @@ func (s *GRPCServer) toProtoVideo(v Video) *videov1.Video {
 		pv.ProcessedAt = timestamppb.New(*v.ProcessedAt)
 	}
 	pv.Visibility = toProtoVideoVisibility(v.Visibility)
+	if m := v.Moderation; m != nil {
+		pv.Moderation = &videov1.VideoModeration{
+			Reason:    toProtoReportReason(m.Reason),
+			Note:      m.Note,
+			BlockedAt: timestamppb.New(m.BlockedAt),
+		}
+	}
 	pv.Draft = v.Draft
 	if v.PublishedAt != nil {
 		pv.PublishedAt = timestamppb.New(*v.PublishedAt)
@@ -390,6 +400,8 @@ func toProtoVideoVisibility(v string) videov1.VideoVisibility {
 		return videov1.VideoVisibility_VIDEO_VISIBILITY_UNLISTED
 	case VisibilityPrivate:
 		return videov1.VideoVisibility_VIDEO_VISIBILITY_PRIVATE
+	case VisibilityBlocked:
+		return videov1.VideoVisibility_VIDEO_VISIBILITY_BLOCKED
 	default:
 		return videov1.VideoVisibility_VIDEO_VISIBILITY_PUBLIC
 	}
@@ -512,6 +524,16 @@ var reportReasons = map[videov1.ReportReason]ReportReason{
 	videov1.ReportReason_REPORT_REASON_MISLEADING: ReportMisleading,
 	videov1.ReportReason_REPORT_REASON_COPYRIGHT:  ReportCopyright,
 	videov1.ReportReason_REPORT_REASON_OTHER:      ReportOther,
+}
+
+// toProtoReportReason adalah kebalikan reportReasons.
+func toProtoReportReason(r ReportReason) videov1.ReportReason {
+	for k, v := range reportReasons {
+		if v == r {
+			return k
+		}
+	}
+	return videov1.ReportReason_REPORT_REASON_UNSPECIFIED
 }
 
 func (s *GRPCServer) ReportVideo(ctx context.Context, req *videov1.ReportVideoRequest) (*videov1.ReportVideoResponse, error) {

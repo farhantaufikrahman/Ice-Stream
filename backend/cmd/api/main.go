@@ -19,6 +19,7 @@ import (
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
+	moderationv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/moderation/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
@@ -27,6 +28,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/httpserver"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/metrics"
 )
 
 func main() {
@@ -97,6 +99,10 @@ func run(logger *slog.Logger) error {
 		"auth": grpcHealthCheck(healthpb.NewHealthClient(authConn), authv1.AuthService_ServiceDesc.ServiceName),
 	}
 
+	// Metrik Prometheus (langkah 28) di port terpisah (METRICS_PORT).
+	reg := metrics.NewRegistry()
+	go metrics.Serve(ctx, cfg.MetricsAddr, reg, logger)
+
 	router, err := httpserver.NewRouter(cfg, logger, httpserver.Deps{
 		Checks: checks,
 		Auth:   authv1.NewAuthServiceClient(authConn),
@@ -109,9 +115,11 @@ func run(logger *slog.Logger) error {
 		Danmaku: danmakuv1.NewDanmakuServiceClient(videoConn),
 		// LiveService (siaran langsung) juga berjalan di proses VideoService.
 		LiveStreams: livev1.NewLiveServiceClient(videoConn),
+		Moderation:  moderationv1.NewModerationServiceClient(videoConn),
 		Live:        hub,
 		LiveChat:    chatHub,
 		Verifier:    accesstoken.NewVerifier(publicKey),
+		Metrics:     reg,
 	})
 	if err != nil {
 		return err
@@ -134,7 +142,8 @@ func run(logger *slog.Logger) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("server berjalan", slog.String("addr", cfg.HTTPAddr), slog.String("env", cfg.Env))
+		logger.Info("server berjalan", slog.String("addr", cfg.HTTPAddr), slog.String("env", cfg.Env),
+			slog.Bool("rate_limit", cfg.RateLimitEnabled))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

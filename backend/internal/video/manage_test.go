@@ -24,7 +24,11 @@ func (r *fakeRepo) UpdateDetails(_ context.Context, id, ownerID int64, d Details
 		return Video{}, ErrNotFound
 	}
 	v.Title, v.Description, v.Category, v.Tags = d.Title, d.Description, d.Category, d.Tags
-	v.Visibility, v.Draft, v.Language = d.Visibility, d.Draft, d.Language
+	v.Draft, v.Language = d.Draft, d.Language
+	// Sama dengan UpdateDetails Oracle: BLOCKED tidak bisa ditimpa.
+	if v.Visibility != VisibilityBlocked {
+		v.Visibility = d.Visibility
+	}
 	if !v.Draft && v.Status == StatusReady && v.PublishedAt == nil {
 		v.PublishedAt = &now
 	}

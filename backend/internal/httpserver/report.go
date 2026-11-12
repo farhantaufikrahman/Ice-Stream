@@ -25,6 +25,16 @@ var reportReasonParams = map[string]videov1.ReportReason{
 	"other":      videov1.ReportReason_REPORT_REASON_OTHER,
 }
 
+// reportReasonNames adalah kebalikan reportReasonParams (enum -> teks
+// JSON). Alasan yang tidak dikenal menjadi "".
+var reportReasonNames = func() map[videov1.ReportReason]string {
+	out := make(map[videov1.ReportReason]string, len(reportReasonParams))
+	for name, r := range reportReasonParams {
+		out[r] = name
+	}
+	return out
+}()
+
 type reportVideoRequest struct {
 	Reason string `json:"reason"`
 	// Details opsional, kecuali untuk reason "other". Maksimal 500 karakter.

@@ -1,7 +1,7 @@
 // Visibilitas, draf, dan bahasa video (langkah 26). Aturannya sama dengan
 // VideoService (backend/internal/video/visibility.go).
 
-import type { Video, VideoLanguage, VideoVisibility } from '../api/types'
+import type { Video, VideoLanguage, VideoVisibility, VideoVisibilityState } from '../api/types'
 
 /** Pilihan di desain Upload.dc.html, urutan sama. */
 export const VISIBILITIES: { value: VideoVisibility; label: string; description: string }[] = [
@@ -17,7 +17,9 @@ export const LANGUAGES: { value: Exclude<VideoLanguage, ''>; label: string }[] =
   { value: 'ja', label: '日本語' },
 ]
 
-export function visibilityLabel(v: VideoVisibility): string {
+export function visibilityLabel(v: VideoVisibilityState): string {
+  // Langkah 28: video yang diturunkan admin.
+  if (v === 'BLOCKED') return 'Diturunkan'
   return VISIBILITIES.find((x) => x.value === v)?.label ?? 'Publik'
 }
 

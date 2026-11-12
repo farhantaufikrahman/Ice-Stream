@@ -13,6 +13,8 @@ metadata:
 data:
   APP_ENV: production
   GRPC_PORT: "50051"
+  # Port /metrics Prometheus (langkah 28), hanya di dalam cluster.
+  METRICS_PORT: "9091"
   SHUTDOWN_TIMEOUT: 10s
   DB_HOST: oracle
   DB_PORT: "1521"

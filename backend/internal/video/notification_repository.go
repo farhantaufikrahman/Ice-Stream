@@ -16,6 +16,8 @@ type notificationRow struct {
 	ActorID   int64      `gorm:"column:actor_id"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
 	ReadAt    *time.Time `gorm:"column:read_at"`
+	// Hanya diisi query ListNotifications (LEFT JOIN video_moderation).
+	ModerationReason *string `gorm:"column:moderation_reason;<-:false"`
 }
 
 func (notificationRow) TableName() string { return "notifications" }
@@ -86,9 +88,11 @@ func (r *OracleRepository) InsertNotifications(ctx context.Context, kind string,
 func (r *OracleRepository) ListNotifications(ctx context.Context, userID, beforeID int64, limit int) ([]Notification, error) {
 	// Alias dengan tanda kutip supaya cocok dengan tag GORM (lihat Search).
 	q := r.db.WithContext(ctx).Table("notifications n").
-		Select(`n.id AS "id", n.kind AS "kind", n.video_id AS "video_id", n.created_at AS "created_at", n.read_at AS "read_at"`).
+		Select(`n.id AS "id", n.kind AS "kind", n.video_id AS "video_id", n.created_at AS "created_at", n.read_at AS "read_at", `+
+			`CASE WHEN n.kind = '`+NotificationVideoBlocked+`' THEN m.reason END AS "moderation_reason"`).
 		Joins("JOIN videos v ON v.id = n.video_id").
-		Where("n.user_id = ? AND "+listedSQLv+" AND v.deleted_at IS NULL", userID)
+		Joins("LEFT JOIN video_moderation m ON m.video_id = n.video_id").
+		Where("n.user_id = ? AND "+notificationVisibleSQL+" AND v.deleted_at IS NULL", userID)
 	if beforeID > 0 {
 		q = q.Where("n.id < ?", beforeID)
 	}
@@ -123,16 +127,26 @@ func (r *OracleRepository) ListNotifications(ctx context.Context, userID, before
 			t := n.ReadAt.UTC()
 			readAt = &t
 		}
-		out = append(out, Notification{
+		item := Notification{
 			ID:        n.ID,
 			Kind:      n.Kind,
 			Video:     v.toVideo(),
 			CreatedAt: n.CreatedAt.UTC(),
 			ReadAt:    readAt,
-		})
+		}
+		if n.ModerationReason != nil {
+			item.ModerationReason = ReportReason(*n.ModerationReason)
+		}
+		out = append(out, item)
 	}
 	return out, nil
 }
+
+// notificationVisibleSQL: notifikasi NEW_VIDEO hanya tampil selama
+// videonya publik. Notifikasi moderasi (langkah 28) untuk pemilik video
+// selalu tampil, walau videonya diturunkan atau pribadi.
+const notificationVisibleSQL = "(" + listedSQLv + " OR (n.kind IN ('" + NotificationVideoBlocked + "', '" +
+	NotificationVideoRestored + "') AND v.owner_id = n.user_id))"
 
 // countUnreadSQL menghitung yang belum dibaca, tapi berhenti setelah limit
 // baris (FETCH FIRST di dalam subquery).
@@ -149,7 +163,7 @@ const countUnreadSQL = `SELECT COUNT(*) FROM (
   SELECT /*+ LEADING(n) USE_NL(v) */ 1
     FROM notifications n JOIN videos v ON v.id = n.video_id
    WHERE n.user_id = ? AND SYS_EXTRACT_UTC(n.read_at) IS NULL
-     AND ` + listedSQLv + ` AND v.deleted_at IS NULL
+     AND ` + notificationVisibleSQL + ` AND v.deleted_at IS NULL
    FETCH FIRST ? ROWS ONLY)`
 
 // CountUnreadNotifications menjalankan countUnreadSQL.
