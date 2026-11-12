@@ -95,6 +95,12 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	authGroup.POST("/password/forgot", auth.forgotPassword)
 	authGroup.POST("/password/reset", auth.resetPassword)
 	authGroup.GET("/me", RequireAuth(deps.Verifier), auth.me)
+	// Masuk dengan Google / GitHub (langkah 26, oauth.go).
+	oauth := newOAuthHandler(cfg.OAuth, deps.Auth, auth, logger)
+	authGroup.GET("/oauth/providers", oauth.listProviders)
+	authGroup.GET("/oauth/:provider/start", oauth.start)
+	authGroup.GET("/oauth/:provider/callback", oauth.callback)
+	authGroup.POST("/oauth/exchange", oauth.exchange)
 
 	videos := &videoHandler{client: deps.Videos, users: deps.Users, logger: logger}
 	requireAuth := RequireAuth(deps.Verifier)
@@ -109,6 +115,10 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.PUT("/:id/like", requireAuth, videos.like)
 	videoGroup.DELETE("/:id/like", requireAuth, videos.unlike)
 	videoGroup.POST("/:id/reports", requireAuth, videos.report)
+	// Thumbnail (langkah 26). Gambar bisa sampai 2 MiB, jadi tidak
+	// memakai batas 16 KiB videoGroup; batasnya dicek di handler.
+	videoGroup.PUT("/:id/thumbnail/frame", requireAuth, videos.chooseThumbnailFrame)
+	v1.PUT("/videos/:id/thumbnail", requireAuth, videos.uploadThumbnail)
 	v1.GET("/me/videos", requireAuth, videos.listMine)
 	v1.GET("/search/videos", videos.search)
 	v1.GET("/trending/videos", videos.trending)
@@ -139,11 +149,17 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.POST("/:id/comments", requireAuth, comments.create)
 	videoGroup.GET("/:id/comments/:commentId/replies", comments.listReplies)
 	videoGroup.DELETE("/:id/comments/:commentId", requireAuth, comments.remove)
+	// Halaman Komentar di Creator Studio (langkah 26).
+	v1.GET("/me/comments", requireAuth, comments.listChannel)
 
 	danmaku := &danmakuHandler{client: deps.Danmaku, videos: deps.Videos, hub: deps.Live, heartbeat: liveHeartbeat, logger: logger}
 	videoGroup.GET("/:id/danmaku", danmaku.list)
 	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
 	videoGroup.GET("/:id/danmaku/live", danmaku.live)
+	// Halaman Danmaku di Creator Studio (langkah 26).
+	studioDanmaku := &studioDanmakuHandler{danmakuHandler: danmaku, users: deps.Users}
+	v1.GET("/me/danmaku", requireAuth, studioDanmaku.listChannel)
+	v1.DELETE("/me/danmaku/:id", requireAuth, studioDanmaku.remove)
 
 	// Siaran langsung (langkah 25a-25c).
 	lives := &liveHandler{client: deps.LiveStreams, users: deps.Users, chatHub: deps.LiveChat, heartbeat: liveHeartbeat, logger: logger}

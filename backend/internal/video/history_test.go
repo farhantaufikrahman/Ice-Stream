@@ -261,7 +261,7 @@ func TestListWatchHistoryValidation(t *testing.T) {
 
 	bad := map[string]string{
 		"bukan base64":   "%%%",
-		"token feed":     encodeFeedCursor(FeedCursor{ProcessedAt: time.Now(), ID: 1}),
+		"token feed":     encodeFeedCursor(FeedCursor{PublishedAt: time.Now(), ID: 1}),
 		"token cari":     encodeSearchPage(2),
 		"tanpa titik":    base64.RawURLEncoding.EncodeToString([]byte("h123")),
 		"waktu negatif":  base64.RawURLEncoding.EncodeToString([]byte("h-5.1")),

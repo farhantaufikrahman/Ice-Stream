@@ -10,6 +10,8 @@ resources:
   - api/deployment.yaml
   - api/service.yaml
   - api/httproute.yaml
+  # Callback login Google/GitHub di http://localhost:4000 (langkah 26)
+  - api/httproute-oauth.yaml
   # AuthService (gRPC :50051)
   - auth/configmap.yaml
   - auth/deployment.yaml
@@ -77,6 +79,14 @@ secretGenerator:
     namespace: ice-stream
     envs:
       - secrets/storage.env
+  # Client id dan secret login Google/GitHub untuk API gateway (dari
+  # secrets/oauth.env, tidak di-commit; contohnya di oauth.env.example).
+  # Nama Secret mendapat akhiran acak, jadi gateway otomatis di-restart
+  # saat isinya diganti.
+  - name: oauth-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/oauth.env
 
 # Kunci PUBLIK JWT untuk gateway. Bukan rahasia, jadi cukup ConfigMap.
 configMapGenerator:

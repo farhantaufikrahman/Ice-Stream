@@ -1,0 +1,28 @@
+# Alamat callback login Google/GitHub (langkah 26):
+#   http://localhost:4000/api/v1/auth/oauth/<google|github>/callback
+#
+# Google hanya menerima redirect URI http untuk host "localhost" (bukan
+# ice-stream.localhost), jadi alur OAuth berjalan di host localhost. Setelah
+# selesai, gateway mengarahkan browser kembali ke APP_BASE_URL
+# (http://ice-stream.localhost:4000). Hanya path OAuth yang dibuka di sini.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-oauth
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  parentRefs:
+    - name: ice-stream-gateway
+  hostnames:
+    - localhost
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/v1/auth/oauth
+      backendRefs:
+        - name: api
+          port: 80

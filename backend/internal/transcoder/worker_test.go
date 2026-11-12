@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func (m *fakeMedia) TranscodeHLS(_ context.Context, _, outDir string, renditions
 	return os.WriteFile(filepath.Join(outDir, "master.m3u8"), []byte("#EXTM3U"), 0o600)
 }
 
-func (m *fakeMedia) Thumbnail(_ context.Context, _, output string, _ int64) error {
+func (m *fakeMedia) Frame(_ context.Context, _, output string, _ int64) error {
 	return os.WriteFile(output, []byte("jpg"), 0o600)
 }
 
@@ -140,13 +141,32 @@ func TestHandleSuccess(t *testing.T) {
 	assert.Equal(t, "ack", msg.result)
 	assert.Equal(t, []string{events.SubjectTranscodeStarted, events.SubjectTranscodeSucceeded}, pub.subjects)
 	res := pub.payloads[1].(events.TranscodeSucceeded)
-	assert.Equal(t, "hls/42/master.m3u8", res.PlaylistKey)
-	assert.Equal(t, "hls/42/thumbnail.jpg", res.ThumbnailKey)
+	// Folder hasil: hls/42/<32 huruf hex acak>/ (langkah 26).
+	require.Regexp(t, `^hls/42/[0-9a-f]{32}/master\.m3u8$`, res.PlaylistKey)
+	prefix := strings.TrimSuffix(res.PlaylistKey, "master.m3u8")
+	// Durasi palsu 9 detik: bingkai di detik 3 (bawaan), 3,6 (40%), dan 6,75 (75%).
+	assert.Equal(t, []int64{3000, 3600, 6750}, res.FrameTimesMs)
+	assert.Equal(t, prefix+"frames/3000.jpg", res.ThumbnailKey)
 	assert.Equal(t, int64(9000), res.DurationMs)
 	assert.Equal(t, []string{"360p", "720p"}, res.Renditions)
 	assert.ElementsMatch(t, []string{
-		"hls/42/master.m3u8", "hls/42/thumbnail.jpg", "hls/42/360p/index.m3u8", "hls/42/720p/index.m3u8",
+		prefix + "master.m3u8", prefix + "360p/index.m3u8", prefix + "720p/index.m3u8",
+		prefix + "frames/3000.jpg", prefix + "frames/3600.jpg", prefix + "frames/6750.jpg",
 	}, storage.uploaded)
+
+	// Percobaan berikutnya memakai folder acak yang lain.
+	w.Handle(context.Background(), newMsg(t, uploaded, 2))
+	again := pub.payloads[3].(events.TranscodeSucceeded)
+	assert.NotEqual(t, res.PlaylistKey, again.PlaylistKey)
+}
+
+func TestFramePositions(t *testing.T) {
+	assert.Equal(t, []int64{3000, 300000, 562500}, FramePositions(750000))
+	// Video 6 detik: bingkai bawaan di sepertiga durasi.
+	assert.Equal(t, []int64{2000, 2400, 4500}, FramePositions(6000))
+	// Video yang sangat pendek: posisi yang sama dibuang.
+	assert.Equal(t, []int64{0}, FramePositions(1))
+	assert.Equal(t, []int64{0}, FramePositions(0))
 }
 
 func TestHandleTemporaryErrorRetries(t *testing.T) {

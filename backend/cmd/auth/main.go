@@ -58,6 +58,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// "Masuk dengan Google / GitHub" (langkah 26). Protokol OAuth-nya ada
+	// di gateway; AuthService hanya menyimpan identitas dan kode login.
+	svc.EnableIdentityLogin(authRepo)
+
 	// "Lupa kata sandi?" (langkah 24c). Email dikirim di background; saat
 	// service dimatikan, email yang sedang dikirim ditunggu paling lama
 	// SHUTDOWN_TIMEOUT.

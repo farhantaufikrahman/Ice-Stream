@@ -8,6 +8,8 @@ import type {
   ChannelDetail,
   ChannelPage,
   ChannelSearchPage,
+  ChannelCommentPage,
+  ChannelDanmakuPage,
   ChannelStats,
   Comment,
   CommentPage,
@@ -22,6 +24,7 @@ import type {
   LiveStream,
   MarkReadResult,
   NotificationPage,
+  OAuthProvider,
   Playlist,
   PlaylistPage,
   PlaylistVideoPage,
@@ -35,7 +38,9 @@ import type {
   TrendingList,
   Video,
   VideoDetail,
+  VideoLanguage,
   VideoPage,
+  VideoVisibility,
   ViewResult,
   WatchLaterPage,
   WatchLaterResult,
@@ -83,6 +88,28 @@ export async function resetPassword(token: string, newPassword: string): Promise
     body: { token, new_password: newPassword },
     withCredentials: true,
   })
+}
+
+/**
+ * Penyedia login yang dinyalakan server (langkah 26). Daftar kosong =
+ * tombol Google/GitHub tidak ditampilkan.
+ */
+export async function listOAuthProviders(signal?: AbortSignal): Promise<OAuthProvider[]> {
+  const body = await apiRequest<{ providers: OAuthProvider[] }>('/auth/oauth/providers', { signal })
+  return body.providers
+}
+
+/**
+ * Menukar kode sekali pakai dari halaman /oauth/selesai dengan sesi login
+ * (cookie refresh token + access token), sama seperti login().
+ */
+export async function exchangeOAuthCode(code: string): Promise<void> {
+  const body = await apiRequest<AccessToken>('/auth/oauth/exchange', {
+    method: 'POST',
+    body: { code },
+    withCredentials: true,
+  })
+  setAccessToken(body.access_token)
 }
 
 export async function logout(): Promise<void> {
@@ -171,6 +198,10 @@ export interface NewVideoInput {
   /** Boleh tidak dikirim (tanpa kategori). */
   category?: string
   tags?: string[]
+  /** Langkah 26. Tidak dikirim = PUBLIC, bukan draf, tanpa bahasa. */
+  visibility?: VideoVisibility
+  draft?: boolean
+  language?: VideoLanguage
 }
 
 /**
@@ -182,6 +213,10 @@ export interface VideoChanges {
   description?: string
   category?: string
   tags?: string[]
+  /** Langkah 26. draft: false = "Terbitkan". */
+  visibility?: VideoVisibility
+  draft?: boolean
+  language?: VideoLanguage
 }
 
 /**
@@ -206,9 +241,61 @@ export function listMyVideos(pageToken: string, signal?: AbortSignal): Promise<V
   return apiRequest<VideoPage>(`/me/videos?${pageQuery(pageToken)}`, { auth: 'required', signal })
 }
 
-/** Statistik dasbor Creator Studio untuk 7, 28, atau 90 hari terakhir (WIB). */
-export function getChannelStats(days: StatsDays, signal?: AbortSignal): Promise<ChannelStats> {
-  return apiRequest<ChannelStats>(`/me/channel-stats?days=${days}`, { auth: 'required', signal })
+/**
+ * Statistik Creator Studio untuk 7, 28, atau 90 hari terakhir (WIB).
+ * videoId (halaman Analitik, langkah 26) membatasi angka ke satu video.
+ */
+export function getChannelStats(days: StatsDays, signal?: AbortSignal, videoId?: string): Promise<ChannelStats> {
+  const params = new URLSearchParams({ days: String(days) })
+  if (videoId) params.set('video_id', videoId)
+  return apiRequest<ChannelStats>(`/me/channel-stats?${params}`, { auth: 'required', signal })
+}
+
+/**
+ * PUT /videos/:id/thumbnail (langkah 26): body = isi file gambar apa
+ * adanya, sama seperti uploadAvatar. Server memotongnya 16:9.
+ */
+export async function uploadThumbnail(id: string, file: Blob): Promise<Video> {
+  const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}/thumbnail`, {
+    method: 'PUT',
+    body: file,
+    auth: 'required',
+  })
+  return body.video
+}
+
+/** PUT /videos/:id/thumbnail/frame: pakai salah satu video.thumbnail_frames. */
+export async function chooseThumbnailFrame(id: string, positionMs: number): Promise<Video> {
+  const body = await apiRequest<{ video: Video }>(`/videos/${encodeURIComponent(id)}/thumbnail/frame`, {
+    method: 'PUT',
+    body: { position_ms: positionMs },
+    auth: 'required',
+  })
+  return body.video
+}
+
+// ---------- Komentar dan danmaku di Creator Studio (langkah 26) ----------
+
+function studioQuery(videoId: string, pageToken: string, pageSize: number): string {
+  const params = new URLSearchParams({ page_size: String(pageSize) })
+  if (videoId) params.set('video_id', videoId)
+  if (pageToken) params.set('page_token', pageToken)
+  return params.toString()
+}
+
+/** Komentar dan balasan di video milik user, terbaru lebih dulu. videoId "" = semua video. */
+export function listMyComments(videoId: string, pageToken: string, signal?: AbortSignal): Promise<ChannelCommentPage> {
+  return apiRequest<ChannelCommentPage>(`/me/comments?${studioQuery(videoId, pageToken, 20)}`, { auth: 'required', signal })
+}
+
+/** Danmaku di video milik user, terbaru lebih dulu. videoId "" = semua video. */
+export function listMyDanmaku(videoId: string, pageToken: string, signal?: AbortSignal): Promise<ChannelDanmakuPage> {
+  return apiRequest<ChannelDanmakuPage>(`/me/danmaku?${studioQuery(videoId, pageToken, 50)}`, { auth: 'required', signal })
+}
+
+/** Pengirim atau pemilik video boleh menghapus danmaku. */
+export async function deleteDanmaku(id: string): Promise<void> {
+  await apiRequest(`/me/danmaku/${encodeURIComponent(id)}`, { method: 'DELETE', auth: 'required' })
 }
 
 /** Field yang tidak diisi (undefined) tidak ikut dikirim, jadi tidak diubah server. */

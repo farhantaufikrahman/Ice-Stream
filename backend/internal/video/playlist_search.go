@@ -96,10 +96,10 @@ func (r *OracleRepository) SearchPlaylists(ctx context.Context, terms []string, 
 	}
 	sql.WriteString(`
    AND EXISTS (SELECT 1 FROM playlist_items pi JOIN videos v ON v.id = pi.video_id
-                WHERE pi.playlist_id = p.id AND v.status = ? AND v.deleted_at IS NULL)
+                WHERE pi.playlist_id = p.id AND ` + watchableSQLv + ` AND v.deleted_at IS NULL)
  ORDER BY CASE WHEN LOWER(p.title) LIKE ? THEN 0 ELSE 1 END, p.updated_at DESC, p.id DESC
 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`)
-	args = append(args, StatusReady, terms[0]+"%", offset, limit)
+	args = append(args, terms[0]+"%", offset, limit)
 
 	var rows []playlistRow
 	if err := r.db.WithContext(ctx).Raw(sql.String(), args...).Scan(&rows).Error; err != nil {

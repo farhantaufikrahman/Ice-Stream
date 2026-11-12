@@ -3431,3 +3431,182 @@ a.trending-title:hover {
     order: 2;
   }
 }
+
+/* Langkah 26: visibilitas, thumbnail, dan Studio Analitik/Komentar/Danmaku */
+.choice-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.choice-group legend {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding: 0;
+}
+.choice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+}
+.choice.is-selected {
+  border-color: var(--accent-text);
+  background: var(--chip-mint);
+}
+.choice input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: #4fe3c1;
+}
+.choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.choice-text strong {
+  font-size: 0.9rem;
+}
+.thumb-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.thumb-pick {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  background: var(--raised);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+.thumb-pick img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb-pick.is-selected {
+  border: 3px solid #4fe3c1;
+}
+.thumb-pick-upload {
+  border: 2px dashed var(--line-strong);
+}
+.thumb-pick-label {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgb(11 18 32 / 70%);
+  color: #e8eef8;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.thumb-pick:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.studio-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.studio-filter select {
+  height: 38px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.studio-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.studio-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.studio-item:first-child {
+  border-top: 0;
+}
+.studio-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studio-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.studio-item-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.danmaku-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  vertical-align: middle;
+}
+.oauth-buttons {
+  display: grid;
+  /* Satu tombol = selebar kartu; dua tombol = berdampingan. */
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 12px;
+}
+.oauth-buttons .btn {
+  height: 46px;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--faint);
+  font-size: 0.82rem;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}

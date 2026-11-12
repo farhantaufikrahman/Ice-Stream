@@ -30,6 +30,31 @@ service CommentService {
   // Error NOT_FOUND jika komentar tidak ada, PERMISSION_DENIED jika
   // requester bukan penulis atau pemilik video.
   rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+  // ListChannelComments mengambil komentar dan balasan di semua video milik
+  // requester (atau satu video jika video_id diisi), terbaru lebih dulu.
+  // Untuk halaman Komentar di Creator Studio (langkah 26). Video draf dan
+  // Pribadi ikut, video yang sudah dihapus tidak.
+  rpc ListChannelComments(ListChannelCommentsRequest) returns (ListChannelCommentsResponse);
+}
+
+message ListChannelCommentsRequest {
+  int64 requester_id = 1;
+  // 0 = semua video milik requester.
+  int64 video_id = 2;
+  // 0 = default (20). Maksimal 50.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// ChannelComment adalah komentar beserta judul videonya.
+message ChannelComment {
+  Comment comment = 1;
+  string video_title = 2;
+}
+
+message ListChannelCommentsResponse {
+  repeated ChannelComment comments = 1;
+  string next_page_token = 2;
 }
 
 message Comment {

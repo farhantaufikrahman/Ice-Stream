@@ -16,11 +16,12 @@ import (
 // @Column di JPA atau definisi model di schema Prisma. Struktur tabelnya
 // sendiri dibuat oleh migrasi Flyway, bukan oleh GORM AutoMigrate.
 type userRow struct {
-	ID           int64  `gorm:"column:id;primaryKey;autoIncrement"`
-	Username     string `gorm:"column:username"`
-	Email        string `gorm:"column:email"`
-	PasswordHash string `gorm:"column:password_hash"`
-	DisplayName  string `gorm:"column:display_name"`
+	ID       int64  `gorm:"column:id;primaryKey;autoIncrement"`
+	Username string `gorm:"column:username"`
+	Email    string `gorm:"column:email"`
+	// NULL untuk user yang mendaftar lewat Google/GitHub (migrasi V7).
+	PasswordHash *string `gorm:"column:password_hash"`
+	DisplayName  string  `gorm:"column:display_name"`
 	// default:... memberi tahu GORM bahwa nilainya diisi Oracle, jadi GORM
 	// mengambilnya kembali dengan RETURNING setelah INSERT.
 	Role      string         `gorm:"column:role;default:USER"`
@@ -28,6 +29,9 @@ type userRow struct {
 	CreatedAt time.Time      `gorm:"column:created_at"`
 	UpdatedAt time.Time      `gorm:"column:updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at"`
+	// EmailVerifiedAt terisi setelah email terbukti milik user: daftar
+	// lewat Google/GitHub atau berhasil "Lupa kata sandi?" (langkah 26).
+	EmailVerifiedAt *time.Time `gorm:"column:email_verified_at"`
 }
 
 func (userRow) TableName() string { return "users" }
@@ -85,7 +89,7 @@ func (r *OracleRepository) CreateUser(ctx context.Context, u NewUser) (User, err
 	row := userRow{
 		Username:     u.Username,
 		Email:        u.Email,
-		PasswordHash: u.PasswordHash,
+		PasswordHash: nilIfEmpty(u.PasswordHash),
 		DisplayName:  u.DisplayName,
 	}
 	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
@@ -113,7 +117,11 @@ func (r *OracleRepository) FindUserByLogin(ctx context.Context, login string) (U
 	if err != nil {
 		return User{}, "", fmt.Errorf("select user by login: %w", err)
 	}
-	return row.toUser(), row.PasswordHash, nil
+	var hash string
+	if row.PasswordHash != nil {
+		hash = *row.PasswordHash
+	}
+	return row.toUser(), hash, nil
 }
 
 // FindUserByID mencari user berdasarkan id.

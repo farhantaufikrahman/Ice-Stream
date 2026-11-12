@@ -50,6 +50,9 @@ type Service struct {
 	// reset berisi fitur "Lupa kata sandi?" (reset.go). nil jika belum
 	// dinyalakan dengan EnablePasswordReset.
 	reset *resetFeature
+	// identities berisi login lewat Google/GitHub (identity.go). nil jika
+	// belum dinyalakan dengan EnableIdentityLogin.
+	identities IdentityRepository
 }
 
 // NewService membuat Service.
@@ -139,6 +142,13 @@ func (s *Service) Login(ctx context.Context, login, password string, client Clie
 	if err != nil {
 		return User{}, TokenPair{}, err
 	}
+	if hash == "" {
+		// User yang mendaftar lewat Google/GitHub belum punya kata sandi
+		// (langkah 26). Jawabannya sama dengan kata sandi salah, dan
+		// bcrypt tetap dijalankan supaya waktunya juga sama.
+		CheckPassword(s.dummyHash, password)
+		return User{}, TokenPair{}, ErrInvalidCredentials
+	}
 	if !CheckPassword(hash, password) {
 		return User{}, TokenPair{}, ErrInvalidCredentials
 	}
@@ -147,8 +157,13 @@ func (s *Service) Login(ctx context.Context, login, password string, client Clie
 	if u.Status != StatusActive {
 		return User{}, TokenPair{}, ErrUserBanned
 	}
+	return s.issueTokens(ctx, u, client, s.now())
+}
 
-	now := s.now()
+// issueTokens membuat sesi baru untuk u: refresh token tersimpan di
+// database dan access token yang ditandatangani. Dipakai Login dan
+// ExchangeLoginCode.
+func (s *Service) issueTokens(ctx context.Context, u User, client ClientInfo, now time.Time) (User, TokenPair, error) {
 	refresh, refreshHash, err := NewRefreshToken()
 	if err != nil {
 		return User{}, TokenPair{}, err

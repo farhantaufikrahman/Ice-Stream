@@ -81,7 +81,7 @@ func (r *OracleRepository) ListWatchLater(ctx context.Context, userID int64, aft
 	q := r.db.WithContext(ctx).Table("watch_later w").
 		Select(`w.video_id AS "video_id", w.added_at AS "added_at"`).
 		Joins("JOIN videos v ON v.id = w.video_id").
-		Where("w.user_id = ? AND v.status = ? AND v.deleted_at IS NULL", userID, StatusReady)
+		Where("w.user_id = ? AND v.deleted_at IS NULL AND v.status = 'READY' AND (v.owner_id = ? OR (v.draft = 0 AND v.visibility IN ('PUBLIC', 'UNLISTED')))", userID, userID)
 	if after != nil {
 		q = q.Where("(SYS_EXTRACT_UTC(w.added_at) < SYS_EXTRACT_UTC(?) OR "+
 			"(SYS_EXTRACT_UTC(w.added_at) = SYS_EXTRACT_UTC(?) AND w.video_id < ?))",

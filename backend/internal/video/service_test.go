@@ -57,7 +57,7 @@ func (r *fakeRepo) changeLike(videoID, userID int64, like bool) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	v, ok := r.videos[videoID]
-	if !ok || v.Status != StatusReady {
+	if !ok || !v.IsWatchable() {
 		return 0, ErrNotFound
 	}
 	if r.likes[videoID] == nil {
@@ -97,6 +97,7 @@ func (r *fakeRepo) Create(_ context.Context, nv NewVideo) (Video, error) {
 		ID: r.nextID, OwnerID: nv.OwnerID, Title: nv.Title, Description: nv.Description,
 		Status: StatusPendingUpload, ObjectKey: nv.ObjectKey, ContentType: nv.ContentType,
 		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(), Category: nv.Category, Tags: nv.Tags,
+		Visibility: nv.Visibility, Draft: nv.Draft, Language: nv.Language,
 	}
 	r.videos[v.ID] = v
 	r.terms[v.ID] = nv.SearchTerms
@@ -143,22 +144,22 @@ func (r *fakeRepo) ListPublic(_ context.Context, filter FeedFilter, after *FeedC
 	defer r.mu.Unlock()
 	var ready []Video
 	for _, v := range r.videos {
-		if v.Status == StatusReady && (len(filter.OwnerIDs) == 0 || slices.Contains(filter.OwnerIDs, v.OwnerID)) &&
+		if v.IsListed() && (len(filter.OwnerIDs) == 0 || slices.Contains(filter.OwnerIDs, v.OwnerID)) &&
 			(filter.Category == "" || v.Category == filter.Category) {
 			ready = append(ready, v)
 		}
 	}
-	// Sama dengan ORDER BY processed_at DESC, id DESC.
+	// Sama dengan ORDER BY published_at DESC, id DESC.
 	slices.SortFunc(ready, func(a, b Video) int {
-		if c := b.ProcessedAt.Compare(*a.ProcessedAt); c != 0 {
+		if c := b.PublishedAt.Compare(*a.PublishedAt); c != 0 {
 			return c
 		}
 		return int(b.ID - a.ID)
 	})
 	var out []Video
 	for _, v := range ready {
-		if after != nil && !v.ProcessedAt.Before(after.ProcessedAt) &&
-			!(v.ProcessedAt.Equal(after.ProcessedAt) && v.ID < after.ID) {
+		if after != nil && !v.PublishedAt.Before(after.PublishedAt) &&
+			!(v.PublishedAt.Equal(after.PublishedAt) && v.ID < after.ID) {
 			continue
 		}
 		if len(out) == limit {
@@ -176,7 +177,7 @@ func (r *fakeRepo) IncrementViews(_ context.Context, id int64, day string) (int6
 		return 0, r.incrementErr
 	}
 	v, ok := r.videos[id]
-	if !ok || v.Status != StatusReady {
+	if !ok || !v.IsWatchable() {
 		return 0, ErrNotFound
 	}
 	v.ViewCount++
@@ -209,8 +210,15 @@ func (r *fakeRepo) MarkProcessing(_ context.Context, id int64, _ time.Time) (boo
 
 func (r *fakeRepo) MarkReady(_ context.Context, id int64, res TranscodeResult, now time.Time) (bool, error) {
 	return r.transition(id, []string{StatusUploaded, StatusProcessing}, func(v *Video) {
-		v.Status, v.PlaylistKey, v.ThumbnailKey = StatusReady, res.PlaylistKey, res.ThumbnailKey
+		v.Status, v.PlaylistKey = StatusReady, res.PlaylistKey
+		if v.ThumbnailKey == "" {
+			v.ThumbnailKey = res.ThumbnailKey
+		}
 		v.DurationMs, v.Renditions, v.ProcessedAt = res.DurationMs, res.Renditions, &now
+		v.ThumbnailFrames = res.FrameTimesMs
+		if !v.Draft {
+			v.PublishedAt = &now
+		}
 	})
 }
 

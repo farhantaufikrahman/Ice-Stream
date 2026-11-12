@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +53,13 @@ type videoRow struct {
 	// Migrasi V15. NULL = tanpa kategori / tanpa tag.
 	Category *string `gorm:"column:category"`
 	Tags     *string `gorm:"column:tags"`
+	// Migrasi V20 (langkah 26).
+	Visibility string `gorm:"column:visibility;default:PUBLIC"`
+	// NUMBER(1): 0 atau 1 (lihat boolToInt).
+	Draft           int        `gorm:"column:draft"`
+	PublishedAt     *time.Time `gorm:"column:published_at"`
+	Language        *string    `gorm:"column:language"`
+	ThumbnailFrames *string    `gorm:"column:thumbnail_frames"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -103,6 +111,18 @@ func (r videoRow) toVideo() Video {
 	if r.Tags != nil {
 		v.Tags = splitTags(*r.Tags)
 	}
+	v.Visibility = r.Visibility
+	v.Draft = r.Draft == 1
+	if r.PublishedAt != nil {
+		t := r.PublishedAt.UTC()
+		v.PublishedAt = &t
+	}
+	if r.Language != nil {
+		v.Language = *r.Language
+	}
+	if r.ThumbnailFrames != nil {
+		v.ThumbnailFrames = splitFrames(*r.ThumbnailFrames)
+	}
 	return v
 }
 
@@ -133,6 +153,12 @@ func (r *OracleRepository) Create(ctx context.Context, v NewVideo) (Video, error
 	}
 	row.Category = nullIfEmpty(v.Category)
 	row.Tags = nullIfEmpty(joinTags(v.Tags))
+	row.Visibility = v.Visibility
+	if row.Visibility == "" {
+		row.Visibility = VisibilityPublic
+	}
+	row.Draft = boolToInt(v.Draft)
+	row.Language = nullIfEmpty(v.Language)
 	now := time.Now().UTC()
 	row.SearchIndexedAt = &now
 	// Video dan kata-katanya disimpan dalam satu transaksi: tidak ada video
@@ -198,28 +224,28 @@ func (r *OracleRepository) ListByOwner(ctx context.Context, ownerID, beforeID in
 	return videos, nil
 }
 
-// ListPublic mengambil maksimal limit video READY untuk feed publik,
-// diurutkan processed_at lalu id dari yang terbaru. Jika filter.OwnerIDs
+// ListPublic mengambil maksimal limit video yang tampil di daftar publik
+// (listedSQL) untuk feed, diurutkan published_at lalu id dari yang terbaru. Jika filter.OwnerIDs
 // diisi, hanya video milik user-user itu (halaman channel atau feed
 // subscription). Jika filter.Category diisi, hanya video kategori itu
-// (index videos_category_feed_ix, migrasi V15). Jika after tidak nil,
+// (index videos_category_feed_ix, migrasi V20). Jika after tidak nil,
 // hanya video setelah cursor itu (halaman berikutnya).
 //
 // Oracle tidak mendukung perbandingan (a, b) < (x, y), jadi syaratnya
-// ditulis panjang: processed_at lebih kecil, ATAU processed_at sama dan id
+// ditulis panjang: published_at lebih kecil, ATAU published_at sama dan id
 // lebih kecil. id ikut dipakai supaya urutan tetap pasti walau dua video
 // selesai di detik yang sama.
 //
-// processed_at selalu dibungkus SYS_EXTRACT_UTC (mengubah waktu menjadi
+// published_at selalu dibungkus SYS_EXTRACT_UTC (mengubah waktu menjadi
 // UTC). Untuk kolom TIMESTAMP WITH TIME ZONE, Oracle menyimpan index-nya
-// dalam bentuk SYS_EXTRACT_UTC(processed_at). ORDER BY harus memakai
+// dalam bentuk SYS_EXTRACT_UTC(published_at). ORDER BY harus memakai
 // ekspresi yang sama persis; kalau tidak, Oracle tidak bisa memakai urutan
-// index videos_feed_ix / videos_owner_feed_ix, sehingga ia membaca SEMUA
+// index videos_public_feed_ix / videos_owner_feed_ix, sehingga ia membaca SEMUA
 // video READY lalu mengurutkannya dulu, makin lambat setiap ada video baru.
 // Dengan SYS_EXTRACT_UTC, Oracle membaca index dari belakang dan berhenti
 // setelah limit baris (sudah dicek dengan EXPLAIN PLAN, lihat langkah 14).
 func (r *OracleRepository) ListPublic(ctx context.Context, filter FeedFilter, after *FeedCursor, limit int) ([]Video, error) {
-	q := r.db.WithContext(ctx).Where("status = ?", StatusReady)
+	q := r.db.WithContext(ctx).Where(listedSQL)
 	if filter.Category != "" {
 		q = q.Where("category = ?", filter.Category)
 	}
@@ -234,12 +260,12 @@ func (r *OracleRepository) ListPublic(ctx context.Context, filter FeedFilter, af
 		q = q.Where("owner_id IN ?", ownerIDs)
 	}
 	if after != nil {
-		q = q.Where("(SYS_EXTRACT_UTC(processed_at) < SYS_EXTRACT_UTC(?) OR "+
-			"(SYS_EXTRACT_UTC(processed_at) = SYS_EXTRACT_UTC(?) AND id < ?))",
-			after.ProcessedAt, after.ProcessedAt, after.ID)
+		q = q.Where("(SYS_EXTRACT_UTC(published_at) < SYS_EXTRACT_UTC(?) OR "+
+			"(SYS_EXTRACT_UTC(published_at) = SYS_EXTRACT_UTC(?) AND id < ?))",
+			after.PublishedAt, after.PublishedAt, after.ID)
 	}
 	var rows []videoRow
-	if err := q.Order("SYS_EXTRACT_UTC(processed_at) DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
+	if err := q.Order("SYS_EXTRACT_UTC(published_at) DESC, id DESC").Limit(limit).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("select public videos: %w", err)
 	}
 	videos := make([]Video, len(rows))
@@ -264,7 +290,7 @@ func (r *OracleRepository) IncrementViews(ctx context.Context, id int64, day str
 	var count int64
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&videoRow{}).
-			Where("id = ? AND status = ?", id, StatusReady).
+			Where("id = ? AND "+watchableSQL, id).
 			UpdateColumn("view_count", gorm.Expr("view_count + 1"))
 		if res.Error != nil {
 			return fmt.Errorf("update view_count: %w", res.Error)
@@ -297,16 +323,24 @@ func (r *OracleRepository) MarkProcessing(ctx context.Context, id int64, now tim
 
 // MarkReady mengubah UPLOADED/PROCESSING menjadi READY. UPLOADED ikut
 // diterima karena event "started" bisa saja datang terlambat.
+//
+// Langkah 26:
+//   - thumbnail_key hanya diisi jika masih kosong: kreator mungkin sudah
+//     mengunggah thumbnail sendiri sebelum transcoding selesai;
+//   - published_at diisi jika video bukan draf, karena sejak saat ini
+//     video bisa ditonton orang lain.
 func (r *OracleRepository) MarkReady(ctx context.Context, id int64, res TranscodeResult, now time.Time) (bool, error) {
 	return r.transition(ctx, id, []string{StatusUploaded, StatusProcessing}, map[string]any{
-		"status":         StatusReady,
-		"playlist_key":   res.PlaylistKey,
-		"thumbnail_key":  res.ThumbnailKey,
-		"duration_ms":    res.DurationMs,
-		"renditions":     strings.Join(res.Renditions, ","),
-		"failure_reason": nil,
-		"processed_at":   now,
-		"updated_at":     now,
+		"status":           StatusReady,
+		"playlist_key":     res.PlaylistKey,
+		"thumbnail_key":    gorm.Expr("COALESCE(thumbnail_key, ?)", nullIfEmpty(res.ThumbnailKey)),
+		"thumbnail_frames": nullIfEmpty(joinFrames(res.FrameTimesMs)),
+		"duration_ms":      res.DurationMs,
+		"renditions":       strings.Join(res.Renditions, ","),
+		"failure_reason":   nil,
+		"processed_at":     now,
+		"published_at":     gorm.Expr("CASE WHEN draft = 0 THEN ? END", now),
+		"updated_at":       now,
 	})
 }
 
@@ -364,7 +398,7 @@ func (r *OracleRepository) changeLike(ctx context.Context, videoID, userID int64
 		var v videoRow
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Select("id", "like_count").
-			Where("id = ? AND status = ?", videoID, StatusReady).
+			Where("id = ? AND "+watchableSQL, videoID).
 			Take(&v).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
@@ -461,7 +495,8 @@ type searchHit struct {
 //	  ) GROUP BY video_id
 //	  HAVING COUNT(*) = 2            -- video harus cocok dengan SEMUA kata
 //	) s JOIN videos v ON v.id = s.video_id
-//	WHERE v.status = 'READY' AND v.deleted_at IS NULL
+//	WHERE v.status = 'READY' AND v.draft = 0 AND v.visibility = 'PUBLIC'
+//	  AND v.deleted_at IS NULL
 //	  [AND v.duration_ms >= ? AND v.duration_ms < ?]   -- filter durasi
 //	ORDER BY s.score DESC, v.view_count DESC, v.id DESC  -- lihat searchOrder
 //	OFFSET 0 ROWS FETCH NEXT 21 ROWS ONLY
@@ -481,8 +516,8 @@ func (r *OracleRepository) Search(ctx context.Context, terms []string, opts Sear
 		parts[i] = "SELECT video_id, MAX(weight) AS w FROM video_search_terms WHERE term LIKE ? GROUP BY video_id"
 		args = append(args, t+"%")
 	}
-	args = append(args, len(terms), StatusReady)
-	where := "WHERE v.status = ? AND v.deleted_at IS NULL "
+	args = append(args, len(terms))
+	where := "WHERE " + listedSQLv + " AND v.deleted_at IS NULL "
 	if minMs, maxMs := opts.Duration.durationRange(); minMs > 0 || maxMs > 0 {
 		where += "AND v.duration_ms >= ? "
 		args = append(args, minMs)
@@ -520,7 +555,7 @@ func searchOrder(sort SearchSort) string {
 	switch sort {
 	case SortNewest:
 		// SYS_EXTRACT_UTC: sama dengan ListPublic, lihat penjelasannya di sana.
-		return "SYS_EXTRACT_UTC(v.processed_at) DESC, v.id DESC"
+		return "SYS_EXTRACT_UTC(v.published_at) DESC, v.id DESC"
 	case SortMostViewed:
 		return "v.view_count DESC, v.id DESC"
 	case SortMostDanmaku:
@@ -530,14 +565,14 @@ func searchOrder(sort SearchSort) string {
 	}
 }
 
-// findInOrder mengambil video READY dengan id ini lalu menyusunnya sesuai
-// urutan ids. Id yang sudah tidak READY (misalnya dihapus di antara dua
+// findInOrder mengambil video publik dengan id ini lalu menyusunnya sesuai
+// urutan ids. Id yang sudah tidak publik (misalnya dihapus di antara dua
 // query) dilewati saja.
 func (r *OracleRepository) findInOrder(ctx context.Context, ids []int64) ([]Video, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	found, err := r.FindReadyByIDs(ctx, ids)
+	found, err := r.FindListedByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -554,15 +589,15 @@ func (r *OracleRepository) findInOrder(ctx context.Context, ids []int64) ([]Vide
 	return videos, nil
 }
 
-// FindReadyByIDs mengambil video READY dengan id ini. GORM menambahkan
+// FindListedByIDs mengambil video publik (listedSQL) dengan id ini. GORM menambahkan
 // "deleted_at IS NULL" sendiri. Pemanggil membatasi ids paling banyak 51,
 // jauh di bawah batas 1000 nilai IN (...) di Oracle.
-func (r *OracleRepository) FindReadyByIDs(ctx context.Context, ids []int64) ([]Video, error) {
+func (r *OracleRepository) FindListedByIDs(ctx context.Context, ids []int64) ([]Video, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	var rows []videoRow
-	if err := r.db.WithContext(ctx).Where("id IN ? AND status = ?", ids, StatusReady).Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id IN ? AND "+listedSQL, ids).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("select videos by id: %w", err)
 	}
 	videos := make([]Video, len(rows))
@@ -573,11 +608,11 @@ func (r *OracleRepository) FindReadyByIDs(ctx context.Context, ids []int64) ([]V
 }
 
 // ListPopularByOwner memakai index videos_owner_popular_ix (owner_id,
-// status, view_count, id), migrasi V16.
+// visibility, draft, status, view_count, id), migrasi V20.
 func (r *OracleRepository) ListPopularByOwner(ctx context.Context, ownerID int64, offset, limit int) ([]Video, error) {
 	var rows []videoRow
 	err := r.db.WithContext(ctx).
-		Where("owner_id = ? AND status = ?", ownerID, StatusReady).
+		Where("owner_id = ? AND "+listedSQL, ownerID).
 		Order("view_count DESC, id DESC").Offset(offset).Limit(limit).Find(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("select popular videos: %w", err)
@@ -601,7 +636,8 @@ type trendingRow struct {
 //	SELECT d.video_id AS "video_id", SUM(d.views) AS "views"
 //	  FROM video_daily_views d JOIN videos v ON v.id = d.video_id
 //	 WHERE d.view_date >= DATE '2026-11-05'
-//	   AND v.status = 'READY' AND v.deleted_at IS NULL [AND v.category = ?]
+//	   AND v.status = 'READY' AND v.draft = 0 AND v.visibility = 'PUBLIC'
+//	   AND v.deleted_at IS NULL [AND v.category = ?]
 //	 GROUP BY d.video_id
 //	 ORDER BY SUM(d.views) DESC, d.video_id DESC
 //	 FETCH FIRST 10 ROWS ONLY
@@ -613,8 +649,8 @@ type trendingRow struct {
 func (r *OracleRepository) TrendingVideos(ctx context.Context, fromDay, category string, limit int) ([]TrendingHit, error) {
 	sql := `SELECT d.video_id AS "video_id", SUM(d.views) AS "views" ` +
 		"FROM video_daily_views d JOIN videos v ON v.id = d.video_id " +
-		"WHERE d.view_date >= TO_DATE(?, 'YYYY-MM-DD') AND v.status = ? AND v.deleted_at IS NULL "
-	args := []any{fromDay, StatusReady}
+		"WHERE d.view_date >= TO_DATE(?, 'YYYY-MM-DD') AND " + listedSQLv + " AND v.deleted_at IS NULL "
+	args := []any{fromDay}
 	if category != "" {
 		sql += "AND v.category = ? "
 		args = append(args, category)
@@ -679,6 +715,41 @@ func (r *OracleRepository) SaveSearchTerms(ctx context.Context, videoID int64, t
 		return nil
 	})
 	return saved, err
+}
+
+// boolToInt mengubah bool menjadi 0/1 untuk kolom NUMBER(1). Oracle baru
+// punya tipe BOOLEAN sejak 23ai; kolom draft memakai NUMBER(1) supaya
+// sama dengan cara lama yang dikenal semua driver.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// splitFrames mengubah "3000,64000" menjadi []int64{3000, 64000}. Bagian
+// yang bukan angka dilewati.
+func splitFrames(s string) []int64 {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		if n, err := strconv.ParseInt(p, 10, 64); err == nil && n >= 0 {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// joinFrames kebalikan splitFrames.
+func joinFrames(frames []int64) string {
+	parts := make([]string, len(frames))
+	for i, f := range frames {
+		parts[i] = strconv.FormatInt(f, 10)
+	}
+	return strings.Join(parts, ",")
 }
 
 // nullIfEmpty mengubah "" menjadi NULL. Oracle memang menganggap ” sama

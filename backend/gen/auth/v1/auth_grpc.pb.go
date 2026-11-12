@@ -25,6 +25,8 @@ const (
 	AuthService_Logout_FullMethodName               = "/auth.v1.AuthService/Logout"
 	AuthService_RequestPasswordReset_FullMethodName = "/auth.v1.AuthService/RequestPasswordReset"
 	AuthService_ResetPassword_FullMethodName        = "/auth.v1.AuthService/ResetPassword"
+	AuthService_LoginWithIdentity_FullMethodName    = "/auth.v1.AuthService/LoginWithIdentity"
+	AuthService_ExchangeLoginCode_FullMethodName    = "/auth.v1.AuthService/ExchangeLoginCode"
 )
 
 // AuthServiceClient is the client API for AuthService service.
@@ -45,6 +47,18 @@ type AuthServiceClient interface {
 	// FAILED_PRECONDITION jika token tidak valid, kedaluwarsa, atau sudah
 	// dipakai; INVALID_ARGUMENT jika password baru tidak memenuhi aturan.
 	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
+	// LoginWithIdentity dipanggil gateway setelah login Google/GitHub
+	// berhasil (langkah 26). Mencari atau membuat user, lalu mengembalikan
+	// kode login sekali pakai (berlaku 2 menit). INVALID_ARGUMENT jika
+	// provider/subject tidak valid; FAILED_PRECONDITION jika penyedia tidak
+	// memberi email terverifikasi, email sudah dipakai akun yang belum
+	// terverifikasi, atau akun sudah terhubung ke akun lain di penyedia itu;
+	// PERMISSION_DENIED jika akun diblokir.
+	LoginWithIdentity(ctx context.Context, in *LoginWithIdentityRequest, opts ...grpc.CallOption) (*LoginWithIdentityResponse, error)
+	// ExchangeLoginCode menukar kode dari LoginWithIdentity dengan token,
+	// sama seperti Login. UNAUTHENTICATED jika kode tidak valid,
+	// kedaluwarsa, atau sudah dipakai.
+	ExchangeLoginCode(ctx context.Context, in *ExchangeLoginCodeRequest, opts ...grpc.CallOption) (*ExchangeLoginCodeResponse, error)
 }
 
 type authServiceClient struct {
@@ -115,6 +129,26 @@ func (c *authServiceClient) ResetPassword(ctx context.Context, in *ResetPassword
 	return out, nil
 }
 
+func (c *authServiceClient) LoginWithIdentity(ctx context.Context, in *LoginWithIdentityRequest, opts ...grpc.CallOption) (*LoginWithIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LoginWithIdentityResponse)
+	err := c.cc.Invoke(ctx, AuthService_LoginWithIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) ExchangeLoginCode(ctx context.Context, in *ExchangeLoginCodeRequest, opts ...grpc.CallOption) (*ExchangeLoginCodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExchangeLoginCodeResponse)
+	err := c.cc.Invoke(ctx, AuthService_ExchangeLoginCode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility.
@@ -133,6 +167,18 @@ type AuthServiceServer interface {
 	// FAILED_PRECONDITION jika token tidak valid, kedaluwarsa, atau sudah
 	// dipakai; INVALID_ARGUMENT jika password baru tidak memenuhi aturan.
 	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
+	// LoginWithIdentity dipanggil gateway setelah login Google/GitHub
+	// berhasil (langkah 26). Mencari atau membuat user, lalu mengembalikan
+	// kode login sekali pakai (berlaku 2 menit). INVALID_ARGUMENT jika
+	// provider/subject tidak valid; FAILED_PRECONDITION jika penyedia tidak
+	// memberi email terverifikasi, email sudah dipakai akun yang belum
+	// terverifikasi, atau akun sudah terhubung ke akun lain di penyedia itu;
+	// PERMISSION_DENIED jika akun diblokir.
+	LoginWithIdentity(context.Context, *LoginWithIdentityRequest) (*LoginWithIdentityResponse, error)
+	// ExchangeLoginCode menukar kode dari LoginWithIdentity dengan token,
+	// sama seperti Login. UNAUTHENTICATED jika kode tidak valid,
+	// kedaluwarsa, atau sudah dipakai.
+	ExchangeLoginCode(context.Context, *ExchangeLoginCodeRequest) (*ExchangeLoginCodeResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -160,6 +206,12 @@ func (UnimplementedAuthServiceServer) RequestPasswordReset(context.Context, *Req
 }
 func (UnimplementedAuthServiceServer) ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResetPassword not implemented")
+}
+func (UnimplementedAuthServiceServer) LoginWithIdentity(context.Context, *LoginWithIdentityRequest) (*LoginWithIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LoginWithIdentity not implemented")
+}
+func (UnimplementedAuthServiceServer) ExchangeLoginCode(context.Context, *ExchangeLoginCodeRequest) (*ExchangeLoginCodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExchangeLoginCode not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 func (UnimplementedAuthServiceServer) testEmbeddedByValue()                     {}
@@ -290,6 +342,42 @@ func _AuthService_ResetPassword_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthService_LoginWithIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LoginWithIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).LoginWithIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_LoginWithIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).LoginWithIdentity(ctx, req.(*LoginWithIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_ExchangeLoginCode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExchangeLoginCodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).ExchangeLoginCode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthService_ExchangeLoginCode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).ExchangeLoginCode(ctx, req.(*ExchangeLoginCodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -320,6 +408,14 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetPassword",
 			Handler:    _AuthService_ResetPassword_Handler,
+		},
+		{
+			MethodName: "LoginWithIdentity",
+			Handler:    _AuthService_LoginWithIdentity_Handler,
+		},
+		{
+			MethodName: "ExchangeLoginCode",
+			Handler:    _AuthService_ExchangeLoginCode_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

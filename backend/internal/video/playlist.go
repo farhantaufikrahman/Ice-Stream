@@ -279,7 +279,10 @@ func (s *Service) AddToPlaylist(ctx context.Context, requesterID, playlistID, vi
 	if err != nil {
 		return time.Time{}, err
 	}
-	if v.Status != StatusReady {
+	// Isi playlist hanya menampilkan video yang boleh ditonton siapa saja
+	// (lihat ListPlaylistItems), jadi video draf atau Pribadi ditolak,
+	// termasuk milik sendiri.
+	if !v.IsWatchable() {
 		return time.Time{}, ErrNotFound
 	}
 	if addedAt, found, err := s.repo.PlaylistItemAddedAt(ctx, playlistID, videoID); err != nil || found {

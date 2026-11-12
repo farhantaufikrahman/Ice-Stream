@@ -95,7 +95,13 @@ func (r *OracleRepository) ResetPassword(ctx context.Context, tokenHash, passwor
 		// dihapus tidak ikut ter-update (RowsAffected = 0).
 		res := tx.Model(&userRow{}).
 			Where("id = ? AND status = ?", tok.UserID, StatusActive).
-			Updates(map[string]any{"password_hash": passwordHash, "updated_at": now})
+			Updates(map[string]any{
+				"password_hash": passwordHash,
+				"updated_at":    now,
+				// Tautan reset hanya sampai ke pemilik email, jadi emailnya
+				// sekarang terbukti (dipakai login Google/GitHub, langkah 26).
+				"email_verified_at": gorm.Expr("COALESCE(email_verified_at, ?)", now),
+			})
 		if res.Error != nil {
 			return fmt.Errorf("update password: %w", res.Error)
 		}

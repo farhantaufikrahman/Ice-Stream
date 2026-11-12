@@ -32,8 +32,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DanmakuService_SendDanmaku_FullMethodName = "/danmaku.v1.DanmakuService/SendDanmaku"
-	DanmakuService_ListDanmaku_FullMethodName = "/danmaku.v1.DanmakuService/ListDanmaku"
+	DanmakuService_SendDanmaku_FullMethodName        = "/danmaku.v1.DanmakuService/SendDanmaku"
+	DanmakuService_ListDanmaku_FullMethodName        = "/danmaku.v1.DanmakuService/ListDanmaku"
+	DanmakuService_ListChannelDanmaku_FullMethodName = "/danmaku.v1.DanmakuService/ListChannelDanmaku"
+	DanmakuService_DeleteDanmaku_FullMethodName      = "/danmaku.v1.DanmakuService/DeleteDanmaku"
 )
 
 // DanmakuServiceClient is the client API for DanmakuService service.
@@ -48,6 +50,14 @@ type DanmakuServiceClient interface {
 	// ListDanmaku mengambil danmaku dalam satu rentang waktu video, urut dari
 	// posisi paling awal. Boleh dipanggil tanpa login.
 	ListDanmaku(ctx context.Context, in *ListDanmakuRequest, opts ...grpc.CallOption) (*ListDanmakuResponse, error)
+	// ListChannelDanmaku mengambil danmaku di semua video milik requester
+	// (atau satu video jika video_id diisi), terbaru lebih dulu. Untuk
+	// halaman Danmaku di Creator Studio (langkah 26).
+	ListChannelDanmaku(ctx context.Context, in *ListChannelDanmakuRequest, opts ...grpc.CallOption) (*ListChannelDanmakuResponse, error)
+	// DeleteDanmaku menghapus satu danmaku. Yang boleh: pengirimnya, atau
+	// pemilik video (moderasi channel). NOT_FOUND jika danmaku tidak ada,
+	// PERMISSION_DENIED jika requester bukan keduanya.
+	DeleteDanmaku(ctx context.Context, in *DeleteDanmakuRequest, opts ...grpc.CallOption) (*DeleteDanmakuResponse, error)
 }
 
 type danmakuServiceClient struct {
@@ -78,6 +88,26 @@ func (c *danmakuServiceClient) ListDanmaku(ctx context.Context, in *ListDanmakuR
 	return out, nil
 }
 
+func (c *danmakuServiceClient) ListChannelDanmaku(ctx context.Context, in *ListChannelDanmakuRequest, opts ...grpc.CallOption) (*ListChannelDanmakuResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListChannelDanmakuResponse)
+	err := c.cc.Invoke(ctx, DanmakuService_ListChannelDanmaku_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *danmakuServiceClient) DeleteDanmaku(ctx context.Context, in *DeleteDanmakuRequest, opts ...grpc.CallOption) (*DeleteDanmakuResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteDanmakuResponse)
+	err := c.cc.Invoke(ctx, DanmakuService_DeleteDanmaku_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DanmakuServiceServer is the server API for DanmakuService service.
 // All implementations must embed UnimplementedDanmakuServiceServer
 // for forward compatibility.
@@ -90,6 +120,14 @@ type DanmakuServiceServer interface {
 	// ListDanmaku mengambil danmaku dalam satu rentang waktu video, urut dari
 	// posisi paling awal. Boleh dipanggil tanpa login.
 	ListDanmaku(context.Context, *ListDanmakuRequest) (*ListDanmakuResponse, error)
+	// ListChannelDanmaku mengambil danmaku di semua video milik requester
+	// (atau satu video jika video_id diisi), terbaru lebih dulu. Untuk
+	// halaman Danmaku di Creator Studio (langkah 26).
+	ListChannelDanmaku(context.Context, *ListChannelDanmakuRequest) (*ListChannelDanmakuResponse, error)
+	// DeleteDanmaku menghapus satu danmaku. Yang boleh: pengirimnya, atau
+	// pemilik video (moderasi channel). NOT_FOUND jika danmaku tidak ada,
+	// PERMISSION_DENIED jika requester bukan keduanya.
+	DeleteDanmaku(context.Context, *DeleteDanmakuRequest) (*DeleteDanmakuResponse, error)
 	mustEmbedUnimplementedDanmakuServiceServer()
 }
 
@@ -105,6 +143,12 @@ func (UnimplementedDanmakuServiceServer) SendDanmaku(context.Context, *SendDanma
 }
 func (UnimplementedDanmakuServiceServer) ListDanmaku(context.Context, *ListDanmakuRequest) (*ListDanmakuResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDanmaku not implemented")
+}
+func (UnimplementedDanmakuServiceServer) ListChannelDanmaku(context.Context, *ListChannelDanmakuRequest) (*ListChannelDanmakuResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListChannelDanmaku not implemented")
+}
+func (UnimplementedDanmakuServiceServer) DeleteDanmaku(context.Context, *DeleteDanmakuRequest) (*DeleteDanmakuResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteDanmaku not implemented")
 }
 func (UnimplementedDanmakuServiceServer) mustEmbedUnimplementedDanmakuServiceServer() {}
 func (UnimplementedDanmakuServiceServer) testEmbeddedByValue()                        {}
@@ -163,6 +207,42 @@ func _DanmakuService_ListDanmaku_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DanmakuService_ListChannelDanmaku_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListChannelDanmakuRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DanmakuServiceServer).ListChannelDanmaku(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DanmakuService_ListChannelDanmaku_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DanmakuServiceServer).ListChannelDanmaku(ctx, req.(*ListChannelDanmakuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DanmakuService_DeleteDanmaku_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDanmakuRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DanmakuServiceServer).DeleteDanmaku(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DanmakuService_DeleteDanmaku_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DanmakuServiceServer).DeleteDanmaku(ctx, req.(*DeleteDanmakuRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DanmakuService_ServiceDesc is the grpc.ServiceDesc for DanmakuService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -177,6 +257,14 @@ var DanmakuService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDanmaku",
 			Handler:    _DanmakuService_ListDanmaku_Handler,
+		},
+		{
+			MethodName: "ListChannelDanmaku",
+			Handler:    _DanmakuService_ListChannelDanmaku_Handler,
+		},
+		{
+			MethodName: "DeleteDanmaku",
+			Handler:    _DanmakuService_DeleteDanmaku_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

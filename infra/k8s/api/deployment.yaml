@@ -37,6 +37,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-config
+            # Client id/secret Google dan GitHub (langkah 26).
+            - secretRef:
+                name: oauth-credentials
           volumeMounts:
             - name: jwt-public
               mountPath: /etc/ice-stream/jwt

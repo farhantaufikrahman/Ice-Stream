@@ -87,7 +87,8 @@ func (r *OracleRepository) GetProgress(ctx context.Context, userID, videoID int6
 //
 //	SELECT h.video_id, h.position_ms, h.watched_at
 //	  FROM watch_history h JOIN videos v ON v.id = h.video_id
-//	 WHERE h.user_id = 7 AND v.status = 'READY' AND v.deleted_at IS NULL
+//	 WHERE h.user_id = 7 AND v.deleted_at IS NULL AND v.status = 'READY'
+//	   AND (v.owner_id = 7 OR (v.draft = 0 AND v.visibility IN ('PUBLIC', 'UNLISTED')))
 //	   AND (SYS_EXTRACT_UTC(h.watched_at) < SYS_EXTRACT_UTC(:cursor)
 //	        OR (SYS_EXTRACT_UTC(h.watched_at) = SYS_EXTRACT_UTC(:cursor) AND h.video_id < :id))
 //	 ORDER BY SYS_EXTRACT_UTC(h.watched_at) DESC, h.video_id DESC
@@ -106,7 +107,7 @@ func (r *OracleRepository) ListHistory(ctx context.Context, userID int64, after 
 	q := r.db.WithContext(ctx).Table("watch_history h").
 		Select(`h.video_id AS "video_id", h.position_ms AS "position_ms", h.watched_at AS "watched_at"`).
 		Joins("JOIN videos v ON v.id = h.video_id").
-		Where("h.user_id = ? AND v.status = ? AND v.deleted_at IS NULL", userID, StatusReady)
+		Where("h.user_id = ? AND v.deleted_at IS NULL AND v.status = 'READY' AND (v.owner_id = ? OR (v.draft = 0 AND v.visibility IN ('PUBLIC', 'UNLISTED')))", userID, userID)
 	if after != nil {
 		q = q.Where("(SYS_EXTRACT_UTC(h.watched_at) < SYS_EXTRACT_UTC(?) OR "+
 			"(SYS_EXTRACT_UTC(h.watched_at) = SYS_EXTRACT_UTC(?) AND h.video_id < ?))",

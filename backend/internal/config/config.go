@@ -41,6 +41,8 @@ type Config struct {
 	LiveMaxClients int
 	// Cookie mengatur cookie refresh token.
 	Cookie CookieConfig
+	// OAuth mengatur login Google/GitHub (langkah 26, oauth.go).
+	OAuth OAuthConfig
 }
 
 // CookieConfig mengatur cookie refresh token.
@@ -103,6 +105,7 @@ func Load() (Config, error) {
 		NATSURL:            getString("NATS_URL", "nats://localhost:4222"),
 		LiveMaxClients:     liveMax,
 		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
+		OAuth:              loadOAuth(),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -134,7 +137,7 @@ func (c Config) validate() error {
 	if c.Cookie.SameSite == http.SameSiteNoneMode && !c.Cookie.Secure {
 		return fmt.Errorf("COOKIE_SAMESITE=none wajib disertai COOKIE_SECURE=true")
 	}
-	return nil
+	return c.OAuth.validate()
 }
 
 // parseSameSite mengubah "lax", "strict", atau "none" menjadi http.SameSite.

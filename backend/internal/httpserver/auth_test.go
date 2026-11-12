@@ -28,12 +28,16 @@ import (
 type fakeAuthClient struct {
 	registerErr, loginErr, refreshErr, logoutErr error
 	forgotErr, resetErr                          error
+	identityErr, exchangeErr                     error
 
 	lastLogin   *authv1.LoginRequest
 	lastRefresh *authv1.RefreshTokenRequest
 	lastLogout  *authv1.LogoutRequest
 	lastForgot  *authv1.RequestPasswordResetRequest
 	lastReset   *authv1.ResetPasswordRequest
+	// Langkah 26 (oauth_test.go).
+	lastIdentity *authv1.LoginWithIdentityRequest
+	lastExchange *authv1.ExchangeLoginCodeRequest
 }
 
 var _ authv1.AuthServiceClient = (*fakeAuthClient)(nil)

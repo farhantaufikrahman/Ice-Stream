@@ -201,7 +201,7 @@ func (s *Service) ListTrending(ctx context.Context, category string, limit int) 
 	for i, h := range hits {
 		ids[i] = h.VideoID
 	}
-	videos, err := s.repo.FindReadyByIDs(ctx, ids)
+	videos, err := s.repo.FindListedByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

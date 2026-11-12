@@ -4,6 +4,23 @@
 
 export type VideoStatus = 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED'
 
+/**
+ * Langkah 26 (desain Upload): PUBLIC = "Publik", UNLISTED = "Tidak publik"
+ * (hanya lewat tautan), PRIVATE = "Pribadi" (hanya pemilik).
+ */
+export type VideoVisibility = 'PUBLIC' | 'UNLISTED' | 'PRIVATE'
+
+/** Kode bahasa video (ISO 639-1). "" = tidak diisi. */
+export type VideoLanguage = '' | 'id' | 'en' | 'ja'
+
+/** Satu pilihan "Bingkai" thumbnail. Hanya ada di jawaban untuk pemilik video. */
+export interface ThumbnailFrame {
+  position_ms: number
+  url: string
+  /** true jika bingkai ini sedang dipakai sebagai thumbnail. */
+  selected: boolean
+}
+
 export interface Owner {
   id: string
   username: string
@@ -38,6 +55,17 @@ export interface Video {
   /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
   tags: string[]
   owner?: Owner
+  /** Langkah 26. */
+  visibility: VideoVisibility
+  /** true = disimpan sebagai draf (belum terbit). */
+  draft: boolean
+  /** Waktu pertama kali terbit; tanggal di kartu video memakai ini. */
+  published_at?: string
+  language: VideoLanguage
+  /** true jika thumbnail diunggah kreator (bukan bingkai dari video). */
+  custom_thumbnail: boolean
+  /** Hanya untuk pemilik video yang sudah READY. */
+  thumbnail_frames?: ThumbnailFrame[]
 }
 
 export interface VideoPage {
@@ -297,6 +325,48 @@ export interface ChannelStats {
   current: ChannelTotals
   /** Periode sebelumnya dengan panjang yang sama, untuk persentase naik/turun. */
   previous: ChannelTotals
+  /** Langkah 26: "" = seluruh channel, selain itu id video yang diminta. */
+  video_id: string
+  /** Maksimal 10 video dengan tayangan terbanyak di periode ini (kosong jika video_id diisi). */
+  top_videos: TopVideo[]
+}
+
+/** Satu baris "Video terpopuler" di halaman Analitik (langkah 26). */
+export interface TopVideo {
+  video_id: string
+  title: string
+  thumbnail_url?: string
+  views: number
+}
+
+/** Komentar di halaman Komentar Creator Studio (GET /me/comments). */
+export interface ChannelComment extends Comment {
+  video_title: string
+}
+
+export interface ChannelCommentPage {
+  comments: ChannelComment[]
+  next_page_token: string
+}
+
+/** Danmaku di halaman Danmaku Creator Studio (GET /me/danmaku). */
+export interface ChannelDanmaku extends Danmaku {
+  user_id: string
+  /** Bisa kosong jika profil pengirim gagal diambil server. */
+  author?: Owner
+  video_title: string
+}
+
+export interface ChannelDanmakuPage {
+  danmaku: ChannelDanmaku[]
+  next_page_token: string
+}
+
+/** Penyedia "Masuk dengan Google / GitHub" yang dinyalakan server. */
+export interface OAuthProvider {
+  id: 'google' | 'github'
+  /** Dibuka dengan pindah halaman (window.location.assign). */
+  start_url: string
 }
 
 /** Satu kreator di hasil pencarian (GET /search/channels). */

@@ -56,6 +56,8 @@ const (
 	VideoService_SearchPlaylists_FullMethodName          = "/video.v1.VideoService/SearchPlaylists"
 	VideoService_ListTrendingVideos_FullMethodName       = "/video.v1.VideoService/ListTrendingVideos"
 	VideoService_ReportVideo_FullMethodName              = "/video.v1.VideoService/ReportVideo"
+	VideoService_ChooseThumbnailFrame_FullMethodName     = "/video.v1.VideoService/ChooseThumbnailFrame"
+	VideoService_UploadThumbnail_FullMethodName          = "/video.v1.VideoService/UploadThumbnail"
 )
 
 // VideoServiceClient is the client API for VideoService service.
@@ -189,6 +191,15 @@ type VideoServiceClient interface {
 	// alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
 	// tidak ada atau belum READY.
 	ReportVideo(ctx context.Context, in *ReportVideoRequest, opts ...grpc.CallOption) (*ReportVideoResponse, error)
+	// ChooseThumbnailFrame memakai salah satu bingkai buatan transcoder
+	// (Video.thumbnail_frames) sebagai thumbnail (langkah 26). NOT_FOUND jika
+	// video tidak ada, bukan milik requester, atau posisi bingkai tidak ada.
+	ChooseThumbnailFrame(ctx context.Context, in *ChooseThumbnailFrameRequest, opts ...grpc.CallOption) (*ChooseThumbnailFrameResponse, error)
+	// UploadThumbnail menyimpan gambar buatan kreator (JPEG, PNG, atau WebP,
+	// maksimal 2 MiB, minimal 320x180) sebagai thumbnail. Gambar dipotong
+	// 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
+	// selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
+	UploadThumbnail(ctx context.Context, in *UploadThumbnailRequest, opts ...grpc.CallOption) (*UploadThumbnailResponse, error)
 }
 
 type videoServiceClient struct {
@@ -529,6 +540,26 @@ func (c *videoServiceClient) ReportVideo(ctx context.Context, in *ReportVideoReq
 	return out, nil
 }
 
+func (c *videoServiceClient) ChooseThumbnailFrame(ctx context.Context, in *ChooseThumbnailFrameRequest, opts ...grpc.CallOption) (*ChooseThumbnailFrameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ChooseThumbnailFrameResponse)
+	err := c.cc.Invoke(ctx, VideoService_ChooseThumbnailFrame_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) UploadThumbnail(ctx context.Context, in *UploadThumbnailRequest, opts ...grpc.CallOption) (*UploadThumbnailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UploadThumbnailResponse)
+	err := c.cc.Invoke(ctx, VideoService_UploadThumbnail_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VideoServiceServer is the server API for VideoService service.
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
@@ -660,6 +691,15 @@ type VideoServiceServer interface {
 	// alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
 	// tidak ada atau belum READY.
 	ReportVideo(context.Context, *ReportVideoRequest) (*ReportVideoResponse, error)
+	// ChooseThumbnailFrame memakai salah satu bingkai buatan transcoder
+	// (Video.thumbnail_frames) sebagai thumbnail (langkah 26). NOT_FOUND jika
+	// video tidak ada, bukan milik requester, atau posisi bingkai tidak ada.
+	ChooseThumbnailFrame(context.Context, *ChooseThumbnailFrameRequest) (*ChooseThumbnailFrameResponse, error)
+	// UploadThumbnail menyimpan gambar buatan kreator (JPEG, PNG, atau WebP,
+	// maksimal 2 MiB, minimal 320x180) sebagai thumbnail. Gambar dipotong
+	// 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
+	// selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
+	UploadThumbnail(context.Context, *UploadThumbnailRequest) (*UploadThumbnailResponse, error)
 	mustEmbedUnimplementedVideoServiceServer()
 }
 
@@ -768,6 +808,12 @@ func (UnimplementedVideoServiceServer) ListTrendingVideos(context.Context, *List
 }
 func (UnimplementedVideoServiceServer) ReportVideo(context.Context, *ReportVideoRequest) (*ReportVideoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportVideo not implemented")
+}
+func (UnimplementedVideoServiceServer) ChooseThumbnailFrame(context.Context, *ChooseThumbnailFrameRequest) (*ChooseThumbnailFrameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ChooseThumbnailFrame not implemented")
+}
+func (UnimplementedVideoServiceServer) UploadThumbnail(context.Context, *UploadThumbnailRequest) (*UploadThumbnailResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UploadThumbnail not implemented")
 }
 func (UnimplementedVideoServiceServer) mustEmbedUnimplementedVideoServiceServer() {}
 func (UnimplementedVideoServiceServer) testEmbeddedByValue()                      {}
@@ -1384,6 +1430,42 @@ func _VideoService_ReportVideo_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VideoService_ChooseThumbnailFrame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ChooseThumbnailFrameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).ChooseThumbnailFrame(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_ChooseThumbnailFrame_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).ChooseThumbnailFrame(ctx, req.(*ChooseThumbnailFrameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_UploadThumbnail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadThumbnailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).UploadThumbnail(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_UploadThumbnail_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).UploadThumbnail(ctx, req.(*UploadThumbnailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VideoService_ServiceDesc is the grpc.ServiceDesc for VideoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1522,6 +1604,14 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReportVideo",
 			Handler:    _VideoService_ReportVideo_Handler,
+		},
+		{
+			MethodName: "ChooseThumbnailFrame",
+			Handler:    _VideoService_ChooseThumbnailFrame_Handler,
+		},
+		{
+			MethodName: "UploadThumbnail",
+			Handler:    _VideoService_UploadThumbnail_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

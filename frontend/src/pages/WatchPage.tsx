@@ -10,6 +10,7 @@ import { ErrorBox } from '../components/ErrorBox'
 import { HlsPlayer } from '../components/HlsPlayer'
 import { categoryLabel } from '../lib/categories'
 import { formatCount, formatDate } from '../lib/format'
+import { languageLabel, visibilityLabel } from '../lib/visibility'
 import { VideoRow } from '../components/VideoCard'
 import { CommentSection } from '../components/watch/CommentSection'
 import { DanmakuComposer } from '../components/watch/DanmakuComposer'
@@ -305,7 +306,11 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
           <div className="watch-stats">
             <span>{formatCount(views)} tayangan</span>
             <span>{formatCount(video.danmaku_count + newDanmakuIds.size)} danmaku</span>
-            <span>Diunggah {formatDate(video.created_at)}</span>
+            <span>{video.published_at ? `Diterbitkan ${formatDate(video.published_at)}` : `Diunggah ${formatDate(video.created_at)}`}</span>
+            {languageLabel(video.language) && <span>{languageLabel(video.language)}</span>}
+            {(video.draft || video.visibility !== 'PUBLIC') && (
+              <span className="chip chip-amber">{video.draft ? 'Draf' : visibilityLabel(video.visibility)}</span>
+            )}
             {startAt > 0 && !fromLink && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>
           <VideoTags category={video.category} tags={video.tags} />

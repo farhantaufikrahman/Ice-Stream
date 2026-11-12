@@ -32,6 +32,9 @@ type fakeDanmakuClient struct {
 	err      error
 	lastSend *danmakuv1.SendDanmakuRequest
 	lastList *danmakuv1.ListDanmakuRequest
+	// Langkah 26 (studio_test.go).
+	lastChannel *danmakuv1.ListChannelDanmakuRequest
+	lastDelete  *danmakuv1.DeleteDanmakuRequest
 }
 
 var _ danmakuv1.DanmakuServiceClient = (*fakeDanmakuClient)(nil)

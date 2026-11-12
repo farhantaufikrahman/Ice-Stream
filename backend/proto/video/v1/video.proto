@@ -144,6 +144,59 @@ service VideoService {
   // alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
   // tidak ada atau belum READY.
   rpc ReportVideo(ReportVideoRequest) returns (ReportVideoResponse);
+
+  // ChooseThumbnailFrame memakai salah satu bingkai buatan transcoder
+  // (Video.thumbnail_frames) sebagai thumbnail (langkah 26). NOT_FOUND jika
+  // video tidak ada, bukan milik requester, atau posisi bingkai tidak ada.
+  rpc ChooseThumbnailFrame(ChooseThumbnailFrameRequest) returns (ChooseThumbnailFrameResponse);
+  // UploadThumbnail menyimpan gambar buatan kreator (JPEG, PNG, atau WebP,
+  // maksimal 2 MiB, minimal 320x180) sebagai thumbnail. Gambar dipotong
+  // 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
+  // selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
+  rpc UploadThumbnail(UploadThumbnailRequest) returns (UploadThumbnailResponse);
+}
+
+// Visibilitas video (langkah 26, desain Upload).
+enum VideoVisibility {
+  // Sama dengan VIDEO_VISIBILITY_PUBLIC.
+  VIDEO_VISIBILITY_UNSPECIFIED = 0;
+  // Tampil di feed, pencarian, Trending, dan halaman kanal.
+  VIDEO_VISIBILITY_PUBLIC = 1;
+  // "Tidak publik": hanya orang yang punya tautannya.
+  VIDEO_VISIBILITY_UNLISTED = 2;
+  // "Pribadi": hanya pemiliknya.
+  VIDEO_VISIBILITY_PRIVATE = 3;
+}
+
+// ThumbnailFrame adalah satu bingkai pilihan thumbnail.
+message ThumbnailFrame {
+  // Posisi bingkai di video, dalam milidetik.
+  int64 position_ms = 1;
+  // URL publik gambar JPEG (tinggi 360 piksel).
+  string url = 2;
+  // true jika bingkai ini sedang dipakai sebagai thumbnail.
+  bool selected = 3;
+}
+
+message ChooseThumbnailFrameRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  int64 position_ms = 3;
+}
+
+message ChooseThumbnailFrameResponse {
+  Video video = 1;
+}
+
+message UploadThumbnailRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Isi file gambar apa adanya.
+  bytes image = 3;
+}
+
+message UploadThumbnailResponse {
+  Video video = 1;
 }
 
 // Alasan laporan (dialog Laporkan).
@@ -257,6 +310,20 @@ message Video {
   repeated string tags = 20;
   // Jumlah danmaku (langkah 24a).
   int64 danmaku_count = 21;
+  // Langkah 26.
+  VideoVisibility visibility = 22;
+  // true = draf ("Simpan draf"), hanya terlihat oleh pemiliknya.
+  bool draft = 23;
+  // Waktu video pertama kali bisa ditonton orang lain. Kosong untuk draf
+  // dan video yang belum READY. Feed diurutkan dengan waktu ini.
+  google.protobuf.Timestamp published_at = 24;
+  // Bahasa video: "id", "en", atau "ja". Kosong = tidak diisi.
+  string language = 25;
+  // Bingkai pilihan thumbnail. Hanya diisi untuk pemilik video (GetVideo,
+  // ListMyVideos); kosong untuk video lama dan video yang belum READY.
+  repeated ThumbnailFrame thumbnail_frames = 26;
+  // true jika thumbnail adalah gambar yang diunggah kreator.
+  bool custom_thumbnail = 27;
 }
 
 message CreateUploadRequest {
@@ -274,6 +341,12 @@ message CreateUploadRequest {
   // "#" di depan dibuang, tag dobel (tanpa melihat huruf besar/kecil)
   // disimpan sekali.
   repeated string tags = 7;
+  // Langkah 26. UNSPECIFIED = PUBLIC.
+  VideoVisibility visibility = 8;
+  // true = "Simpan draf": video tidak terbit otomatis setelah READY.
+  bool draft = 9;
+  // Boleh kosong. Jika diisi: "id", "en", atau "ja".
+  string language = 10;
 }
 
 message CreateUploadResponse {
@@ -485,6 +558,12 @@ message UpdateVideoRequest {
   // "optional": tanpa pembungkus, "tidak dikirim" dan "daftar kosong"
   // terlihat sama.
   TagList tags = 6;
+  // Langkah 26. Tidak dikirim = tidak diubah.
+  optional VideoVisibility visibility = 7;
+  // false = terbitkan draf; true = jadikan draf (sembunyikan lagi).
+  optional bool draft = 8;
+  // "" = hapus bahasa.
+  optional string language = 9;
 }
 
 // TagList membungkus daftar tag supaya bisa dibedakan antara "tidak
@@ -725,6 +804,18 @@ message GetChannelStatsRequest {
   int64 requester_id = 1;
   // Panjang periode dalam hari: 7, 28, atau 90.
   int32 days = 2;
+  // Langkah 26 (halaman Analitik): 0 = seluruh channel, selain itu hanya
+  // video ini. NOT_FOUND jika video tidak ada atau bukan milik requester.
+  int64 video_id = 3;
+}
+
+// TopVideo adalah satu baris tabel "Video terpopuler" di halaman Analitik.
+message TopVideo {
+  int64 video_id = 1;
+  string title = 2;
+  string thumbnail_url = 3;
+  // Tayangan dalam periode ini (bukan sepanjang masa).
+  int64 views = 4;
 }
 
 // DailyViews adalah jumlah tayangan semua video channel pada satu hari.
@@ -753,6 +844,9 @@ message GetChannelStatsResponse {
   google.protobuf.Timestamp previous_start = 4;
   google.protobuf.Timestamp current_start = 5;
   google.protobuf.Timestamp end = 6;
+  // Maksimal 10 video dengan tayangan terbanyak dalam periode ini, hanya
+  // jika video_id = 0. Video yang sudah dihapus tidak ikut.
+  repeated TopVideo top_videos = 7;
 }
 
 message SearchPlaylistsRequest {

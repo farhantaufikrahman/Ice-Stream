@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { errorMessage } from '../api/client'
 import { useAuth } from '../auth/useAuth'
+import { OAuthButtons } from '../components/auth/OAuthButtons'
 import { ErrorBox } from '../components/ErrorBox'
 
 // Aturan isian (panjang username, password, dan lainnya) diperiksa oleh
@@ -60,6 +61,8 @@ export function RegisterPage() {
       <button type="submit" className="btn btn-amber btn-block" disabled={busy}>
         {busy ? 'Memproses…' : 'Buat akun'}
       </button>
+      {/* Akun baru dari Google/GitHub tidak punya kata sandi; tetap bisa masuk lewat penyedia. */}
+      <OAuthButtons next="/" />
       <p className="muted">
         Sudah punya akun? <Link to="/login">Masuk</Link>
       </p>

@@ -37,6 +37,10 @@ type Repository interface {
 	// authorize dipanggil dengan komentar dan id pemilik video; jika
 	// authorize mengembalikan error, tidak ada yang dihapus.
 	Delete(ctx context.Context, videoID, commentID int64, now time.Time, authorize func(c Comment, videoOwnerID int64) error) error
+	// ListByChannel mengambil komentar dan balasan di video milik ownerID
+	// (hanya videoID jika > 0) yang belum dihapus, id terbesar lebih dulu,
+	// hanya yang id-nya lebih kecil dari beforeID (0 = dari yang terbaru).
+	ListByChannel(ctx context.Context, ownerID, videoID, beforeID int64, limit int) ([]ChannelComment, error)
 }
 
 const (
@@ -161,6 +165,32 @@ func (s *Service) DeleteComment(ctx context.Context, requesterID, videoID, comme
 		}
 		return ErrForbidden
 	})
+}
+
+// ListChannelComments mengambil komentar di video milik requesterID untuk
+// Creator Studio. videoID 0 = semua video. Video milik orang lain
+// menghasilkan daftar kosong (bukan error), karena syarat pemilik ada di
+// query.
+func (s *Service) ListChannelComments(ctx context.Context, requesterID, videoID int64, pageSize int, pageToken string) ([]ChannelComment, string, error) {
+	if requesterID <= 0 {
+		return nil, "", errors.New("requester id kosong")
+	}
+	if videoID < 0 {
+		return nil, "", ErrVideoNotFound
+	}
+	limit, cursor, err := parsePage(pageSize, pageToken)
+	if err != nil {
+		return nil, "", err
+	}
+	comments, err := s.repo.ListByChannel(ctx, requesterID, videoID, cursor, limit+1)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(comments) <= limit {
+		return comments, "", nil
+	}
+	comments = comments[:limit]
+	return comments, encodeCursor(comments[limit-1].ID), nil
 }
 
 func (s *Service) checkVideo(ctx context.Context, videoID int64) error {

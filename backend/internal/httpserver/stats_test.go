@@ -35,6 +35,7 @@ func (f *fakeVideoClient) GetChannelStats(_ context.Context, in *videov1.GetChan
 		PreviousStart: timestamppb.New(testPrevStart),
 		CurrentStart:  timestamppb.New(testCurStart),
 		End:           timestamppb.New(testEnd),
+		TopVideos:     []*videov1.TopVideo{{VideoId: 42, Title: "Tes", ThumbnailUrl: "http://media/t.jpg", Views: 3}},
 	}, nil
 }
 
@@ -61,7 +62,9 @@ func TestChannelStats(t *testing.T) {
 		"days": 28,
 		"daily": [{"date":"2026-11-10","views":3},{"date":"2026-11-11","views":0}],
 		"current": {"views":3,"danmaku":2,"comments":1,"new_subscribers":4},
-		"previous": {"views":9,"danmaku":0,"comments":0,"new_subscribers":1}
+		"previous": {"views":9,"danmaku":0,"comments":0,"new_subscribers":1},
+		"video_id": "",
+		"top_videos": [{"video_id":"42","title":"Tes","thumbnail_url":"http://media/t.jpg","views":3}]
 	}`, rec.Body.String())
 	// Periode subscriber sama persis dengan periode dari VideoService.
 	assert.Equal(t, int64(7), users.lastNewSubs.GetChannelId())
@@ -72,6 +75,13 @@ func TestChannelStats(t *testing.T) {
 	rec = do(r, http.MethodGet, "/api/v1/me/channel-stats?days=7", "", as(7))
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, int32(7), fake.lastStats.GetDays())
+
+	// Satu video (langkah 26).
+	rec = do(r, http.MethodGet, "/api/v1/me/channel-stats?video_id=42", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, int64(42), fake.lastStats.GetVideoId())
+	assert.Contains(t, rec.Body.String(), `"video_id":"42"`)
+	assert.Equal(t, http.StatusBadRequest, do(r, http.MethodGet, "/api/v1/me/channel-stats?video_id=-1", "", as(7)).Code)
 
 	t.Run("days bukan angka", func(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, do(r, http.MethodGet, "/api/v1/me/channel-stats?days=abc", "", as(7)).Code)

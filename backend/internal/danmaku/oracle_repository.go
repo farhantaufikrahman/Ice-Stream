@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-// statusReady sama dengan video.StatusReady. Ditulis ulang di sini supaya
-// package danmaku tidak bergantung pada package video.
-const statusReady = "READY"
+// watchableSQL: video boleh ditonton siapa saja yang punya tautannya, sama
+// dengan watchableSQL di package video (langkah 26). Ditulis ulang di sini
+// supaya package danmaku tidak bergantung pada package video. Video draf dan
+// Pribadi tidak bisa diberi komentar atau danmaku, juga oleh pemiliknya.
+const watchableSQL = "status = 'READY' AND draft = 0 AND visibility IN ('PUBLIC', 'UNLISTED')"
 
 // danmakuRow memetakan tabel DANMAKU (schema VIDEO_SVC).
 type danmakuRow struct {
@@ -64,11 +67,11 @@ func NewOracleRepository(db *gorm.DB) *OracleRepository {
 
 var _ Repository = (*OracleRepository)(nil)
 
-// VideoDuration mengambil durasi video READY.
+// VideoDuration mengambil durasi video yang boleh ditonton (watchableSQL).
 func (r *OracleRepository) VideoDuration(ctx context.Context, videoID int64) (int64, error) {
 	var v videoRef
 	err := r.db.WithContext(ctx).Select("id", "duration_ms").
-		Where("id = ? AND status = ?", videoID, statusReady).
+		Where("id = ? AND "+watchableSQL, videoID).
 		Take(&v).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, ErrVideoNotFound
@@ -144,4 +147,87 @@ func (r *OracleRepository) List(ctx context.Context, videoID, fromMs, toMs int64
 		out[i] = row.toDanmaku()
 	}
 	return out, nil
+}
+
+// channelDanmakuRow adalah satu baris hasil ListByChannel.
+type channelDanmakuRow struct {
+	// Field bernama + tag embedded: GORM mengabaikan struct tertanam yang
+	// tidak diekspor (danmakuRow tanpa nama field), sehingga semua kolom
+	// danmaku akan kosong. Lihat https://gorm.io/docs/models.html#Embedded-Struct
+	Row        danmakuRow `gorm:"embedded"`
+	VideoTitle string     `gorm:"column:video_title"`
+}
+
+// ListByChannel:
+//
+//	SELECT d.*, v.title AS video_title
+//	  FROM danmaku d JOIN videos v ON v.id = d.video_id
+//	 WHERE v.owner_id = 7 AND v.deleted_at IS NULL [AND d.video_id = 42] [AND d.id < 900]
+//	 ORDER BY d.id DESC FETCH FIRST 51 ROWS ONLY
+//
+// Sama seperti komentar (package comment): video milik channel dicari
+// lewat videos_owner_id_ix, danmakunya lewat danmaku_video_pos_ix.
+func (r *OracleRepository) ListByChannel(ctx context.Context, ownerID, videoID, beforeID int64, limit int) ([]ChannelDanmaku, error) {
+	sql := `SELECT d.id AS "id", d.video_id AS "video_id", d.user_id AS "user_id", d.position_ms AS "position_ms",
+       d.body AS "body", d.color AS "color", d.display_mode AS "display_mode", d.created_at AS "created_at",
+       v.title AS "video_title"
+  FROM danmaku d JOIN videos v ON v.id = d.video_id
+ WHERE v.owner_id = ? AND v.deleted_at IS NULL`
+	args := []any{ownerID}
+	if videoID > 0 {
+		sql += " AND d.video_id = ?"
+		args = append(args, videoID)
+	}
+	if beforeID > 0 {
+		sql += " AND d.id < ?"
+		args = append(args, beforeID)
+	}
+	sql += " ORDER BY d.id DESC FETCH FIRST ? ROWS ONLY"
+	args = append(args, limit)
+
+	var rows []channelDanmakuRow
+	if err := r.db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("select channel danmaku: %w", err)
+	}
+	out := make([]ChannelDanmaku, len(rows))
+	for i, row := range rows {
+		out[i] = ChannelDanmaku{Danmaku: row.Row.toDanmaku(), VideoTitle: row.VideoTitle}
+	}
+	return out, nil
+}
+
+// Delete mengunci baris danmaku (SELECT ... FOR UPDATE), membaca pemilik
+// videonya, lalu menghapus danmaku dan mengurangi danmaku_count dalam satu
+// transaksi. Dua permintaan hapus yang bersamaan tidak bisa mengurangi
+// jumlahnya dua kali: yang kedua menunggu kunci, lalu tidak menemukan
+// barisnya lagi.
+func (r *OracleRepository) Delete(ctx context.Context, danmakuID int64, authorize func(Danmaku, int64) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row danmakuRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", danmakuID).Take(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("select danmaku for update: %w", err)
+		}
+		var owner struct {
+			OwnerID int64 `gorm:"column:owner_id"`
+		}
+		if err := tx.Table("videos").Select("owner_id").Where("id = ?", row.VideoID).Take(&owner).Error; err != nil {
+			return fmt.Errorf("select video owner: %w", err)
+		}
+		if err := authorize(row.toDanmaku(), owner.OwnerID); err != nil {
+			return err
+		}
+		if err := tx.Delete(&danmakuRow{}, row.ID).Error; err != nil {
+			return fmt.Errorf("delete danmaku: %w", err)
+		}
+		err = tx.Table("videos").Where("id = ?", row.VideoID).
+			UpdateColumn("danmaku_count", gorm.Expr("GREATEST(danmaku_count - 1, 0)")).Error
+		if err != nil {
+			return fmt.Errorf("update danmaku_count: %w", err)
+		}
+		return nil
+	})
 }

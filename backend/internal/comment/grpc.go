@@ -55,6 +55,21 @@ func (s *GRPCServer) DeleteComment(ctx context.Context, req *commentv1.DeleteCom
 	return &commentv1.DeleteCommentResponse{}, nil
 }
 
+func (s *GRPCServer) ListChannelComments(ctx context.Context, req *commentv1.ListChannelCommentsRequest) (*commentv1.ListChannelCommentsResponse, error) {
+	comments, next, err := s.svc.ListChannelComments(ctx, req.GetRequesterId(), req.GetVideoId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &commentv1.ListChannelCommentsResponse{
+		Comments:      make([]*commentv1.ChannelComment, len(comments)),
+		NextPageToken: next,
+	}
+	for i, c := range comments {
+		resp.Comments[i] = &commentv1.ChannelComment{Comment: toProto(c.Comment), VideoTitle: c.VideoTitle}
+	}
+	return resp, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError

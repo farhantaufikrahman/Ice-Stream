@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { Video } from '../api/types'
 import { categoryLabel } from '../lib/categories'
 import { formatCount, formatDuration, timeAgo } from '../lib/format'
+import { videoDate } from '../lib/visibility'
 import { Avatar } from './Avatar'
 import { Thumbnail } from './Thumbnail'
 
@@ -28,7 +29,7 @@ export function VideoCard({ video, hideOwner = false }: { video: Video; hideOwne
             {video.title}
           </span>
           <span className="muted">
-            {hideOwner ? `${formatCount(video.view_count)} tayangan` : ownerName} · {timeAgo(video.created_at)}
+            {hideOwner ? `${formatCount(video.view_count)} tayangan` : ownerName} · {timeAgo(videoDate(video))}
           </span>
         </div>
       </div>

@@ -40,6 +40,17 @@ type DailyViews struct {
 	Views int64
 }
 
+// TopVideo adalah satu baris "Video terpopuler" di halaman Analitik.
+type TopVideo struct {
+	VideoID      int64
+	Title        string
+	ThumbnailKey string // kosong jika video belum READY
+	Views        int64  // tayangan dalam periode ini
+}
+
+// topVideosLimit: jumlah baris tabel "Video terpopuler".
+const topVideosLimit = 10
+
 // ChannelStats adalah isi dasbor channel.
 //
 // Periode ini = [CurrentStart, End), periode sebelumnya =
@@ -52,6 +63,8 @@ type ChannelStats struct {
 	PreviousStart time.Time
 	CurrentStart  time.Time
 	End           time.Time
+	// TopVideos hanya diisi untuk seluruh channel (videoID = 0).
+	TopVideos []TopVideo
 }
 
 // statsWindow menghitung batas periode untuk days hari yang berakhir hari
@@ -67,27 +80,38 @@ func statsWindow(now time.Time, days int) (previousStart, currentStart, end time
 }
 
 // GetChannelStats mengambil statistik semua video milik ownerID untuk days
-// hari terakhir (termasuk hari ini) dan days hari sebelumnya.
+// hari terakhir (termasuk hari ini) dan days hari sebelumnya. videoID > 0
+// membatasi statistik ke satu video milik ownerID (halaman Analitik,
+// langkah 26); video milik orang lain dianggap tidak ada.
 //
 // Video yang sudah dihapus tetap dihitung: tayangan, danmaku, dan komentar
 // yang diterima saat video itu masih ada tetap bagian dari sejarah channel
 // (YouTube Studio juga begitu). Komentar yang dihapus tidak dihitung.
-func (s *Service) GetChannelStats(ctx context.Context, ownerID int64, days int) (ChannelStats, error) {
-	if ownerID <= 0 {
+func (s *Service) GetChannelStats(ctx context.Context, ownerID int64, days int, videoID int64) (ChannelStats, error) {
+	if ownerID <= 0 || videoID < 0 {
 		return ChannelStats{}, ErrNotFound
 	}
 	if !allowedStatsDays[days] {
 		return ChannelStats{}, &ValidationError{"days", "harus 7, 28, atau 90"}
 	}
+	if videoID > 0 {
+		v, err := s.repo.FindByID(ctx, videoID)
+		if err != nil {
+			return ChannelStats{}, err
+		}
+		if v.OwnerID != ownerID {
+			return ChannelStats{}, ErrNotFound
+		}
+	}
 	previousStart, currentStart, end := statsWindow(s.now(), days)
 	// Tanggal terakhir = sehari sebelum end.
 	lastDay := statsDay(end.Add(-time.Nanosecond))
 
-	perDay, err := s.repo.ChannelDailyViews(ctx, ownerID, statsDay(previousStart), lastDay)
+	perDay, err := s.repo.ChannelDailyViews(ctx, ownerID, videoID, statsDay(previousStart), lastDay)
 	if err != nil {
 		return ChannelStats{}, err
 	}
-	current, previous, err := s.repo.ChannelActivity(ctx, ownerID, previousStart, currentStart, end)
+	current, previous, err := s.repo.ChannelActivity(ctx, ownerID, videoID, previousStart, currentStart, end)
 	if err != nil {
 		return ChannelStats{}, err
 	}
@@ -111,6 +135,13 @@ func (s *Service) GetChannelStats(ctx context.Context, ownerID int64, days int) 
 		}
 		out.Current.Views += views
 		out.Daily = append(out.Daily, DailyViews{Date: day, Views: views})
+	}
+	if videoID == 0 {
+		top, err := s.repo.TopVideos(ctx, ownerID, statsDay(currentStart), lastDay, topVideosLimit)
+		if err != nil {
+			return ChannelStats{}, err
+		}
+		out.TopVideos = top
 	}
 	return out, nil
 }

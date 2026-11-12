@@ -55,7 +55,7 @@ func (r *fakeRepo) Search(_ context.Context, terms []string, opts SearchOptions,
 	key := func(h hit) []int64 {
 		switch opts.Sort {
 		case SortNewest:
-			return []int64{h.v.ProcessedAt.UnixMicro(), h.v.ID}
+			return []int64{h.v.PublishedAt.UnixMicro(), h.v.ID}
 		case SortMostViewed:
 			return []int64{h.v.ViewCount, h.v.ID}
 		case SortMostDanmaku:
@@ -224,7 +224,7 @@ func TestSearchVideosValidation(t *testing.T) {
 	assert.ErrorAs(t, err, &verr)
 	_, _, err = svc.SearchVideos(context.Background(), "golang", SearchOptions{}, 51, "")
 	assert.ErrorAs(t, err, &verr)
-	for _, token := range []string{"!!!", encodeRaw("1"), encodeRaw("s0"), encodeRaw("s10"), encodeRaw("sx"), encodeFeedCursor(FeedCursor{ProcessedAt: time.Now(), ID: 1})} {
+	for _, token := range []string{"!!!", encodeRaw("1"), encodeRaw("s0"), encodeRaw("s10"), encodeRaw("sx"), encodeFeedCursor(FeedCursor{PublishedAt: time.Now(), ID: 1})} {
 		_, _, err = svc.SearchVideos(context.Background(), "golang", SearchOptions{}, 0, token)
 		assert.ErrorAs(t, err, &verr, "token %q", token)
 	}

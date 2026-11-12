@@ -56,14 +56,38 @@ func (s *GRPCServer) ListDanmaku(ctx context.Context, req *danmakuv1.ListDanmaku
 	return resp, nil
 }
 
+func (s *GRPCServer) ListChannelDanmaku(ctx context.Context, req *danmakuv1.ListChannelDanmakuRequest) (*danmakuv1.ListChannelDanmakuResponse, error) {
+	items, next, err := s.svc.ListChannelDanmaku(ctx, req.GetRequesterId(), req.GetVideoId(), int(req.GetPageSize()), req.GetPageToken())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	resp := &danmakuv1.ListChannelDanmakuResponse{
+		Danmaku:       make([]*danmakuv1.ChannelDanmaku, len(items)),
+		NextPageToken: next,
+	}
+	for i, d := range items {
+		resp.Danmaku[i] = &danmakuv1.ChannelDanmaku{Danmaku: toProto(d.Danmaku), VideoTitle: d.VideoTitle}
+	}
+	return resp, nil
+}
+
+func (s *GRPCServer) DeleteDanmaku(ctx context.Context, req *danmakuv1.DeleteDanmakuRequest) (*danmakuv1.DeleteDanmakuResponse, error) {
+	if err := s.svc.DeleteDanmaku(ctx, req.GetRequesterId(), req.GetDanmakuId()); err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	return &danmakuv1.DeleteDanmakuResponse{}, nil
+}
+
 // toStatus memetakan error Service ke kode gRPC.
 func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 	var verr *ValidationError
 	switch {
 	case errors.As(err, &verr):
 		return status.Error(codes.InvalidArgument, verr.Error())
-	case errors.Is(err, ErrVideoNotFound):
+	case errors.Is(err, ErrVideoNotFound), errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrForbidden):
+		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, ErrRateLimited):
 		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, context.Canceled):

@@ -90,6 +90,269 @@ func (DanmakuMode) EnumDescriptor() ([]byte, []int) {
 	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{0}
 }
 
+type ListChannelDanmakuRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	// 0 = semua video milik requester.
+	VideoId int64 `protobuf:"varint,2,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	// 0 = default (50). Maksimal 100.
+	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelDanmakuRequest) Reset() {
+	*x = ListChannelDanmakuRequest{}
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelDanmakuRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelDanmakuRequest) ProtoMessage() {}
+
+func (x *ListChannelDanmakuRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelDanmakuRequest.ProtoReflect.Descriptor instead.
+func (*ListChannelDanmakuRequest) Descriptor() ([]byte, []int) {
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ListChannelDanmakuRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *ListChannelDanmakuRequest) GetVideoId() int64 {
+	if x != nil {
+		return x.VideoId
+	}
+	return 0
+}
+
+func (x *ListChannelDanmakuRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListChannelDanmakuRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ChannelDanmaku adalah danmaku beserta judul videonya.
+type ChannelDanmaku struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Danmaku       *Danmaku               `protobuf:"bytes,1,opt,name=danmaku,proto3" json:"danmaku,omitempty"`
+	VideoTitle    string                 `protobuf:"bytes,2,opt,name=video_title,json=videoTitle,proto3" json:"video_title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChannelDanmaku) Reset() {
+	*x = ChannelDanmaku{}
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChannelDanmaku) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChannelDanmaku) ProtoMessage() {}
+
+func (x *ChannelDanmaku) ProtoReflect() protoreflect.Message {
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChannelDanmaku.ProtoReflect.Descriptor instead.
+func (*ChannelDanmaku) Descriptor() ([]byte, []int) {
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ChannelDanmaku) GetDanmaku() *Danmaku {
+	if x != nil {
+		return x.Danmaku
+	}
+	return nil
+}
+
+func (x *ChannelDanmaku) GetVideoTitle() string {
+	if x != nil {
+		return x.VideoTitle
+	}
+	return ""
+}
+
+type ListChannelDanmakuResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Danmaku       []*ChannelDanmaku      `protobuf:"bytes,1,rep,name=danmaku,proto3" json:"danmaku,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChannelDanmakuResponse) Reset() {
+	*x = ListChannelDanmakuResponse{}
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChannelDanmakuResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChannelDanmakuResponse) ProtoMessage() {}
+
+func (x *ListChannelDanmakuResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChannelDanmakuResponse.ProtoReflect.Descriptor instead.
+func (*ListChannelDanmakuResponse) Descriptor() ([]byte, []int) {
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListChannelDanmakuResponse) GetDanmaku() []*ChannelDanmaku {
+	if x != nil {
+		return x.Danmaku
+	}
+	return nil
+}
+
+func (x *ListChannelDanmakuResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type DeleteDanmakuRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequesterId   int64                  `protobuf:"varint,1,opt,name=requester_id,json=requesterId,proto3" json:"requester_id,omitempty"`
+	DanmakuId     int64                  `protobuf:"varint,2,opt,name=danmaku_id,json=danmakuId,proto3" json:"danmaku_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDanmakuRequest) Reset() {
+	*x = DeleteDanmakuRequest{}
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDanmakuRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDanmakuRequest) ProtoMessage() {}
+
+func (x *DeleteDanmakuRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDanmakuRequest.ProtoReflect.Descriptor instead.
+func (*DeleteDanmakuRequest) Descriptor() ([]byte, []int) {
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DeleteDanmakuRequest) GetRequesterId() int64 {
+	if x != nil {
+		return x.RequesterId
+	}
+	return 0
+}
+
+func (x *DeleteDanmakuRequest) GetDanmakuId() int64 {
+	if x != nil {
+		return x.DanmakuId
+	}
+	return 0
+}
+
+type DeleteDanmakuResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDanmakuResponse) Reset() {
+	*x = DeleteDanmakuResponse{}
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDanmakuResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDanmakuResponse) ProtoMessage() {}
+
+func (x *DeleteDanmakuResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDanmakuResponse.ProtoReflect.Descriptor instead.
+func (*DeleteDanmakuResponse) Descriptor() ([]byte, []int) {
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{4}
+}
+
 type Danmaku struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Id      int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -109,7 +372,7 @@ type Danmaku struct {
 
 func (x *Danmaku) Reset() {
 	*x = Danmaku{}
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[0]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +384,7 @@ func (x *Danmaku) String() string {
 func (*Danmaku) ProtoMessage() {}
 
 func (x *Danmaku) ProtoReflect() protoreflect.Message {
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[0]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,7 +397,7 @@ func (x *Danmaku) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Danmaku.ProtoReflect.Descriptor instead.
 func (*Danmaku) Descriptor() ([]byte, []int) {
-	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{0}
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Danmaku) GetId() int64 {
@@ -210,7 +473,7 @@ type SendDanmakuRequest struct {
 
 func (x *SendDanmakuRequest) Reset() {
 	*x = SendDanmakuRequest{}
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[1]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +485,7 @@ func (x *SendDanmakuRequest) String() string {
 func (*SendDanmakuRequest) ProtoMessage() {}
 
 func (x *SendDanmakuRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[1]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +498,7 @@ func (x *SendDanmakuRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendDanmakuRequest.ProtoReflect.Descriptor instead.
 func (*SendDanmakuRequest) Descriptor() ([]byte, []int) {
-	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{1}
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SendDanmakuRequest) GetRequesterId() int64 {
@@ -289,7 +552,7 @@ type SendDanmakuResponse struct {
 
 func (x *SendDanmakuResponse) Reset() {
 	*x = SendDanmakuResponse{}
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[2]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +564,7 @@ func (x *SendDanmakuResponse) String() string {
 func (*SendDanmakuResponse) ProtoMessage() {}
 
 func (x *SendDanmakuResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[2]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +577,7 @@ func (x *SendDanmakuResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendDanmakuResponse.ProtoReflect.Descriptor instead.
 func (*SendDanmakuResponse) Descriptor() ([]byte, []int) {
-	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{2}
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SendDanmakuResponse) GetDanmaku() *Danmaku {
@@ -341,7 +604,7 @@ type ListDanmakuRequest struct {
 
 func (x *ListDanmakuRequest) Reset() {
 	*x = ListDanmakuRequest{}
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[3]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -353,7 +616,7 @@ func (x *ListDanmakuRequest) String() string {
 func (*ListDanmakuRequest) ProtoMessage() {}
 
 func (x *ListDanmakuRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[3]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,7 +629,7 @@ func (x *ListDanmakuRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDanmakuRequest.ProtoReflect.Descriptor instead.
 func (*ListDanmakuRequest) Descriptor() ([]byte, []int) {
-	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{3}
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListDanmakuRequest) GetVideoId() int64 {
@@ -415,7 +678,7 @@ type ListDanmakuResponse struct {
 
 func (x *ListDanmakuResponse) Reset() {
 	*x = ListDanmakuResponse{}
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[4]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -427,7 +690,7 @@ func (x *ListDanmakuResponse) String() string {
 func (*ListDanmakuResponse) ProtoMessage() {}
 
 func (x *ListDanmakuResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_danmaku_v1_danmaku_proto_msgTypes[4]
+	mi := &file_danmaku_v1_danmaku_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -440,7 +703,7 @@ func (x *ListDanmakuResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDanmakuResponse.ProtoReflect.Descriptor instead.
 func (*ListDanmakuResponse) Descriptor() ([]byte, []int) {
-	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{4}
+	return file_danmaku_v1_danmaku_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListDanmakuResponse) GetDanmaku() []*Danmaku {
@@ -462,7 +725,25 @@ var File_danmaku_v1_danmaku_proto protoreflect.FileDescriptor
 const file_danmaku_v1_danmaku_proto_rawDesc = "" +
 	"\n" +
 	"\x18danmaku/v1/danmaku.proto\x12\n" +
-	"danmaku.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x80\x02\n" +
+	"danmaku.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x95\x01\n" +
+	"\x19ListChannelDanmakuRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x19\n" +
+	"\bvideo_id\x18\x02 \x01(\x03R\avideoId\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"`\n" +
+	"\x0eChannelDanmaku\x12-\n" +
+	"\adanmaku\x18\x01 \x01(\v2\x13.danmaku.v1.DanmakuR\adanmaku\x12\x1f\n" +
+	"\vvideo_title\x18\x02 \x01(\tR\n" +
+	"videoTitle\"z\n" +
+	"\x1aListChannelDanmakuResponse\x124\n" +
+	"\adanmaku\x18\x01 \x03(\v2\x1a.danmaku.v1.ChannelDanmakuR\adanmaku\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"X\n" +
+	"\x14DeleteDanmakuRequest\x12!\n" +
+	"\frequester_id\x18\x01 \x01(\x03R\vrequesterId\x12\x1d\n" +
+	"\n" +
+	"danmaku_id\x18\x02 \x01(\x03R\tdanmakuId\"\x17\n" +
+	"\x15DeleteDanmakuResponse\"\x80\x02\n" +
 	"\aDanmaku\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bvideo_id\x18\x02 \x01(\x03R\avideoId\x12\x17\n" +
@@ -499,10 +780,12 @@ const file_danmaku_v1_danmaku_proto_rawDesc = "" +
 	"\x18DANMAKU_MODE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13DANMAKU_MODE_SCROLL\x10\x01\x12\x14\n" +
 	"\x10DANMAKU_MODE_TOP\x10\x02\x12\x17\n" +
-	"\x13DANMAKU_MODE_BOTTOM\x10\x032\xb0\x01\n" +
+	"\x13DANMAKU_MODE_BOTTOM\x10\x032\xeb\x02\n" +
 	"\x0eDanmakuService\x12N\n" +
 	"\vSendDanmaku\x12\x1e.danmaku.v1.SendDanmakuRequest\x1a\x1f.danmaku.v1.SendDanmakuResponse\x12N\n" +
-	"\vListDanmaku\x12\x1e.danmaku.v1.ListDanmakuRequest\x1a\x1f.danmaku.v1.ListDanmakuResponseB\xb2\x01\n" +
+	"\vListDanmaku\x12\x1e.danmaku.v1.ListDanmakuRequest\x1a\x1f.danmaku.v1.ListDanmakuResponse\x12c\n" +
+	"\x12ListChannelDanmaku\x12%.danmaku.v1.ListChannelDanmakuRequest\x1a&.danmaku.v1.ListChannelDanmakuResponse\x12T\n" +
+	"\rDeleteDanmaku\x12 .danmaku.v1.DeleteDanmakuRequest\x1a!.danmaku.v1.DeleteDanmakuResponseB\xb2\x01\n" +
 	"\x0ecom.danmaku.v1B\fDanmakuProtoP\x01ZIgithub.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1;danmakuv1\xa2\x02\x03DXX\xaa\x02\n" +
 	"Danmaku.V1\xca\x02\n" +
 	"Danmaku\\V1\xe2\x02\x16Danmaku\\V1\\GPBMetadata\xea\x02\vDanmaku::V1b\x06proto3"
@@ -520,31 +803,42 @@ func file_danmaku_v1_danmaku_proto_rawDescGZIP() []byte {
 }
 
 var file_danmaku_v1_danmaku_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_danmaku_v1_danmaku_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_danmaku_v1_danmaku_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_danmaku_v1_danmaku_proto_goTypes = []any{
-	(DanmakuMode)(0),              // 0: danmaku.v1.DanmakuMode
-	(*Danmaku)(nil),               // 1: danmaku.v1.Danmaku
-	(*SendDanmakuRequest)(nil),    // 2: danmaku.v1.SendDanmakuRequest
-	(*SendDanmakuResponse)(nil),   // 3: danmaku.v1.SendDanmakuResponse
-	(*ListDanmakuRequest)(nil),    // 4: danmaku.v1.ListDanmakuRequest
-	(*ListDanmakuResponse)(nil),   // 5: danmaku.v1.ListDanmakuResponse
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(DanmakuMode)(0),                   // 0: danmaku.v1.DanmakuMode
+	(*ListChannelDanmakuRequest)(nil),  // 1: danmaku.v1.ListChannelDanmakuRequest
+	(*ChannelDanmaku)(nil),             // 2: danmaku.v1.ChannelDanmaku
+	(*ListChannelDanmakuResponse)(nil), // 3: danmaku.v1.ListChannelDanmakuResponse
+	(*DeleteDanmakuRequest)(nil),       // 4: danmaku.v1.DeleteDanmakuRequest
+	(*DeleteDanmakuResponse)(nil),      // 5: danmaku.v1.DeleteDanmakuResponse
+	(*Danmaku)(nil),                    // 6: danmaku.v1.Danmaku
+	(*SendDanmakuRequest)(nil),         // 7: danmaku.v1.SendDanmakuRequest
+	(*SendDanmakuResponse)(nil),        // 8: danmaku.v1.SendDanmakuResponse
+	(*ListDanmakuRequest)(nil),         // 9: danmaku.v1.ListDanmakuRequest
+	(*ListDanmakuResponse)(nil),        // 10: danmaku.v1.ListDanmakuResponse
+	(*timestamppb.Timestamp)(nil),      // 11: google.protobuf.Timestamp
 }
 var file_danmaku_v1_danmaku_proto_depIdxs = []int32{
-	0, // 0: danmaku.v1.Danmaku.mode:type_name -> danmaku.v1.DanmakuMode
-	6, // 1: danmaku.v1.Danmaku.created_at:type_name -> google.protobuf.Timestamp
-	0, // 2: danmaku.v1.SendDanmakuRequest.mode:type_name -> danmaku.v1.DanmakuMode
-	1, // 3: danmaku.v1.SendDanmakuResponse.danmaku:type_name -> danmaku.v1.Danmaku
-	1, // 4: danmaku.v1.ListDanmakuResponse.danmaku:type_name -> danmaku.v1.Danmaku
-	2, // 5: danmaku.v1.DanmakuService.SendDanmaku:input_type -> danmaku.v1.SendDanmakuRequest
-	4, // 6: danmaku.v1.DanmakuService.ListDanmaku:input_type -> danmaku.v1.ListDanmakuRequest
-	3, // 7: danmaku.v1.DanmakuService.SendDanmaku:output_type -> danmaku.v1.SendDanmakuResponse
-	5, // 8: danmaku.v1.DanmakuService.ListDanmaku:output_type -> danmaku.v1.ListDanmakuResponse
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6,  // 0: danmaku.v1.ChannelDanmaku.danmaku:type_name -> danmaku.v1.Danmaku
+	2,  // 1: danmaku.v1.ListChannelDanmakuResponse.danmaku:type_name -> danmaku.v1.ChannelDanmaku
+	0,  // 2: danmaku.v1.Danmaku.mode:type_name -> danmaku.v1.DanmakuMode
+	11, // 3: danmaku.v1.Danmaku.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 4: danmaku.v1.SendDanmakuRequest.mode:type_name -> danmaku.v1.DanmakuMode
+	6,  // 5: danmaku.v1.SendDanmakuResponse.danmaku:type_name -> danmaku.v1.Danmaku
+	6,  // 6: danmaku.v1.ListDanmakuResponse.danmaku:type_name -> danmaku.v1.Danmaku
+	7,  // 7: danmaku.v1.DanmakuService.SendDanmaku:input_type -> danmaku.v1.SendDanmakuRequest
+	9,  // 8: danmaku.v1.DanmakuService.ListDanmaku:input_type -> danmaku.v1.ListDanmakuRequest
+	1,  // 9: danmaku.v1.DanmakuService.ListChannelDanmaku:input_type -> danmaku.v1.ListChannelDanmakuRequest
+	4,  // 10: danmaku.v1.DanmakuService.DeleteDanmaku:input_type -> danmaku.v1.DeleteDanmakuRequest
+	8,  // 11: danmaku.v1.DanmakuService.SendDanmaku:output_type -> danmaku.v1.SendDanmakuResponse
+	10, // 12: danmaku.v1.DanmakuService.ListDanmaku:output_type -> danmaku.v1.ListDanmakuResponse
+	3,  // 13: danmaku.v1.DanmakuService.ListChannelDanmaku:output_type -> danmaku.v1.ListChannelDanmakuResponse
+	5,  // 14: danmaku.v1.DanmakuService.DeleteDanmaku:output_type -> danmaku.v1.DeleteDanmakuResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_danmaku_v1_danmaku_proto_init() }
@@ -552,14 +846,14 @@ func file_danmaku_v1_danmaku_proto_init() {
 	if File_danmaku_v1_danmaku_proto != nil {
 		return
 	}
-	file_danmaku_v1_danmaku_proto_msgTypes[1].OneofWrappers = []any{}
+	file_danmaku_v1_danmaku_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_danmaku_v1_danmaku_proto_rawDesc), len(file_danmaku_v1_danmaku_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

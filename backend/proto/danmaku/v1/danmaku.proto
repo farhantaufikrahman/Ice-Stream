@@ -25,7 +25,42 @@ service DanmakuService {
   // ListDanmaku mengambil danmaku dalam satu rentang waktu video, urut dari
   // posisi paling awal. Boleh dipanggil tanpa login.
   rpc ListDanmaku(ListDanmakuRequest) returns (ListDanmakuResponse);
+  // ListChannelDanmaku mengambil danmaku di semua video milik requester
+  // (atau satu video jika video_id diisi), terbaru lebih dulu. Untuk
+  // halaman Danmaku di Creator Studio (langkah 26).
+  rpc ListChannelDanmaku(ListChannelDanmakuRequest) returns (ListChannelDanmakuResponse);
+  // DeleteDanmaku menghapus satu danmaku. Yang boleh: pengirimnya, atau
+  // pemilik video (moderasi channel). NOT_FOUND jika danmaku tidak ada,
+  // PERMISSION_DENIED jika requester bukan keduanya.
+  rpc DeleteDanmaku(DeleteDanmakuRequest) returns (DeleteDanmakuResponse);
 }
+
+message ListChannelDanmakuRequest {
+  int64 requester_id = 1;
+  // 0 = semua video milik requester.
+  int64 video_id = 2;
+  // 0 = default (50). Maksimal 100.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// ChannelDanmaku adalah danmaku beserta judul videonya.
+message ChannelDanmaku {
+  Danmaku danmaku = 1;
+  string video_title = 2;
+}
+
+message ListChannelDanmakuResponse {
+  repeated ChannelDanmaku danmaku = 1;
+  string next_page_token = 2;
+}
+
+message DeleteDanmakuRequest {
+  int64 requester_id = 1;
+  int64 danmaku_id = 2;
+}
+
+message DeleteDanmakuResponse {}
 
 enum DanmakuMode {
   DANMAKU_MODE_UNSPECIFIED = 0;

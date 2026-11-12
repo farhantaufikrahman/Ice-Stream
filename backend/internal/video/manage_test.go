@@ -23,6 +23,10 @@ func (r *fakeRepo) UpdateDetails(_ context.Context, id, ownerID int64, d Details
 		return Video{}, ErrNotFound
 	}
 	v.Title, v.Description, v.Category, v.Tags = d.Title, d.Description, d.Category, d.Tags
+	v.Visibility, v.Draft, v.Language = d.Visibility, d.Draft, d.Language
+	if !v.Draft && v.Status == StatusReady && v.PublishedAt == nil {
+		v.PublishedAt = &now
+	}
 	r.videos[id] = v
 	r.terms[id] = terms
 	return v, nil
@@ -82,6 +86,31 @@ func (s *fakeStore) DeletePrefix(_ context.Context, prefix string) (int, error) 
 		}
 	}
 	return n, nil
+}
+
+func (r *fakeRepo) SetThumbnailKey(_ context.Context, id, ownerID int64, key string, _ time.Time) (Video, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v, ok := r.videos[id]
+	if !ok || v.OwnerID != ownerID {
+		return Video{}, ErrNotFound
+	}
+	v.ThumbnailKey = key
+	r.videos[id] = v
+	return v, nil
+}
+
+func (s *fakeStore) Put(_ context.Context, key, _ string, data []byte) error {
+	if s.objects == nil {
+		s.objects = map[string]ObjectInfo{}
+	}
+	s.objects[key] = ObjectInfo{Size: int64(len(data)), ContentType: "image/jpeg"}
+	return nil
+}
+
+func (s *fakeStore) Delete(_ context.Context, key string) error {
+	delete(s.objects, key)
+	return nil
 }
 
 func ptr(s string) *string { return &s }

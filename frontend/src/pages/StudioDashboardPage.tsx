@@ -8,11 +8,13 @@ import { Avatar } from '../components/Avatar'
 import { ErrorBox } from '../components/ErrorBox'
 import { StatusChip } from '../components/studio/StatusChip'
 import { StudioLayout } from '../components/studio/StudioLayout'
+import { StatsKpis } from '../components/studio/StatsKpis'
 import { ViewsChart } from '../components/studio/ViewsChart'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { Thumbnail } from '../components/Thumbnail'
-import { compareWithPrevious, formatNumber, formatPeriod } from '../lib/channelStats'
+import { formatPeriod } from '../lib/channelStats'
 import { formatCount, formatDate } from '../lib/format'
+import { videoDate } from '../lib/visibility'
 
 const RANGES: StatsDays[] = [7, 28, 90]
 const DEFAULT_DAYS: StatsDays = 28
@@ -117,7 +119,7 @@ export function StudioDashboardPage() {
         <p className="muted">Memuat statistik…</p>
       ) : (
         <>
-          <Kpis stats={currentStats.data} />
+          <StatsKpis stats={currentStats.data} />
           <ViewsChart daily={currentStats.data.daily} />
         </>
       )}
@@ -145,34 +147,6 @@ export function StudioDashboardPage() {
         )}
       </section>
     </StudioLayout>
-  )
-}
-
-function Kpis({ stats }: { stats: ChannelStats }) {
-  const { current: c, previous: p } = stats
-  const cards: { label: string; value: number | null; previous: number | null }[] = [
-    { label: 'Tayangan', value: c.views, previous: p.views },
-    { label: 'Pengikut baru', value: c.new_subscribers, previous: p.new_subscribers },
-    { label: 'Danmaku diterima', value: c.danmaku, previous: p.danmaku },
-    { label: 'Komentar diterima', value: c.comments, previous: p.comments },
-  ]
-  return (
-    <div className="kpi-grid">
-      {cards.map((k) => {
-        const delta = k.value !== null && k.previous !== null ? compareWithPrevious(k.value, k.previous) : null
-        return (
-          <div key={k.label} className="kpi">
-            <span className="kpi-label">{k.label}</span>
-            <span className="kpi-value">{k.value === null ? '—' : formatNumber(k.value)}</span>
-            {delta ? (
-              <span className={`kpi-delta is-${delta.tone}`}>{delta.label}</span>
-            ) : (
-              <span className="kpi-delta is-flat">Sedang tidak bisa dimuat</span>
-            )}
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -219,7 +193,7 @@ function RecentTable({ videos }: { videos: Video[] }) {
                 <td>
                   <StatusChip status={v.status} />
                 </td>
-                <td className="nowrap muted">{formatDate(v.created_at)}</td>
+                <td className="nowrap muted">{formatDate(videoDate(v))}</td>
                 <td className="num">{ready ? formatCount(v.view_count) : '—'}</td>
                 <td className="num">{ready ? formatCount(v.like_count) : '—'}</td>
                 <td className="num">{ready ? formatCount(v.comment_count) : '—'}</td>

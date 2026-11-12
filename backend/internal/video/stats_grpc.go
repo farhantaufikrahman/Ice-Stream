@@ -10,7 +10,7 @@ import (
 
 // GetChannelStats: handler gRPC untuk dasbor Creator Studio (stats.go).
 func (s *GRPCServer) GetChannelStats(ctx context.Context, req *videov1.GetChannelStatsRequest) (*videov1.GetChannelStatsResponse, error) {
-	st, err := s.svc.GetChannelStats(ctx, req.GetRequesterId(), int(req.GetDays()))
+	st, err := s.svc.GetChannelStats(ctx, req.GetRequesterId(), int(req.GetDays()), req.GetVideoId())
 	if err != nil {
 		return nil, s.toStatus(ctx, err)
 	}
@@ -24,6 +24,14 @@ func (s *GRPCServer) GetChannelStats(ctx context.Context, req *videov1.GetChanne
 	}
 	for i, d := range st.Daily {
 		resp.Daily[i] = &videov1.DailyViews{Date: d.Date, Views: d.Views}
+	}
+	for _, v := range st.TopVideos {
+		resp.TopVideos = append(resp.TopVideos, &videov1.TopVideo{
+			VideoId:      v.VideoID,
+			Title:        v.Title,
+			ThumbnailUrl: s.svc.MediaURL(v.ThumbnailKey),
+			Views:        v.Views,
+		})
 	}
 	return resp, nil
 }
