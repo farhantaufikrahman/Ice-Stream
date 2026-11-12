@@ -43,6 +43,7 @@ type fakeVideoClient struct {
 	lastUpdate   *videov1.UpdateVideoRequest
 	lastDeleteV  *videov1.DeleteVideoRequest
 	lastTrending *videov1.ListTrendingVideosRequest
+	lastReport   *videov1.ReportVideoRequest
 	// notif berisi request notifikasi terakhir (notification_test.go).
 	notif fakeNotifications
 	// later berisi request Tonton nanti terakhir (watchlater_test.go).

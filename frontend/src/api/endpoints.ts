@@ -36,6 +36,7 @@ import type {
   WatchLaterResult,
 } from './types'
 import type { ChannelSort, DurationFilter, SearchSort } from '../lib/discover'
+import type { ReportReason } from '../lib/report'
 
 // ---------- Auth ----------
 
@@ -293,6 +294,15 @@ export function listTrending(category: string, limit: number, signal?: AbortSign
   const params = new URLSearchParams({ limit: String(limit) })
   if (category) params.set('category', category)
   return apiRequest<TrendingList>(`/trending/videos?${params}`, { signal })
+}
+
+/** Laporkan video (langkah 24b). Mengirim lagi mengganti laporan sebelumnya. */
+export function reportVideo(id: string, reason: ReportReason, details: string): Promise<{ reported_at: string }> {
+  return apiRequest<{ reported_at: string }>(`/videos/${encodeURIComponent(id)}/reports`, {
+    method: 'POST',
+    body: { reason, details },
+    auth: 'required',
+  })
 }
 
 /** Ikuti (true) atau berhenti mengikuti (false) sebuah kanal. Aman diulang. */

@@ -16,11 +16,14 @@ import { DanmakuComposer } from '../components/watch/DanmakuComposer'
 import { DanmakuLayer, type DanmakuLayerHandle } from '../components/watch/DanmakuLayer'
 import { DanmakuList } from '../components/watch/DanmakuList'
 import { PlaylistPanel } from '../components/watch/PlaylistPanel'
+import { ReportDialog } from '../components/watch/ReportDialog'
 import { SaveButton } from '../components/watch/SaveButton'
+import { ShareDialog } from '../components/watch/ShareDialog'
 import { useChannel } from '../hooks/useChannel'
 import { useDanmaku } from '../hooks/useDanmaku'
 import { usePlaylistQueue, type PlaylistQueue } from '../hooks/usePlaylistQueue'
 import { watchInListPath } from '../lib/playlistQueue'
+import { parseStartParam } from '../lib/share'
 
 /** Jumlah video di kolom "Berikutnya". */
 const UP_NEXT_COUNT = 8
@@ -211,7 +214,13 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
 
   // Server sudah memutuskan posisi lanjut (langkah 13): 0 jika baru
   // menonton kurang dari 5 detik atau tinggal kurang dari 10 detik lagi.
-  const startAt = (detail.resume_position_ms ?? 0) / 1000
+  // Tautan dari tombol Bagikan (?t=83) menang atas posisi terakhir
+  // menonton. Waktu di luar panjang video diabaikan.
+  const linkStart = parseStartParam(new URLSearchParams(location.search).get('t'))
+  const fromLink = linkStart > 0 && (!video.duration_ms || linkStart * 1000 < video.duration_ms)
+  const startAt = fromLink ? linkStart : (detail.resume_position_ms ?? 0) / 1000
+  const [dialog, setDialog] = useState<null | { kind: 'share'; seconds: number } | { kind: 'report' }>(null)
+  const isOwnVideo = user?.id === video.owner_id
 
   const onFirstPlay = useCallback(() => {
     // Server menghitung satu view per penonton per 30 menit (langkah 10).
@@ -317,7 +326,7 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
             <span>{formatCount(views)} tayangan</span>
             <span>{formatCount(video.danmaku_count + newDanmakuIds.size)} danmaku</span>
             <span>Diunggah {formatDate(video.created_at)}</span>
-            {startAt > 0 && <span className="accent">Melanjutkan dari posisi terakhir</span>}
+            {startAt > 0 && !fromLink && <span className="accent">Melanjutkan dari posisi terakhir</span>}
           </div>
           <VideoTags category={video.category} tags={video.tags} />
         </div>
@@ -345,7 +354,32 @@ function WatchView({ detail, loggedIn, user, playlist }: WatchViewProps) {
             loggedIn={loggedIn}
             disabled={video.status !== 'READY'}
           />
+          <button
+            type="button"
+            className="btn btn-like"
+            onClick={() => setDialog({ kind: 'share', seconds: videoRef.current?.currentTime ?? 0 })}
+            disabled={video.status !== 'READY'}
+            aria-haspopup="dialog"
+          >
+            <ShareIcon /> Bagikan
+          </button>
+          {/* Pemilik tidak bisa melaporkan videonya sendiri (server juga menolak). */}
+          {!isOwnVideo &&
+            video.status === 'READY' &&
+            (loggedIn ? (
+              <button type="button" className="btn btn-ghost-muted" onClick={() => setDialog({ kind: 'report' })} aria-haspopup="dialog">
+                Laporkan
+              </button>
+            ) : (
+              <Link to={loginLink} className="btn btn-ghost-muted" title="Masuk untuk melaporkan video">
+                Laporkan
+              </Link>
+            ))}
         </div>
+        {dialog?.kind === 'share' && (
+          <ShareDialog videoId={video.id} title={video.title} currentSeconds={dialog.seconds} onClose={() => setDialog(null)} />
+        )}
+        {dialog?.kind === 'report' && <ReportDialog videoId={video.id} title={video.title} onClose={() => setDialog(null)} />}
         {likeError && <ErrorBox message={likeError} />}
 
         <section className="channel-card">
@@ -476,6 +510,18 @@ function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+    </svg>
+  )
+}
+
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />
+      <line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
     </svg>
   )
 }

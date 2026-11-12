@@ -128,6 +128,10 @@ type Repository interface {
 	// added_at lalu video_id terbesar lebih dulu, hanya yang posisinya
 	// setelah after (nil = dari awal).
 	ListWatchLater(ctx context.Context, userID int64, after *WatchLaterCursor, limit int) ([]WatchLaterEntry, error)
+	// SaveReport menyimpan laporan (langkah 24b). Jika user itu sudah pernah
+	// melaporkan video yang sama, alasan, keterangan, dan waktunya diganti,
+	// dan statusnya kembali OPEN.
+	SaveReport(ctx context.Context, r Report) error
 
 	// Playlist (playlist_repository.go).
 
