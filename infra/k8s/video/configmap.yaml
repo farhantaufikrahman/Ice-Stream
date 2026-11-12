@@ -41,3 +41,15 @@ data:
   MAX_UPLOAD_MB: "2048"
   UPLOAD_URL_TTL: 15m
   PLAYBACK_URL_TTL: 1h
+  # Siaran langsung (langkah 25a). VideoService membaca daftar stream dari
+  # Control API MediaMTX setiap 5 detik, dan MediaMTX bertanya ke port 8090
+  # setiap kali OBS mulai siaran (lihat live/configmap.yaml).
+  MEDIAMTX_API_URL: http://mediamtx:9997
+  LIVE_HOOK_PORT: "8090"
+  # Diisi kreator di kolom "Server" OBS (Service mediamtx-rtmp, port 1935
+  # di localhost).
+  LIVE_INGEST_URL: rtmp://localhost:1935/live
+  # Alamat HLS untuk penonton (live/httproute.yaml).
+  LIVE_PLAYBACK_URL: http://live.ice-stream.localhost:4000
+  LIVE_POLL_INTERVAL: 5s
+  LIVE_GRACE: 15s

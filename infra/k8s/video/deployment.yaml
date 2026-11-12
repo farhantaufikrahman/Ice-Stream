@@ -33,6 +33,9 @@ spec:
           ports:
             - name: grpc
               containerPort: 50052
+            # Hook auth MediaMTX ("boleh siaran?"), langkah 25a.
+            - name: live-hook
+              containerPort: 8090
           envFrom:
             - configMapRef:
                 name: video-config

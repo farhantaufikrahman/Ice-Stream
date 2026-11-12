@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +21,7 @@ import (
 
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
+	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/comment"
@@ -28,6 +30,7 @@ import (
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/gormdb"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/grpcserver"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/livestream"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/video"
 )
 
@@ -159,6 +162,38 @@ func run(logger *slog.Logger) error {
 	danmakus := danmaku.NewService(danmaku.NewOracleRepository(db), danmaku.NewNATSPublisher(nc), logger)
 	danmakuv1.RegisterDanmakuServiceServer(srv, danmaku.NewGRPCServer(danmakus, logger))
 
+	// LiveService (langkah 25a): stream key dan status siaran. Videonya
+	// sendiri diurus MediaMTX; di sini hanya hook auth dan pembacaan status.
+	lives := livestream.NewService(livestream.NewOracleRepository(db), livestream.Options{
+		IngestURL:       cfg.Live.IngestURL,
+		PlaybackBaseURL: cfg.Live.PlaybackURL,
+		Grace:           cfg.Live.Grace,
+	})
+	livev1.RegisterLiveServiceServer(srv, livestream.NewGRPCServer(lives, logger))
+	hookSrv := &http.Server{
+		Addr:              cfg.Live.HookAddr,
+		Handler:           livestream.HookHandler(lives, logger),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+	}
+	go func() {
+		if err := hookSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server hook MediaMTX berhenti", slog.Any("error", err))
+		}
+	}()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		_ = hookSrv.Shutdown(shutdownCtx)
+	}()
+	go livestream.Syncer{
+		Source:   livestream.MediaMTXClient{BaseURL: cfg.Live.MediaMTXAPIURL, HTTP: &http.Client{Timeout: cfg.Live.PollInterval}},
+		Service:  lives,
+		Interval: cfg.Live.PollInterval,
+		Logger:   logger,
+	}.Run(ctx)
+
 	healthSrv := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthSrv)
 	go grpcserver.WatchHealth(ctx, healthSrv, videov1.VideoService_ServiceDesc.ServiceName, []grpcserver.Check{
@@ -177,6 +212,8 @@ func run(logger *slog.Logger) error {
 		slog.String("media_url", cfg.MediaPublicURL),
 		slog.String("view_dedup_window", cfg.ViewDedupWindow.String()),
 		slog.String("auth_addr", cfg.AuthGRPCAddr),
+		slog.String("mediamtx_api", cfg.Live.MediaMTXAPIURL),
+		slog.String("live_hook_addr", cfg.Live.HookAddr),
 	)
 	return grpcserver.Serve(ctx, srv, healthSrv, cfg.GRPCAddr, cfg.ShutdownTimeout, logger)
 }

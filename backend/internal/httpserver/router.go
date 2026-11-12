@@ -14,6 +14,7 @@ import (
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
+	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
@@ -42,6 +43,9 @@ type Deps struct {
 	// Danmaku adalah klien gRPC ke DanmakuService (berjalan di proses
 	// VideoService).
 	Danmaku danmakuv1.DanmakuServiceClient
+	// LiveStreams adalah klien gRPC ke LiveService (siaran langsung,
+	// berjalan di proses VideoService).
+	LiveStreams livev1.LiveServiceClient
 	// Live membagikan danmaku baru ke penonton yang tersambung (SSE).
 	// Boleh nil di test.
 	Live *live.Hub
@@ -137,6 +141,15 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	videoGroup.GET("/:id/danmaku", danmaku.list)
 	videoGroup.POST("/:id/danmaku", requireAuth, danmaku.send)
 	videoGroup.GET("/:id/danmaku/live", danmaku.live)
+
+	// Siaran langsung (langkah 25a).
+	lives := &liveHandler{client: deps.LiveStreams, users: deps.Users, logger: logger}
+	v1.GET("/live", lives.list)
+	v1.GET("/live/:id", lives.get)
+	meLive := v1.Group("/me/live", requireAuth, limitBody(maxLiveBodyBytes))
+	meLive.GET("", lives.myChannel)
+	meLive.PATCH("", lives.updateMyChannel)
+	meLive.POST("/stream-key", lives.resetStreamKey)
 
 	notifications := &notificationHandler{videos: deps.Videos, users: deps.Users, logger: logger}
 	v1.GET("/me/notifications", requireAuth, notifications.list)

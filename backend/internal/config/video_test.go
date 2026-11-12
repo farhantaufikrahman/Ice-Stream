@@ -21,6 +21,7 @@ func TestLoadVideoDefaults(t *testing.T) {
 		"STORAGE_PUBLIC_ENDPOINT", "STORAGE_REGION", "STORAGE_BUCKET", "MAX_UPLOAD_MB",
 		"UPLOAD_URL_TTL", "PLAYBACK_URL_TTL", "CORS_ALLOWED_ORIGINS", "NATS_URL", "MEDIA_PUBLIC_URL",
 		"VIEW_DEDUP_WINDOW", "AUTH_GRPC_ADDR",
+		"MEDIAMTX_API_URL", "LIVE_HOOK_PORT", "LIVE_INGEST_URL", "LIVE_PLAYBACK_URL", "LIVE_POLL_INTERVAL", "LIVE_GRACE",
 	} {
 		t.Setenv(key, "")
 	}
@@ -43,6 +44,15 @@ func TestLoadVideoDefaults(t *testing.T) {
 	assert.Equal(t, "localhost:50051", cfg.AuthGRPCAddr)
 	// Jika tidak diisi, file HLS dibuka langsung dari storage.
 	assert.Equal(t, "http://localhost:9000/videos", cfg.MediaPublicURL)
+	// Tanpa pengaturan: MediaMTX berjalan di laptop dengan port bawaannya.
+	assert.Equal(t, LiveConfig{
+		MediaMTXAPIURL: "http://localhost:9997",
+		HookAddr:       ":8090",
+		IngestURL:      "rtmp://localhost:1935/live",
+		PlaybackURL:    "http://localhost:8888",
+		PollInterval:   5 * time.Second,
+		Grace:          15 * time.Second,
+	}, cfg.Live)
 }
 
 func TestLoadVideoMediaPublicURL(t *testing.T) {
@@ -57,22 +67,28 @@ func TestLoadVideoMediaPublicURL(t *testing.T) {
 
 func TestLoadVideoInvalid(t *testing.T) {
 	tests := map[string]struct{ key, value string }{
-		"GRPC_PORT salah":           {"GRPC_PORT", "abc"},
-		"DB_PASSWORD kosong":        {"DB_PASSWORD", ""},
-		"access key kosong":         {"STORAGE_ACCESS_KEY", ""},
-		"secret key kosong":         {"STORAGE_SECRET_KEY", ""},
-		"endpoint tanpa skema":      {"STORAGE_ENDPOINT", "storage:9000"},
-		"endpoint dengan path":      {"STORAGE_PUBLIC_ENDPOINT", "http://localhost:9000/videos"},
-		"MAX_UPLOAD_MB nol":         {"MAX_UPLOAD_MB", "0"},
-		"MAX_UPLOAD_MB lebih 5 GiB": {"MAX_UPLOAD_MB", "6000"},
-		"UPLOAD_URL_TTL kependekan": {"UPLOAD_URL_TTL", "10s"},
-		"PLAYBACK_URL_TTL kelamaan": {"PLAYBACK_URL_TTL", "200h"},
-		"NATS_URL bukan nats://":    {"NATS_URL", "http://nats:4222"},
-		"MEDIA_PUBLIC_URL relatif":  {"MEDIA_PUBLIC_URL", "/videos"},
-		"VIEW_DEDUP_WINDOW 10s":     {"VIEW_DEDUP_WINDOW", "10s"},
-		"VIEW_DEDUP_WINDOW 48h":     {"VIEW_DEDUP_WINDOW", "48h"},
-		"AUTH_GRPC_ADDR tanpa port": {"AUTH_GRPC_ADDR", "auth"},
-		"AUTH_GRPC_ADDR port salah": {"AUTH_GRPC_ADDR", "auth:abc"},
+		"GRPC_PORT salah":               {"GRPC_PORT", "abc"},
+		"DB_PASSWORD kosong":            {"DB_PASSWORD", ""},
+		"access key kosong":             {"STORAGE_ACCESS_KEY", ""},
+		"secret key kosong":             {"STORAGE_SECRET_KEY", ""},
+		"endpoint tanpa skema":          {"STORAGE_ENDPOINT", "storage:9000"},
+		"endpoint dengan path":          {"STORAGE_PUBLIC_ENDPOINT", "http://localhost:9000/videos"},
+		"MAX_UPLOAD_MB nol":             {"MAX_UPLOAD_MB", "0"},
+		"MAX_UPLOAD_MB lebih 5 GiB":     {"MAX_UPLOAD_MB", "6000"},
+		"UPLOAD_URL_TTL kependekan":     {"UPLOAD_URL_TTL", "10s"},
+		"PLAYBACK_URL_TTL kelamaan":     {"PLAYBACK_URL_TTL", "200h"},
+		"NATS_URL bukan nats://":        {"NATS_URL", "http://nats:4222"},
+		"MEDIA_PUBLIC_URL relatif":      {"MEDIA_PUBLIC_URL", "/videos"},
+		"VIEW_DEDUP_WINDOW 10s":         {"VIEW_DEDUP_WINDOW", "10s"},
+		"VIEW_DEDUP_WINDOW 48h":         {"VIEW_DEDUP_WINDOW", "48h"},
+		"AUTH_GRPC_ADDR tanpa port":     {"AUTH_GRPC_ADDR", "auth"},
+		"AUTH_GRPC_ADDR port salah":     {"AUTH_GRPC_ADDR", "auth:abc"},
+		"MEDIAMTX_API_URL tanpa skema":  {"MEDIAMTX_API_URL", "mediamtx:9997"},
+		"LIVE_PLAYBACK_URL dengan path": {"LIVE_PLAYBACK_URL", "http://live.ice-stream.localhost:4000/live"},
+		"LIVE_INGEST_URL bukan rtmp":    {"LIVE_INGEST_URL", "http://localhost:1935/live"},
+		"LIVE_HOOK_PORT salah":          {"LIVE_HOOK_PORT", "abc"},
+		"LIVE_POLL_INTERVAL 0":          {"LIVE_POLL_INTERVAL", "100ms"},
+		"LIVE_GRACE terlalu pendek":     {"LIVE_GRACE", "6s"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

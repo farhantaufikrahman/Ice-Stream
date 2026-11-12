@@ -18,6 +18,7 @@ import (
 	authv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/auth/v1"
 	commentv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/comment/v1"
 	danmakuv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/danmaku/v1"
+	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
 	userv1 "github.com/farhantaufikrahman/ice-stream/backend/gen/user/v1"
 	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/accesstoken"
@@ -97,9 +98,11 @@ func run(logger *slog.Logger) error {
 		// CommentService berjalan di proses VideoService, jadi memakai koneksi video.
 		Comments: commentv1.NewCommentServiceClient(videoConn),
 		// DanmakuService juga berjalan di proses VideoService.
-		Danmaku:  danmakuv1.NewDanmakuServiceClient(videoConn),
-		Live:     hub,
-		Verifier: accesstoken.NewVerifier(publicKey),
+		Danmaku: danmakuv1.NewDanmakuServiceClient(videoConn),
+		// LiveService (siaran langsung) juga berjalan di proses VideoService.
+		LiveStreams: livev1.NewLiveServiceClient(videoConn),
+		Live:        hub,
+		Verifier:    accesstoken.NewVerifier(publicKey),
 	})
 	if err != nil {
 		return err

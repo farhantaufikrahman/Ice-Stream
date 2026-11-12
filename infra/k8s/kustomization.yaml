@@ -37,6 +37,13 @@ resources:
   - web/deployment.yaml
   - web/service.yaml
   - web/httproute.yaml
+  # Siaran langsung: MediaMTX (RTMP di localhost:1935, HLS di
+  # http://live.ice-stream.localhost:4000)
+  - live/configmap.yaml
+  - live/deployment.yaml
+  - live/service.yaml
+  - live/service-rtmp.yaml
+  - live/httproute.yaml
   # Server SMTP palsu untuk development (kotak masuk di
   # http://mail.ice-stream.localhost:4000)
   - mail/deployment.yaml
