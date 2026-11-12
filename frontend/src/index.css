@@ -2993,3 +2993,441 @@ a.trending-title:hover {
 .report-reasons .radio-card {
   align-items: center;
 }
+
+/* ---------- Siaran langsung (langkah 25b dan 25c) ---------- */
+
+/* Menu Beranda / Live di header (desain Live.dc.html). */
+.main-nav {
+  display: flex;
+  gap: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.main-nav-link {
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--muted);
+}
+.main-nav-link:hover {
+  color: var(--fg);
+}
+.main-nav-link.active {
+  background: var(--raised);
+  color: var(--fg);
+}
+/* Tombol stroberi "Mulai live" / "Mulai siaran". */
+.btn-live,
+.btn-live:hover:not(:disabled) {
+  background: var(--strawberry);
+  border-color: var(--strawberry);
+  color: #0b1220;
+}
+.btn-live:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.live-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--strawberry);
+}
+.live-dot.is-dark {
+  width: 8px;
+  height: 8px;
+  background: #0b1220;
+}
+.live-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Badge di atas gambar. Warna tetap (bukan token) karena selalu di atas
+   video atau kartu gelap. */
+.live-badge {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--strawberry);
+  color: #0b1220;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.live-pill {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgb(5 8 15 / 0.7);
+  color: #e8eef8;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Kartu siaran (Home.dc.html "Sedang live"). */
+.live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px 20px;
+}
+.live-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--fg);
+  min-width: 0;
+}
+.live-card:hover {
+  color: var(--fg);
+}
+.live-card:hover .video-card-title {
+  color: var(--accent-text);
+}
+.live-card-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  border: 2px solid var(--strawberry);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.live-card-thumb svg {
+  opacity: 0.25;
+}
+.live-card-thumb .live-badge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+}
+.live-card-thumb .thumb-category {
+  left: auto;
+  right: 10px;
+}
+.live-watching {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgb(11 18 32 / 0.8);
+  color: #e8eef8;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.live-section {
+  margin-bottom: 32px;
+}
+.live-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* Halaman tonton siaran (Live.dc.html). */
+.live-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.live-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: stretch;
+}
+.live-main {
+  flex: 999 1 640px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.live-badges {
+  position: absolute;
+  left: 16px;
+  top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+.live-ended-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.live-channel-card {
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.live-channel-card .watch-actions {
+  margin-left: auto;
+}
+.live-chat {
+  flex: 1 1 340px;
+  min-width: 0;
+  min-height: 480px;
+  max-height: 720px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.live-chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.live-chat-title {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.live-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.live-chat-msg {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.live-chat-name {
+  font-weight: 700;
+  margin-right: 4px;
+}
+.live-chat-badge {
+  font-size: 0.7rem;
+  color: var(--faint);
+}
+.live-chat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.live-chat-input {
+  display: flex;
+  gap: 8px;
+}
+.live-chat-input input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.live-chat-input input:focus {
+  border-color: var(--accent-text);
+  outline: none;
+}
+
+/* Studio > Siaran langsung (GoLive.dc.html). */
+.golive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  align-items: flex-start;
+}
+.golive-main {
+  flex: 999 1 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.golive-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.golive-status {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+.golive-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 18px;
+  background: #24405e;
+  border: 1px solid #1a2640;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.golive-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #05080f;
+}
+/* Pratinjau kamera dicerminkan seperti cermin (yang dikirim ke penonton
+   tetap tidak terbalik). */
+.golive-preview video.is-mirrored {
+  transform: scaleX(-1);
+}
+.golive-placeholder {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  color: #c4cede;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.golive-tag {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+}
+.golive-live {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+}
+.golive-toggles {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+}
+.golive-round {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgb(5 8 15 / 0.75);
+  color: #e8eef8;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.golive-round[aria-pressed='true'] {
+  background: var(--strawberry);
+  color: #0b1220;
+}
+.golive-level {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.golive-level span {
+  width: 5px;
+  border-radius: 2px;
+  background: #3a4a68;
+}
+.golive-level span.is-lit {
+  background: var(--mint);
+}
+.golive-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.golive-source {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--soft);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.golive-source.is-active {
+  border-color: transparent;
+  background: var(--inv-bg);
+  color: var(--inv-fg);
+}
+.golive-source:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.golive-help {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--soft);
+}
+.golive-software {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.golive-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--chip-pink);
+  color: var(--pink-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.golive-health {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.golive-health div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.golive-health dt {
+  color: var(--muted);
+}
+.golive-health dd {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--fg);
+}
+.golive-health dd.is-ok {
+  color: var(--accent-text);
+}
+@media (max-width: 640px) {
+  .main-nav {
+    order: 2;
+  }
+}

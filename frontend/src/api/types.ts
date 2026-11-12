@@ -309,3 +309,63 @@ export interface ChannelSearchPage {
   channels: ChannelResult[]
   next_page_token: string
 }
+
+// ---------- Siaran langsung (langkah 25) ----------
+
+export type LiveStatus = 'LIVE' | 'ENDED'
+
+/** Satu kali siaran (GET /live, GET /live/:id). */
+export interface LiveStream {
+  id: string
+  owner_id: string
+  /** Kosong jika UserService sedang gagal. */
+  owner?: Owner
+  title: string
+  /** "" = tanpa kategori. */
+  category: string
+  status: LiveStatus
+  started_at: string
+  /** Hanya ada setelah siaran selesai. */
+  ended_at?: string
+  /** Alamat HLS untuk hls.js. Hanya ada selama LIVE. */
+  playback_url?: string
+  viewer_count: number
+  peak_viewers: number
+}
+
+/** Pengaturan siaran milik sendiri (GET /me/live). */
+export interface LiveChannel {
+  title: string
+  category: string
+  /** Isi kolom "Server" di OBS, misalnya rtmp://localhost:1935/live. */
+  ingest_url: string
+  has_stream_key: boolean
+  stream_key_created_at?: string
+  /** Siaran yang sedang berjalan, null jika tidak sedang live. */
+  current: LiveStream | null
+}
+
+/** Jawaban POST /me/live/stream-key. stream_key hanya muncul sekali. */
+export interface StreamKeyResult {
+  channel: LiveChannel
+  stream_key: string
+}
+
+/** Jawaban POST /me/live/publish-token (siaran dari browser). */
+export interface PublishToken {
+  whip_url: string
+  token: string
+  expires_at: string
+}
+
+/** Satu pesan chat siaran (GET /live/:id/chat, event SSE "chat"). */
+export interface LiveChatMessage {
+  id: string
+  stream_id: string
+  /** null jika profil pengirim sedang tidak bisa dimuat. */
+  user: Owner | null
+  body: string
+  /** Format "#RRGGBB". */
+  color: string
+  created_at: string
+}

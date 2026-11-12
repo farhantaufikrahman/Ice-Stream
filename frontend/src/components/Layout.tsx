@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/useAuth'
 import { Avatar } from './Avatar'
 import { HistoryLink, NotificationBell, WatchLaterLink } from './HeaderIcons'
@@ -42,6 +42,15 @@ function Header() {
         <LogoMark size={38} />
         <Wordmark size={22} />
       </Link>
+      {/* Menu utama (desain Home.dc.html dan Live.dc.html). */}
+      <nav className="main-nav" aria-label="Navigasi utama">
+        <NavLink to="/" end className="main-nav-link">
+          Beranda
+        </NavLink>
+        <NavLink to="/live" className="main-nav-link">
+          Live
+        </NavLink>
+      </nav>
       {/* key: isi kotak ikut berganti saat URL ?q= berubah (misalnya tombol Back). */}
       <form className="search" role="search" onSubmit={onSearch} key={currentQuery}>
         <label htmlFor="q" className="sr-only">
@@ -55,10 +64,16 @@ function Header() {
       </form>
       <div className="header-actions">
         {status === 'authenticated' && (
-          <Link to="/upload" className="btn btn-primary" aria-label="Unggah video">
-            <UploadIcon />
-            <span className="hide-narrow">Unggah</span>
-          </Link>
+          <>
+            <Link to="/studio/live" className="btn btn-live" aria-label="Mulai live">
+              <span className="live-dot is-dark" aria-hidden="true" />
+              <span className="hide-narrow">Mulai live</span>
+            </Link>
+            <Link to="/upload" className="btn btn-primary" aria-label="Unggah video">
+              <UploadIcon />
+              <span className="hide-narrow">Unggah</span>
+            </Link>
+          </>
         )}
         <ThemeToggle />
         {status === 'authenticated' && (

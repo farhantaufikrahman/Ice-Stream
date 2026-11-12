@@ -1,5 +1,6 @@
 # Alamat MediaMTX di dalam cluster:
 #   mediamtx:8888  HLS (diteruskan Gateway, lihat httproute.yaml)
+#   mediamtx:8889  WHIP untuk siaran dari browser (httproute-webrtc.yaml)
 #   mediamtx:9997  Control API (hanya untuk VideoService, tidak ada HTTPRoute)
 apiVersion: v1
 kind: Service
@@ -16,6 +17,9 @@ spec:
     - name: hls
       port: 8888
       targetPort: hls
+    - name: webrtc
+      port: 8889
+      targetPort: webrtc
     - name: api
       port: 9997
       targetPort: api

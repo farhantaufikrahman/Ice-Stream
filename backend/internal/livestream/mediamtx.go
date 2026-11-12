@@ -108,13 +108,15 @@ type hookRequest struct {
 	Path     string `json:"path"`
 	Protocol string `json:"protocol"`
 	Query    string `json:"query"`
-	IP       string `json:"ip"`
-	ID       string `json:"id"`
+	// Token dari header "Authorization: Bearer ..." (siaran browser).
+	Token string `json:"token"`
+	IP    string `json:"ip"`
+	ID    string `json:"id"`
 }
 
 // Authorizer adalah bagian Service yang dipakai HookHandler.
 type Authorizer interface {
-	AuthorizePublish(ctx context.Context, path, query string) (int64, error)
+	AuthorizePublish(ctx context.Context, req PublishRequest) (int64, error)
 }
 
 // HookHandler membuat handler HTTP untuk POST /mediamtx/auth.
@@ -135,14 +137,14 @@ func HookHandler(auth Authorizer, logger *slog.Logger) http.Handler {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		ownerID, err := auth.AuthorizePublish(r.Context(), req.Path, req.Query)
+		ownerID, err := auth.AuthorizePublish(r.Context(), PublishRequest{Path: req.Path, Query: req.Query, Token: req.Token})
 		switch {
 		case err == nil:
 			logger.InfoContext(r.Context(), "siaran diizinkan", slog.Int64("owner_id", ownerID), slog.String("protocol", req.Protocol))
 			w.WriteHeader(http.StatusOK)
 		case errors.Is(err, ErrForbidden):
-			// Query (berisi key) sengaja tidak dicatat.
-			logger.WarnContext(r.Context(), "siaran ditolak", slog.String("path", req.Path), slog.String("ip", req.IP))
+			// Query dan token (berisi rahasia) sengaja tidak dicatat.
+			logger.WarnContext(r.Context(), "siaran ditolak", slog.String("path", req.Path), slog.String("protocol", req.Protocol), slog.String("ip", req.IP))
 			w.WriteHeader(http.StatusUnauthorized)
 		default:
 			logger.ErrorContext(r.Context(), "hook auth MediaMTX gagal", slog.Any("error", err))

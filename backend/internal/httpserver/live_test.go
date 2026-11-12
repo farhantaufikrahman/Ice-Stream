@@ -1,9 +1,13 @@
 package httpserver
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -15,6 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
 
 // fakeLiveClient menggantikan LiveService sungguhan di test.
@@ -26,6 +32,9 @@ type fakeLiveClient struct {
 	lastMine   *livev1.GetMyChannelRequest
 	lastUpdate *livev1.UpdateMyChannelRequest
 	lastReset  *livev1.ResetStreamKeyRequest
+	lastToken  *livev1.CreatePublishTokenRequest
+	lastSend   *livev1.SendChatMessageRequest
+	lastChat   *livev1.ListChatMessagesRequest
 }
 
 var _ livev1.LiveServiceClient = (*fakeLiveClient)(nil)
@@ -91,6 +100,37 @@ func (f *fakeLiveClient) GetLiveStream(_ context.Context, in *livev1.GetLiveStre
 	return &livev1.GetLiveStreamResponse{Stream: st}, nil
 }
 
+func testChatMessage() *livev1.ChatMessage {
+	return &livev1.ChatMessage{Id: 15, StreamId: 3, UserId: 7, Body: "halo kak", Color: 0x4FE3C1, CreatedAt: timestamppb.New(testLiveStart)}
+}
+
+func (f *fakeLiveClient) CreatePublishToken(_ context.Context, in *livev1.CreatePublishTokenRequest, _ ...grpc.CallOption) (*livev1.CreatePublishTokenResponse, error) {
+	f.lastToken = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &livev1.CreatePublishTokenResponse{
+		WhipUrl: "http://webrtc.ice-stream.localhost:4000/live/7/whip", Token: "ipt_rahasia",
+		ExpiresAt: timestamppb.New(testLiveStart.Add(5 * time.Minute)),
+	}, nil
+}
+
+func (f *fakeLiveClient) SendChatMessage(_ context.Context, in *livev1.SendChatMessageRequest, _ ...grpc.CallOption) (*livev1.SendChatMessageResponse, error) {
+	f.lastSend = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &livev1.SendChatMessageResponse{Message: testChatMessage()}, nil
+}
+
+func (f *fakeLiveClient) ListChatMessages(_ context.Context, in *livev1.ListChatMessagesRequest, _ ...grpc.CallOption) (*livev1.ListChatMessagesResponse, error) {
+	f.lastChat = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &livev1.ListChatMessagesResponse{Messages: []*livev1.ChatMessage{testChatMessage()}}, nil
+}
+
 func TestListLive(t *testing.T) {
 	fake := &fakeLiveClient{}
 	r := newTestRouter(t, Deps{LiveStreams: fake, Users: &fakeUserClient{}})
@@ -105,6 +145,10 @@ func TestListLive(t *testing.T) {
 		rec.Body.String())
 	assert.Equal(t, int32(8), fake.lastList.GetLimit())
 	assert.Equal(t, "teknologi", fake.lastList.GetCategory())
+
+	rec = do(r, http.MethodGet, "/api/v1/live?q=ngoding", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "ngoding", fake.lastList.GetQuery(), "tab Live di pencarian")
 
 	rec = do(r, http.MethodGet, "/api/v1/live?limit=banyak", "")
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
@@ -172,4 +216,97 @@ func TestMyLiveChannel(t *testing.T) {
 	fake.err = status.Error(codes.InvalidArgument, "title: judul siaran wajib diisi")
 	rec = do(r, http.MethodPatch, "/api/v1/me/live", `{"title":""}`, as(7))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+const testChatJSON = `{"id":"15","stream_id":"3","user":{"id":"7","username":"budi","display_name":"Budi","avatar_url":"http://media.ice-stream.localhost:4000/images/avatars/7/ab.jpg"},"body":"halo kak","color":"#4FE3C1","created_at":"2026-11-12T07:00:00Z"}`
+
+func TestPublishToken(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeLiveClient{}
+	r := newTestRouter(t, Deps{LiveStreams: fake, Verifier: verifier})
+
+	rec := do(r, http.MethodPost, "/api/v1/me/live/publish-token", "")
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	rec = do(r, http.MethodPost, "/api/v1/me/live/publish-token", "", as(7))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{"whip_url":"http://webrtc.ice-stream.localhost:4000/live/7/whip","token":"ipt_rahasia","expires_at":"2026-11-12T07:05:00Z"}`, rec.Body.String())
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, int64(7), fake.lastToken.GetRequesterId())
+}
+
+func TestLiveChat(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeLiveClient{}
+	r := newTestRouter(t, Deps{LiveStreams: fake, Users: &fakeUserClient{}, Verifier: verifier})
+
+	rec := do(r, http.MethodGet, "/api/v1/live/3/chat?limit=20", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{"messages":[`+testChatJSON+`]}`, rec.Body.String())
+	assert.Equal(t, int64(3), fake.lastChat.GetStreamId())
+	assert.Equal(t, int32(20), fake.lastChat.GetLimit())
+
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"halo kak"}`)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "kirim chat wajib login")
+
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"halo kak","color":"#4FE3C1"}`, as(7))
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{"message":`+testChatJSON+`}`, rec.Body.String())
+	assert.Equal(t, int64(7), fake.lastSend.GetRequesterId())
+	assert.Equal(t, int64(3), fake.lastSend.GetStreamId())
+	assert.Equal(t, uint32(0x4FE3C1), fake.lastSend.GetColor())
+
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"x","color":"merah"}`, as(7))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	rec = do(r, http.MethodGet, "/api/v1/live/abc/chat", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	fake.err = status.Error(codes.ResourceExhausted, "tunggu sebentar sebelum mengirim pesan lagi")
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"lagi"}`, as(7))
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
+	fake.err = status.Error(codes.FailedPrecondition, "siaran sudah selesai")
+	rec = do(r, http.MethodPost, "/api/v1/live/3/chat", `{"body":"lagi"}`, as(7))
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
+func TestLiveChatStream(t *testing.T) {
+	// Tanpa hub: 503.
+	r := newTestRouter(t, Deps{LiveStreams: &fakeLiveClient{}})
+	rec := do(r, http.MethodGet, "/api/v1/live/3/chat/live", "")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+	broker := &liveBroker{handlers: map[string]func([]byte){}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	users := &fakeUserClient{}
+	hub := live.NewHub(broker, live.Options{Subject: events.SubjectLiveChat, Transform: NewLiveChatEncoder(users, logger)}, logger)
+	t.Cleanup(hub.Close)
+	fake := &fakeLiveClient{}
+	srv := httptest.NewServer(newTestRouter(t, Deps{LiveStreams: fake, LiveChat: hub}))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/api/v1/live/3/chat/live")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	rd := bufio.NewReader(resp.Body)
+	assert.Equal(t, "retry: 3000", readEvent(t, rd))
+
+	data, _ := json.Marshal(events.LiveChatSent{ID: 15, StreamID: 3, UserID: 7, Body: "halo kak", Color: 0x4FE3C1, CreatedAt: testLiveStart})
+	require.Eventually(t, func() bool { return broker.publish("live.chat.3", data) }, time.Second, 10*time.Millisecond)
+	assert.Equal(t, "event: chat\ndata: "+testChatJSON, readEvent(t, rd))
+
+	// Pesan kedua dari orang yang sama: profil diambil dari cache.
+	users.lastBatch = nil
+	require.True(t, broker.publish("live.chat.3", data))
+	readEvent(t, rd)
+	assert.Nil(t, users.lastBatch, "profil pengirim disimpan sebentar")
+
+	// Siaran tidak ada: 404, tidak bergabung ke hub.
+	fake.err = status.Error(codes.NotFound, "siaran tidak ditemukan")
+	resp2, err := http.Get(srv.URL + "/api/v1/live/99/chat/live")
+	require.NoError(t, err)
+	resp2.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp2.StatusCode)
+	clients, _ := hub.Stats()
+	assert.Equal(t, 1, clients)
 }

@@ -1,33 +1,43 @@
 import { useId, useRef, useState } from 'react'
 import { formatDuration } from '../../lib/format'
-import { shareUrl } from '../../lib/share'
+import { liveShareUrl, shareUrl } from '../../lib/share'
 import { Modal } from '../Modal'
 
+/** Yang dibagikan: video (bisa "mulai di detik ke-N") atau siaran langsung. */
+export type ShareTarget =
+  | {
+      videoId: string
+      /** Detik video saat tombol Bagikan ditekan; 0 jika belum diputar. */
+      currentSeconds: number
+    }
+  | { liveId: string }
+
 interface Props {
-  videoId: string
+  target: ShareTarget
   title: string
-  /** Detik video saat tombol Bagikan ditekan; 0 jika belum diputar. */
-  currentSeconds: number
   onClose: () => void
 }
 
 type CopyState = 'idle' | 'copied' | 'failed'
 
 /**
- * Dialog Bagikan (langkah 24b): tautan video, pilihan "Mulai di 1:23", dan
+ * Dialog Bagikan (langkah 24b; siaran langsung sejak langkah 25c): tautan
+ * video, pilihan "Mulai di 1:23", dan
  * tombol Salin. Di HP yang mendukung Web Share API ada tombol untuk
  * membuka menu bagikan bawaan (WhatsApp, Telegram, dan lainnya).
  *
  * Clipboard API: https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText
  * Web Share API: https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share
  */
-export function ShareDialog({ videoId, title, currentSeconds, onClose }: Props) {
-  const start = Math.floor(currentSeconds)
+export function ShareDialog({ target, title, onClose }: Props) {
+  // Siaran langsung tidak punya pilihan "Mulai di": penonton selalu masuk
+  // ke bagian yang sedang tayang.
+  const start = 'videoId' in target ? Math.floor(target.currentSeconds) : 0
   const [withStart, setWithStart] = useState(false)
   const [copy, setCopy] = useState<CopyState>('idle')
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
-  const url = shareUrl(window.location.origin, videoId, withStart ? start : 0)
+  const url = 'videoId' in target ? shareUrl(window.location.origin, target.videoId, withStart ? start : 0) : liveShareUrl(window.location.origin, target.liveId)
   const canShare = typeof navigator.share === 'function'
 
   const copyLink = async () => {
@@ -50,7 +60,7 @@ export function ShareDialog({ videoId, title, currentSeconds, onClose }: Props) 
   }
 
   return (
-    <Modal title="Bagikan video" onClose={onClose}>
+    <Modal title={'videoId' in target ? 'Bagikan video' : 'Bagikan siaran'} onClose={onClose}>
       <div className="modal-body">
         <div className="field">
           <label htmlFor={inputId}>Tautan</label>

@@ -7,6 +7,8 @@ import { ErrorPage } from './pages/ErrorPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
+import { LivePage } from './pages/LivePage'
+import { LiveWatchRoute } from './pages/LiveWatchPage'
 import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { NotificationsPage } from './pages/NotificationsPage'
@@ -16,6 +18,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StudioDashboardPage } from './pages/StudioDashboardPage'
+import { StudioLivePage } from './pages/StudioLivePage'
 import { StudioPage } from './pages/StudioPage'
 import { TrendingPage } from './pages/TrendingPage'
 import { UploadPage } from './pages/UploadPage'
@@ -38,6 +41,9 @@ export const router = createBrowserRouter([
           { path: '/trending', element: <TrendingPage /> },
           { path: '/watch/:id', element: <WatchPage /> },
           { path: '/channel/:username', element: <ChannelPage /> },
+          // Siaran langsung (langkah 25c): daftar dan halaman tonton, tanpa login.
+          { path: '/live', element: <LivePage /> },
+          { path: '/live/:id', element: <LiveWatchRoute /> },
           // Boleh tanpa login: playlist PUBLIC bisa dibuka siapa saja.
           { path: '/playlist/:id', element: <PlaylistPage /> },
           {
@@ -69,6 +75,8 @@ export const router = createBrowserRouter([
         children: [
           { path: '/studio', element: <StudioDashboardPage /> },
           { path: '/studio/content', element: <StudioPage /> },
+          // Siaran langsung (langkah 25b).
+          { path: '/studio/live', element: <StudioLivePage /> },
           { path: '/studio/settings', element: <SettingsPage /> },
           { path: '/upload', element: <UploadPage /> },
         ],

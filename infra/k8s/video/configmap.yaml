@@ -51,5 +51,10 @@ data:
   LIVE_INGEST_URL: rtmp://localhost:1935/live
   # Alamat HLS untuk penonton (live/httproute.yaml).
   LIVE_PLAYBACK_URL: http://live.ice-stream.localhost:4000
+  # Alamat WHIP untuk siaran dari browser (langkah 25b,
+  # live/httproute-webrtc.yaml). Token siaran berlaku 5 menit, cukup untuk
+  # menekan tombol "Mulai siaran".
+  LIVE_WHIP_URL: http://webrtc.ice-stream.localhost:4000
+  LIVE_PUBLISH_TOKEN_TTL: 5m
   LIVE_POLL_INTERVAL: 5s
   LIVE_GRACE: 15s

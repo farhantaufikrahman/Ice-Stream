@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -207,67 +206,7 @@ func (h *danmakuHandler) live(c *gin.Context) {
 		return
 	}
 
-	client, err := h.hub.Join(videoID)
-	switch {
-	case errors.Is(err, live.ErrFull):
-		h.logger.WarnContext(c.Request.Context(), "penonton live penuh")
-		abortError(c, http.StatusServiceUnavailable, "UNAVAILABLE", "terlalu banyak penonton, coba lagi sebentar")
-		return
-	case err != nil:
-		h.logger.WarnContext(c.Request.Context(), "gagal bergabung ke danmaku live", slog.Any("error", err))
-		abortError(c, http.StatusServiceUnavailable, "UNAVAILABLE", "danmaku live sedang tidak tersedia")
-		return
-	}
-	defer h.hub.Leave(client)
-
-	w := c.Writer
-	rc := http.NewResponseController(w)
-	// http.Server punya ReadTimeout 15 detik dan WriteTimeout 30 detik untuk
-	// request biasa. Koneksi SSE berumur panjang, jadi batas itu dimatikan
-	// untuk koneksi ini saja. Batas tulis diganti per pesan (lihat write).
-	// Error diabaikan: ResponseRecorder di test tidak mendukung deadline.
-	_ = rc.SetReadDeadline(time.Time{})
-
-	header := w.Header()
-	header.Set("Content-Type", "text/event-stream; charset=utf-8")
-	header.Set("Cache-Control", "no-cache")
-	// NGINX (NGINX Gateway Fabric) menampung response sebelum diteruskan
-	// (buffering). Header ini meminta NGINX langsung meneruskan setiap event.
-	header.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-
-	write := func(chunk string) bool {
-		_ = rc.SetWriteDeadline(time.Now().Add(liveWriteTimeout))
-		if _, err := io.WriteString(w, chunk); err != nil {
-			return false
-		}
-		return rc.Flush() == nil
-	}
-	if !write(fmt.Sprintf("retry: %d\n\n", liveRetryMs)) {
-		return
-	}
-
-	ticker := time.NewTicker(h.heartbeat)
-	defer ticker.Stop()
-	ctx := c.Request.Context()
-	for {
-		select {
-		case <-ctx.Done():
-			// Browser menutup tab atau pindah halaman.
-			return
-		case <-client.Done():
-			// Pod sedang berhenti. Browser akan menyambung ulang ke pod lain.
-			return
-		case msg := <-client.Messages():
-			if !write("event: danmaku\ndata: " + string(msg) + "\n\n") {
-				return
-			}
-		case <-ticker.C:
-			if !write(": ping\n\n") {
-				return
-			}
-		}
-	}
+	serveSSE(c, h.hub, videoID, "danmaku", h.heartbeat, h.logger)
 }
 
 // checkReady memastikan video ada dan READY sebelum membuka koneksi live.

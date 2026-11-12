@@ -80,6 +80,14 @@ func run(logger *slog.Logger) error {
 		Transform:  httpserver.EncodeLiveDanmaku,
 		MaxClients: cfg.LiveMaxClients,
 	}, logger)
+	// Chat siaran langsung (langkah 25c) memakai Hub kedua dengan subject
+	// live.chat.<stream_id>. Batas penontonnya dihitung terpisah.
+	users := userv1.NewUserServiceClient(authConn)
+	chatHub := live.NewHub(live.NewNATSBroker(nc), live.Options{
+		Subject:    events.SubjectLiveChat,
+		Transform:  httpserver.NewLiveChatEncoder(users, logger),
+		MaxClients: cfg.LiveMaxClients,
+	}, logger)
 
 	// Gateway tidak terhubung ke Oracle. Yang dicek hanya AuthService, karena
 	// tanpa auth hampir semua fitur tidak bisa dipakai. VideoService sengaja
@@ -94,7 +102,7 @@ func run(logger *slog.Logger) error {
 		Auth:   authv1.NewAuthServiceClient(authConn),
 		Videos: videov1.NewVideoServiceClient(videoConn),
 		// UserService berjalan di proses AuthService, jadi memakai koneksi yang sama.
-		Users: userv1.NewUserServiceClient(authConn),
+		Users: users,
 		// CommentService berjalan di proses VideoService, jadi memakai koneksi video.
 		Comments: commentv1.NewCommentServiceClient(videoConn),
 		// DanmakuService juga berjalan di proses VideoService.
@@ -102,6 +110,7 @@ func run(logger *slog.Logger) error {
 		// LiveService (siaran langsung) juga berjalan di proses VideoService.
 		LiveStreams: livev1.NewLiveServiceClient(videoConn),
 		Live:        hub,
+		LiveChat:    chatHub,
 		Verifier:    accesstoken.NewVerifier(publicKey),
 	})
 	if err != nil {
@@ -121,6 +130,7 @@ func run(logger *slog.Logger) error {
 	// pernah selesai sendiri. hub.Close memutus semuanya begitu Shutdown
 	// dimulai (browser lalu menyambung ulang ke pod lain).
 	srv.RegisterOnShutdown(hub.Close)
+	srv.RegisterOnShutdown(chatHub.Close)
 
 	serverErr := make(chan error, 1)
 	go func() {

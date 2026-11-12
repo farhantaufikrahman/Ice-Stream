@@ -50,6 +50,15 @@ spec:
               containerPort: 8888
             - name: api
               containerPort: 9997
+            # Siaran dari browser (langkah 25b): WHIP (HTTP) dan media ICE.
+            - name: webrtc
+              containerPort: 8889
+            - name: ice-udp
+              containerPort: 8189
+              protocol: UDP
+            - name: ice-tcp
+              containerPort: 8189
+              protocol: TCP
           readinessProbe:
             httpGet:
               path: /v3/paths/list

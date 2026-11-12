@@ -59,6 +59,11 @@ type LiveConfig struct {
 	// PlaybackURL adalah alamat publik HLS MediaMTX, misalnya
 	// "http://live.ice-stream.localhost:4000".
 	PlaybackURL string
+	// WHIPURL adalah alamat publik WebRTC MediaMTX untuk siaran dari browser
+	// (langkah 25b), misalnya "http://webrtc.ice-stream.localhost:4000".
+	WHIPURL string
+	// PublishTokenTTL adalah lama token siaran browser berlaku.
+	PublishTokenTTL time.Duration
 	// PollInterval adalah jarak antar pembacaan status dari MediaMTX.
 	PollInterval time.Duration
 	// Grace adalah batas tenggang sebelum siaran yang hilang ditutup.
@@ -121,6 +126,10 @@ func LoadVideo() (VideoConfig, error) {
 	if err != nil {
 		return VideoConfig{}, err
 	}
+	liveTokenTTL, err := getDuration("LIVE_PUBLISH_TOKEN_TTL", 5*time.Minute)
+	if err != nil {
+		return VideoConfig{}, err
+	}
 	db, err := loadDB("video_svc")
 	if err != nil {
 		return VideoConfig{}, err
@@ -145,8 +154,11 @@ func LoadVideo() (VideoConfig, error) {
 			HookAddr:       ":" + getString("LIVE_HOOK_PORT", "8090"),
 			IngestURL:      strings.TrimRight(getString("LIVE_INGEST_URL", "rtmp://localhost:1935/live"), "/"),
 			PlaybackURL:    strings.TrimRight(getString("LIVE_PLAYBACK_URL", "http://localhost:8888"), "/"),
-			PollInterval:   livePoll,
-			Grace:          liveGrace,
+			// Port WebRTC bawaan MediaMTX.
+			WHIPURL:         strings.TrimRight(getString("LIVE_WHIP_URL", "http://localhost:8889"), "/"),
+			PublishTokenTTL: liveTokenTTL,
+			PollInterval:    livePoll,
+			Grace:           liveGrace,
 		},
 	}
 	if err := cfg.validate(); err != nil {
@@ -196,7 +208,7 @@ func (c VideoConfig) validate() error {
 }
 
 func (l LiveConfig) validate() error {
-	for key, v := range map[string]string{"MEDIAMTX_API_URL": l.MediaMTXAPIURL, "LIVE_PLAYBACK_URL": l.PlaybackURL} {
+	for key, v := range map[string]string{"MEDIAMTX_API_URL": l.MediaMTXAPIURL, "LIVE_PLAYBACK_URL": l.PlaybackURL, "LIVE_WHIP_URL": l.WHIPURL} {
 		u, err := url.Parse(v)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" || u.RawQuery != "" {
 			return fmt.Errorf("%s harus berupa alamat http(s) tanpa path, dapat %q", key, v)
@@ -207,6 +219,11 @@ func (l LiveConfig) validate() error {
 	}
 	if err := validPort("LIVE_HOOK_PORT", strings.TrimPrefix(l.HookAddr, ":")); err != nil {
 		return err
+	}
+	// Token hanya dipakai saat tombol "Mulai siaran" ditekan, jadi tidak
+	// perlu lama. Batas bawah memberi waktu untuk jaringan yang lambat.
+	if l.PublishTokenTTL < 30*time.Second || l.PublishTokenTTL > time.Hour {
+		return fmt.Errorf("LIVE_PUBLISH_TOKEN_TTL harus antara 30s dan 1h, dapat %s", l.PublishTokenTTL)
 	}
 	if l.PollInterval < time.Second || l.PollInterval > time.Minute {
 		return fmt.Errorf("LIVE_POLL_INTERVAL harus antara 1s dan 1m, dapat %s", l.PollInterval)
