@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { ChannelPage } from './pages/ChannelPage'
 import { ErrorPage } from './pages/ErrorPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
@@ -11,6 +12,7 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { PlaylistPage } from './pages/PlaylistPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StudioDashboardPage } from './pages/StudioDashboardPage'
@@ -51,11 +53,14 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // Masuk dan Daftar: panel brand di kiri, tanpa header.
+        // Masuk, Daftar, dan Lupa kata sandi: panel brand di kiri, tanpa header.
         element: <AuthLayout />,
         children: [
           { path: '/login', element: <LoginPage /> },
           { path: '/register', element: <RegisterPage /> },
+          // Lupa kata sandi (langkah 24c): tanpa login.
+          { path: '/forgot-password', element: <ForgotPasswordPage /> },
+          { path: '/reset-password', element: <ResetPasswordPage /> },
         ],
       },
       {

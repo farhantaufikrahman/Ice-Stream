@@ -27,10 +27,13 @@ import (
 // *Err diisi untuk mensimulasikan error dari AuthService.
 type fakeAuthClient struct {
 	registerErr, loginErr, refreshErr, logoutErr error
+	forgotErr, resetErr                          error
 
 	lastLogin   *authv1.LoginRequest
 	lastRefresh *authv1.RefreshTokenRequest
 	lastLogout  *authv1.LogoutRequest
+	lastForgot  *authv1.RequestPasswordResetRequest
+	lastReset   *authv1.ResetPasswordRequest
 }
 
 var _ authv1.AuthServiceClient = (*fakeAuthClient)(nil)

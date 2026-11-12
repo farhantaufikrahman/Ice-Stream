@@ -37,6 +37,11 @@ resources:
   - web/deployment.yaml
   - web/service.yaml
   - web/httproute.yaml
+  # Server SMTP palsu untuk development (kotak masuk di
+  # http://mail.ice-stream.localhost:4000)
+  - mail/deployment.yaml
+  - mail/service.yaml
+  - mail/httproute.yaml
 
 # Membuat Secret "oracle-credentials" dari file secrets/oracle.env
 # (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).

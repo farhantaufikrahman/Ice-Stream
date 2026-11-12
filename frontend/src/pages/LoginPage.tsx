@@ -40,10 +40,13 @@ export function LoginPage() {
         Email atau username
         <input name="login" autoComplete="username" required />
       </label>
-      <label>
-        Kata sandi
-        <input name="password" type="password" autoComplete="current-password" required />
-      </label>
+      <div className="auth-field">
+        <div className="auth-field-head">
+          <label htmlFor="login-password">Kata sandi</label>
+          <Link to="/forgot-password">Lupa kata sandi?</Link>
+        </div>
+        <input id="login-password" name="password" type="password" autoComplete="current-password" required />
+      </div>
       <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
         {busy ? 'Memproses…' : 'Masuk'}
       </button>

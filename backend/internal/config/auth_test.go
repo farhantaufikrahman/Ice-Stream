@@ -13,6 +13,7 @@ func TestLoadAuthDefaults(t *testing.T) {
 		"APP_ENV", "GRPC_PORT", "SHUTDOWN_TIMEOUT", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
 		"DB_HOST", "DB_PORT", "DB_SERVICE", "DB_USER", "DB_MAX_OPEN_CONNS",
 		"STORAGE_ENDPOINT", "STORAGE_PUBLIC_ENDPOINT", "STORAGE_BUCKET", "MEDIA_PUBLIC_URL",
+		"SMTP_ADDR", "MAIL_FROM", "APP_BASE_URL", "PASSWORD_RESET_TTL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -29,6 +30,14 @@ func TestLoadAuthDefaults(t *testing.T) {
 	// Foto profil disimpan di bucket images, terpisah dari bucket videos.
 	assert.Equal(t, "images", cfg.Storage.Bucket)
 	assert.Equal(t, "http://localhost:9000/images", cfg.MediaPublicURL)
+	// Tanpa pengaturan, email dikirim ke Mailpit lokal dan tautan menuju
+	// Vite dev server.
+	assert.Equal(t, MailConfig{
+		SMTPAddr:         "localhost:1025",
+		From:             "Ice-Stream <no-reply@ice-stream.localhost>",
+		AppBaseURL:       "http://localhost:5173",
+		PasswordResetTTL: 30 * time.Minute,
+	}, cfg.Mail)
 }
 
 // setAuthRequired mengisi env yang wajib ada.
@@ -52,6 +61,11 @@ func TestLoadAuthInvalid(t *testing.T) {
 		"DB_MAX_OPEN_CONNS nol":         {"DB_MAX_OPEN_CONNS", "0"},
 		"STORAGE_ACCESS_KEY kosong":     {"STORAGE_ACCESS_KEY", ""},
 		"MEDIA_PUBLIC_URL relatif":      {"MEDIA_PUBLIC_URL", "/images"},
+		"SMTP_ADDR tanpa port":          {"SMTP_ADDR", "mailpit"},
+		"MAIL_FROM bukan email":         {"MAIL_FROM", "Ice-Stream"},
+		"APP_BASE_URL tanpa skema":      {"APP_BASE_URL", "ice-stream.localhost:4000"},
+		"APP_BASE_URL dengan path":      {"APP_BASE_URL", "http://ice-stream.localhost:4000/app"},
+		"PASSWORD_RESET_TTL kependekan": {"PASSWORD_RESET_TTL", "1m"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

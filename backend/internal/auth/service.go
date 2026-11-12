@@ -47,6 +47,9 @@ type Service struct {
 	// sama dengan saat password salah. Tanpa ini, penyerang bisa menebak
 	// email mana yang terdaftar dari cepat-lambatnya respons.
 	dummyHash string
+	// reset berisi fitur "Lupa kata sandi?" (reset.go). nil jika belum
+	// dinyalakan dengan EnablePasswordReset.
+	reset *resetFeature
 }
 
 // NewService membuat Service.
@@ -101,9 +104,8 @@ func (s *Service) validateRegister(in RegisterInput) (NewUser, error) {
 		return NewUser{}, &ValidationError{"email", "format email tidak valid"}
 	}
 
-	// bcrypt hanya membaca 72 byte pertama, jadi password lebih panjang ditolak.
-	if utf8.RuneCountInString(in.Password) < 8 || len(in.Password) > 72 {
-		return NewUser{}, &ValidationError{"password", "minimal 8 karakter dan maksimal 72 byte"}
+	if err := validatePassword(in.Password); err != nil {
+		return NewUser{}, err
 	}
 
 	display := strings.TrimSpace(in.DisplayName)
@@ -115,6 +117,16 @@ func (s *Service) validateRegister(in RegisterInput) (NewUser, error) {
 	}
 
 	return NewUser{Username: username, Email: email, DisplayName: display}, nil
+}
+
+// validatePassword memeriksa aturan password, dipakai saat daftar dan saat
+// reset password. bcrypt hanya membaca 72 byte pertama, jadi password yang
+// lebih panjang ditolak.
+func validatePassword(p string) error {
+	if utf8.RuneCountInString(p) < 8 || len(p) > 72 {
+		return &ValidationError{"password", "minimal 8 karakter dan maksimal 72 byte"}
+	}
+	return nil
 }
 
 // Login memeriksa username/email dan password, lalu membuat token.
