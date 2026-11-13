@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	livev1 "github.com/farhantaufikrahman/ice-stream/backend/gen/live/v1"
+	"github.com/farhantaufikrahman/ice-stream/backend/internal/config"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/events"
 	"github.com/farhantaufikrahman/ice-stream/backend/internal/live"
 )
@@ -232,6 +234,41 @@ func TestMyLiveChannel(t *testing.T) {
 	fake.err = status.Error(codes.InvalidArgument, "title: judul siaran wajib diisi")
 	rec = do(r, http.MethodPatch, "/api/v1/me/live", `{"title":""}`, as(7))
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// Langkah 29: LIVE_BROADCAST_ADMIN_ONLY menutup /me/live untuk non-admin,
+// sementara halaman siaran dan chat tetap terbuka untuk semua.
+func TestMyLiveAdminOnly(t *testing.T) {
+	verifier, asUser, asAdmin := newRoleTokenSigner(t)
+	fake := &fakeLiveClient{}
+	gin.SetMode(gin.TestMode)
+	cfg := config.Config{
+		Env:                    "development",
+		CORSAllowedOrigins:     []string{"http://localhost:5173"},
+		Cookie:                 config.CookieConfig{SameSite: http.SameSiteLaxMode},
+		LiveBroadcastAdminOnly: true,
+	}
+	r, err := NewRouter(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), Deps{LiveStreams: fake, Users: &fakeUserClient{}, Verifier: verifier})
+	require.NoError(t, err)
+
+	for _, req := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/v1/me/live", ""},
+		{http.MethodPatch, "/api/v1/me/live", `{"title":"x"}`},
+		{http.MethodPost, "/api/v1/me/live/stream-key", ""},
+		{http.MethodPost, "/api/v1/me/live/publish-token", ""},
+	} {
+		rec := do(r, req.method, req.path, req.body, asUser(7))
+		assert.Equal(t, http.StatusForbidden, rec.Code, req.method+" "+req.path)
+		assert.Contains(t, rec.Body.String(), `"LIVE_BROADCAST_ADMIN_ONLY"`)
+	}
+	assert.Nil(t, fake.lastMine, "VideoService tidak dipanggil untuk non-admin")
+
+	rec := do(r, http.MethodGet, "/api/v1/me/live", "", asAdmin(1))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, int64(1), fake.lastMine.GetRequesterId())
+
+	rec = do(r, http.MethodGet, "/api/v1/live", "")
+	assert.Equal(t, http.StatusOK, rec.Code, "daftar siaran tetap terbuka")
 }
 
 const testChatJSON = `{"id":"15","stream_id":"3","user":{"id":"7","username":"budi","display_name":"Budi","avatar_url":"http://media.ice-stream.localhost:4000/images/avatars/7/ab.jpg"},"body":"halo kak","color":"#4FE3C1","created_at":"2026-11-12T07:00:00Z"}`

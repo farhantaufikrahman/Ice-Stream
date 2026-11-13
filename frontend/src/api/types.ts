@@ -150,20 +150,43 @@ export interface ViewResult {
 }
 
 /**
- * Cara mengunggah file langsung ke storage (RustFS) memakai URL presigned:
- * kirim request `method` ke `url` dengan semua `headers`, body = file.
+ * Cara mengirim satu request langsung ke storage (RustFS) memakai URL
+ * presigned: kirim `method` ke `url` dengan semua `headers`.
  */
 export interface UploadTicket {
   url: string
   method: string
   headers: Record<string, string>
-  expires_at: string
+}
+
+/**
+ * Langkah 29: file video dikirim per bagian (multipart upload), karena
+ * Cloudflare menolak request di atas 100 MB. Bagian ke-n (mulai 1) =
+ * file.slice((n - 1) * part_size, n * part_size).
+ */
+export interface UploadPlan {
+  part_size: number
+  part_count: number
 }
 
 /** Jawaban POST /videos. */
 export interface CreateUploadResult {
   video: Video
-  upload: UploadTicket
+  upload: UploadPlan
+}
+
+/** URL presigned untuk satu bagian file. `size` ikut ditandatangani. */
+export interface UploadPartTicket extends UploadTicket {
+  part_number: number
+  size: number
+}
+
+/** Jawaban POST /videos/:id/upload-parts. */
+export interface UploadPartsResult {
+  parts: UploadPartTicket[]
+  /** Bagian yang sudah tersimpan di storage (tidak perlu dikirim lagi). */
+  uploaded_part_numbers: number[]
+  expires_at: string
 }
 
 // ---------- Komentar dan danmaku (langkah 17c) ----------

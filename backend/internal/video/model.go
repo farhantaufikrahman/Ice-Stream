@@ -90,6 +90,9 @@ type Video struct {
 	// Language adalah kode bahasa video ("id", "en", "ja"), kosong jika
 	// tidak diisi.
 	Language string
+	// UploadID adalah id multipart upload di storage (langkah 29). Kosong
+	// untuk video lama (satu PUT) dan rekaman siaran.
+	UploadID string
 	// ThumbnailFrames adalah posisi (milidetik) bingkai pilihan thumbnail
 	// yang dibuat transcoder. Kosong untuk video lama dan video yang belum
 	// READY. Lokasi filenya lihat FrameKey.
@@ -131,6 +134,8 @@ type NewVideo struct {
 	Visibility  string
 	Draft       bool
 	Language    string
+	// UploadID dari ObjectStore.CreateMultipart (langkah 29).
+	UploadID string
 	// SearchTerms adalah kata dari judul dan deskripsi untuk pencarian
 	// (lihat BuildSearchTerms). Disimpan dalam transaksi yang sama dengan
 	// videonya.

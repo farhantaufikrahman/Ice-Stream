@@ -60,6 +60,8 @@ type videoRow struct {
 	PublishedAt     *time.Time `gorm:"column:published_at"`
 	Language        *string    `gorm:"column:language"`
 	ThumbnailFrames *string    `gorm:"column:thumbnail_frames"`
+	// Migrasi V23 (langkah 29).
+	UploadID *string `gorm:"column:upload_id"`
 }
 
 func (videoRow) TableName() string { return "videos" }
@@ -75,6 +77,9 @@ func (r videoRow) toVideo() Video {
 		SizeBytes:   r.SizeBytes,
 		CreatedAt:   r.CreatedAt.UTC(),
 		ViewCount:   r.ViewCount,
+	}
+	if r.UploadID != nil {
+		v.UploadID = *r.UploadID
 	}
 	v.CommentCount = r.CommentCount
 	v.LikeCount = r.LikeCount
@@ -159,6 +164,7 @@ func (r *OracleRepository) Create(ctx context.Context, v NewVideo) (Video, error
 	}
 	row.Draft = boolToInt(v.Draft)
 	row.Language = nullIfEmpty(v.Language)
+	row.UploadID = nullIfEmpty(v.UploadID)
 	now := time.Now().UTC()
 	row.SearchIndexedAt = &now
 	// Video dan kata-katanya disimpan dalam satu transaksi: tidak ada video

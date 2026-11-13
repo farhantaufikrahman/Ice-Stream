@@ -1,0 +1,19 @@
+# Dipasang dengan `kubectl apply -k infra/monitoring/` SETELAH Helm chart
+# kube-prometheus-stack terpasang (lihat `make monitoring-up`).
+# Sengaja terpisah dari infra/k8s/: jika digabung, `make k8s-up` gagal di
+# cluster yang belum punya CRD PodMonitor.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - podmonitor.yaml
+configMapGenerator:
+  # Sidecar Grafana memuat setiap ConfigMap berlabel grafana_dashboard: "1"
+  # dari semua namespace sebagai dashboard.
+  - name: grafana-dashboard-ice-stream
+    namespace: ice-stream
+    files:
+      - dashboards/ice-stream.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

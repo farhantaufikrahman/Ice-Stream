@@ -1,0 +1,80 @@
+# Cloudflare Tunnel (langkah 29): cloudflared membuka koneksi KELUAR dari
+# cluster ke Cloudflare, lalu Cloudflare meneruskan request dari internet
+# lewat koneksi itu. Laptop tidak perlu IP publik atau port yang dibuka di
+# router.
+#
+# Tunnel ini "remote-managed": daftar hostname -> service diisi di dashboard
+# Cloudflare (Zero Trust > Networks > Tunnels), bukan di file ini. Pod hanya
+# butuh token tunnel (Secret cloudflared-token dari secrets/cloudflared.env).
+#
+# Dokumentasi: https://developers.cloudflare.com/tunnel/deployment-guides/kubernetes/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  # 2 replika: satu boleh restart tanpa memutus situs.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflared
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.10.7
+          imagePullPolicy: IfNotPresent
+          command:
+            - cloudflared
+            - tunnel
+            - --no-autoupdate
+            - --loglevel
+            - info
+            - --metrics
+            - 0.0.0.0:2000
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: TUNNEL_TOKEN
+          ports:
+            - name: metrics
+              containerPort: 2000
+          # /ready = 200 hanya jika tersambung ke Cloudflare.
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

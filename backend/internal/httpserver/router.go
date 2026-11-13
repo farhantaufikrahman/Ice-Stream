@@ -103,6 +103,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	rl := newRateLimiter(cfg.RateLimitEnabled, deps.Metrics)
 	authLimit := rl.perIP(ruleAuth)
 	uploadLimit := rl.perUser(ruleUpload)
+	uploadPartsLimit := rl.perUser(ruleUploadParts)
 	imageLimit := rl.perUser(ruleImage)
 	commentLimit := rl.perUser(ruleComment)
 	chatLimit := rl.perUser(ruleChat)
@@ -132,6 +133,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	// daripada /:id.
 	videoGroup.GET("/recommended", OptionalAuth(deps.Verifier), videos.recommended)
 	videoGroup.POST("", requireAuth, uploadLimit, videos.create)
+	videoGroup.POST("/:id/upload-parts", requireAuth, uploadPartsLimit, videos.uploadParts)
 	videoGroup.POST("/:id/complete", requireAuth, videos.complete)
 	videoGroup.GET("/:id", OptionalAuth(deps.Verifier), videos.get)
 	videoGroup.PATCH("/:id", requireAuth, videos.update)
@@ -196,6 +198,9 @@ func NewRouter(cfg config.Config, logger *slog.Logger, deps Deps) (*gin.Engine, 
 	liveGroup.POST("/chat", requireAuth, chatLimit, lives.sendChat)
 	liveGroup.GET("/chat/live", lives.chatLive)
 	meLive := v1.Group("/me/live", requireAuth, limitBody(maxLiveBodyBytes))
+	if cfg.LiveBroadcastAdminOnly {
+		meLive.Use(requireLiveBroadcaster())
+	}
 	meLive.GET("", lives.myChannel)
 	meLive.PATCH("", lives.updateMyChannel)
 	meLive.POST("/stream-key", lives.resetStreamKey)

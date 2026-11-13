@@ -11,6 +11,8 @@ coverage.*
 !.env.example
 # Password untuk Secret Kubernetes (dibaca secretGenerator)
 infra/k8s/secrets/*.env
+# Token Cloudflare Tunnel (langkah 29)
+infra/online/secrets/*.env
 *.pem
 backend/secrets/
 

@@ -1,6 +1,7 @@
 # CI Ice-Stream: memeriksa setiap Pull Request (dan setiap push ke dev/main)
 # sebelum di-merge. Tidak ada yang di-push ke Docker Hub atau di-deploy;
-# workflow ini hanya menjawab "apakah kode ini aman di-merge?".
+# workflow ini hanya menjawab "apakah kode ini aman di-merge?". Hasil tes
+# dan coverage juga dikirim ke SonarQube Cloud (job "sonar").
 #
 # Dokumentasi: https://docs.github.com/en/actions
 name: CI
@@ -9,11 +10,13 @@ on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [dev, main]
+    branches: [dev]
+  # Dipanggil ulang oleh cd.yml sebelum push image dan deploy (push ke main).
+  workflow_call:
 
 # Push baru ke PR yang sama membatalkan run lama yang belum selesai.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Token bawaan hanya boleh membaca isi repo.
@@ -50,8 +53,14 @@ jobs:
           git diff --exit-code -- go.mod go.sum
       - name: Vet
         run: go vet ./...
-      - name: Test (dengan race detector)
-        run: go test -race -count=1 ./...
+      - name: Test (dengan race detector) + coverage
+        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Simpan laporan coverage untuk SonarQube
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-backend
+          path: backend/coverage.out
+          retention-days: 3
       - name: Build semua command
         run: go build ./...
 
@@ -104,15 +113,56 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Lint (oxlint)
         run: npm run lint
-      - name: Test (vitest)
-        run: npm test
+      - name: Test (vitest) + coverage
+        run: npm run test:coverage
+      - name: Simpan laporan coverage untuk SonarQube
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-frontend
+          path: frontend/coverage/lcov.info
+          retention-days: 3
       - name: Build (tsc + vite)
         run: npm run build
+
+  sonar:
+    name: SonarQube Cloud
+    needs: [backend, frontend]
+    # Dilewati sampai SonarQube Cloud disiapkan (Variables SONAR_PROJECT_KEY
+    # belum diisi), dan untuk PR dari fork (tidak mendapat secret SONAR_TOKEN).
+    if: >-
+      vars.SONAR_PROJECT_KEY != '' &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Riwayat lengkap dibutuhkan Sonar untuk menandai "kode baru".
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-backend
+          path: backend
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-frontend
+          path: frontend/coverage
+      # https://github.com/SonarSource/sonarqube-scan-action
+      - name: Analisis
+        uses: SonarSource/sonarqube-scan-action@v8.4.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
 
   images:
     name: Image ${{ matrix.name }}
     # Build image hanya jika tes lolos, supaya menit CI tidak terbuang.
     needs: [backend, proto, frontend]
+    # Saat dipanggil cd.yml, image di-build (dan di-push) oleh job CD sendiri.
+    if: github.workflow == 'CI'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

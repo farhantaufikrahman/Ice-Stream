@@ -47,6 +47,9 @@ var (
 	ruleRefresh = rateRule{name: "refresh", every: 2 * time.Second, burst: 30}
 	// Membuat video baru (minta URL upload): 10 sekaligus, lalu 1 per 3 menit. Per user.
 	ruleUpload = rateRule{name: "upload", every: 3 * time.Minute, burst: 10}
+	// Minta URL bagian upload (langkah 29): video 2 GB = 41 bagian, diminta
+	// beberapa sekaligus. 30 sekaligus, lalu 1 per detik. Per user.
+	ruleUploadParts = rateRule{name: "upload_parts", every: time.Second, burst: 30}
 	// Upload gambar (thumbnail, foto profil): 10 sekaligus, lalu 1 per 10 detik. Per user.
 	ruleImage = rateRule{name: "image", every: 10 * time.Second, burst: 10}
 	// Komentar: 10 sekaligus, lalu 1 per 3 detik. Per user.

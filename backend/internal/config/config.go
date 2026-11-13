@@ -46,6 +46,11 @@ type Config struct {
 	// RateLimitEnabled menyalakan rate limit gateway (langkah 28). Default
 	// true; matikan hanya untuk uji beban di laptop.
 	RateLimitEnabled bool
+	// LiveBroadcastAdminOnly membatasi pengaturan siaran (/me/live) hanya
+	// untuk admin (langkah 29). Dinyalakan saat backend online lewat
+	// Cloudflare Tunnel, karena RTMP/WebRTC dari luar laptop tidak bisa
+	// masuk; menonton dan chat tetap terbuka untuk semua.
+	LiveBroadcastAdminOnly bool
 	// MetricsAddr adalah alamat server /metrics Prometheus (langkah 28),
 	// terpisah dari HTTPAddr supaya tidak terbuka ke internet.
 	MetricsAddr string
@@ -102,22 +107,27 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	liveAdminOnly, err := getBool("LIVE_BROADCAST_ADMIN_ONLY", false)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
-		Env:                env,
-		HTTPAddr:           ":" + getString("HTTP_PORT", "8080"),
-		CORSAllowedOrigins: getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
-		ShutdownTimeout:    shutdownTimeout,
-		TrustedProxies:     getList("TRUSTED_PROXIES", nil),
-		AuthGRPCAddr:       getString("AUTH_GRPC_ADDR", "localhost:50051"),
-		VideoGRPCAddr:      getString("VIDEO_GRPC_ADDR", "localhost:50052"),
-		JWTPublicKeyFile:   getString("JWT_PUBLIC_KEY_FILE", ""),
-		NATSURL:            getString("NATS_URL", "nats://localhost:4222"),
-		LiveMaxClients:     liveMax,
-		Cookie:             CookieConfig{Secure: cookieSecure, SameSite: sameSite},
-		OAuth:              loadOAuth(),
-		RateLimitEnabled:   rateLimit,
-		MetricsAddr:        ":" + getString("METRICS_PORT", "9090"),
+		Env:                    env,
+		HTTPAddr:               ":" + getString("HTTP_PORT", "8080"),
+		CORSAllowedOrigins:     getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
+		ShutdownTimeout:        shutdownTimeout,
+		TrustedProxies:         getList("TRUSTED_PROXIES", nil),
+		AuthGRPCAddr:           getString("AUTH_GRPC_ADDR", "localhost:50051"),
+		VideoGRPCAddr:          getString("VIDEO_GRPC_ADDR", "localhost:50052"),
+		JWTPublicKeyFile:       getString("JWT_PUBLIC_KEY_FILE", ""),
+		NATSURL:                getString("NATS_URL", "nats://localhost:4222"),
+		LiveMaxClients:         liveMax,
+		Cookie:                 CookieConfig{Secure: cookieSecure, SameSite: sameSite},
+		OAuth:                  loadOAuth(),
+		RateLimitEnabled:       rateLimit,
+		LiveBroadcastAdminOnly: liveAdminOnly,
+		MetricsAddr:            ":" + getString("METRICS_PORT", "9090"),
 	}
 
 	if err := cfg.validate(); err != nil {

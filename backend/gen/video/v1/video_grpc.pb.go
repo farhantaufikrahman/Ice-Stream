@@ -24,6 +24,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	VideoService_CreateUpload_FullMethodName             = "/video.v1.VideoService/CreateUpload"
+	VideoService_PresignUploadParts_FullMethodName       = "/video.v1.VideoService/PresignUploadParts"
 	VideoService_CompleteUpload_FullMethodName           = "/video.v1.VideoService/CompleteUpload"
 	VideoService_GetVideo_FullMethodName                 = "/video.v1.VideoService/GetVideo"
 	VideoService_ListMyVideos_FullMethodName             = "/video.v1.VideoService/ListMyVideos"
@@ -67,12 +68,20 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type VideoServiceClient interface {
-	// CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memberi URL
-	// presigned untuk mengunggah file langsung dari browser ke object storage.
+	// CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memulai
+	// multipart upload di object storage (langkah 29). File dikirim browser
+	// per bagian (part_size_bytes) memakai URL dari PresignUploadParts.
 	// Error INVALID_ARGUMENT jika judul, tipe file, atau ukuran tidak valid.
 	CreateUpload(ctx context.Context, in *CreateUploadRequest, opts ...grpc.CallOption) (*CreateUploadResponse, error)
-	// CompleteUpload dipanggil setelah browser selesai mengunggah. Service
-	// memeriksa file di storage, lalu mengubah status menjadi UPLOADED.
+	// PresignUploadParts (langkah 29) memberi URL presigned untuk bagian
+	// file yang diminta, dan daftar bagian yang SUDAH tersimpan di storage
+	// (untuk melanjutkan upload yang terputus). Error NOT_FOUND jika video
+	// tidak ada atau bukan milik requester, FAILED_PRECONDITION jika video
+	// tidak sedang menunggu upload, INVALID_ARGUMENT jika nomor bagian salah.
+	PresignUploadParts(ctx context.Context, in *PresignUploadPartsRequest, opts ...grpc.CallOption) (*PresignUploadPartsResponse, error)
+	// CompleteUpload dipanggil setelah browser selesai mengunggah semua
+	// bagian. Service menggabungkan bagian-bagian itu menjadi satu file,
+	// memeriksanya, lalu mengubah status menjadi UPLOADED.
 	// Error NOT_FOUND jika video tidak ada atau bukan milik requester,
 	// FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
 	CompleteUpload(ctx context.Context, in *CompleteUploadRequest, opts ...grpc.CallOption) (*CompleteUploadResponse, error)
@@ -231,6 +240,16 @@ func (c *videoServiceClient) CreateUpload(ctx context.Context, in *CreateUploadR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateUploadResponse)
 	err := c.cc.Invoke(ctx, VideoService_CreateUpload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *videoServiceClient) PresignUploadParts(ctx context.Context, in *PresignUploadPartsRequest, opts ...grpc.CallOption) (*PresignUploadPartsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PresignUploadPartsResponse)
+	err := c.cc.Invoke(ctx, VideoService_PresignUploadParts_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -611,12 +630,20 @@ func (c *videoServiceClient) SetFeaturedVideo(ctx context.Context, in *SetFeatur
 // All implementations must embed UnimplementedVideoServiceServer
 // for forward compatibility.
 type VideoServiceServer interface {
-	// CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memberi URL
-	// presigned untuk mengunggah file langsung dari browser ke object storage.
+	// CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memulai
+	// multipart upload di object storage (langkah 29). File dikirim browser
+	// per bagian (part_size_bytes) memakai URL dari PresignUploadParts.
 	// Error INVALID_ARGUMENT jika judul, tipe file, atau ukuran tidak valid.
 	CreateUpload(context.Context, *CreateUploadRequest) (*CreateUploadResponse, error)
-	// CompleteUpload dipanggil setelah browser selesai mengunggah. Service
-	// memeriksa file di storage, lalu mengubah status menjadi UPLOADED.
+	// PresignUploadParts (langkah 29) memberi URL presigned untuk bagian
+	// file yang diminta, dan daftar bagian yang SUDAH tersimpan di storage
+	// (untuk melanjutkan upload yang terputus). Error NOT_FOUND jika video
+	// tidak ada atau bukan milik requester, FAILED_PRECONDITION jika video
+	// tidak sedang menunggu upload, INVALID_ARGUMENT jika nomor bagian salah.
+	PresignUploadParts(context.Context, *PresignUploadPartsRequest) (*PresignUploadPartsResponse, error)
+	// CompleteUpload dipanggil setelah browser selesai mengunggah semua
+	// bagian. Service menggabungkan bagian-bagian itu menjadi satu file,
+	// memeriksanya, lalu mengubah status menjadi UPLOADED.
 	// Error NOT_FOUND jika video tidak ada atau bukan milik requester,
 	// FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
 	CompleteUpload(context.Context, *CompleteUploadRequest) (*CompleteUploadResponse, error)
@@ -774,6 +801,9 @@ type UnimplementedVideoServiceServer struct{}
 func (UnimplementedVideoServiceServer) CreateUpload(context.Context, *CreateUploadRequest) (*CreateUploadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateUpload not implemented")
 }
+func (UnimplementedVideoServiceServer) PresignUploadParts(context.Context, *PresignUploadPartsRequest) (*PresignUploadPartsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PresignUploadParts not implemented")
+}
 func (UnimplementedVideoServiceServer) CompleteUpload(context.Context, *CompleteUploadRequest) (*CompleteUploadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompleteUpload not implemented")
 }
@@ -920,6 +950,24 @@ func _VideoService_CreateUpload_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(VideoServiceServer).CreateUpload(ctx, req.(*CreateUploadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _VideoService_PresignUploadParts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PresignUploadPartsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VideoServiceServer).PresignUploadParts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VideoService_PresignUploadParts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VideoServiceServer).PresignUploadParts(ctx, req.(*PresignUploadPartsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1600,6 +1648,10 @@ var VideoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateUpload",
 			Handler:    _VideoService_CreateUpload_Handler,
+		},
+		{
+			MethodName: "PresignUploadParts",
+			Handler:    _VideoService_PresignUploadParts_Handler,
 		},
 		{
 			MethodName: "CompleteUpload",

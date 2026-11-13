@@ -16,6 +16,7 @@ import type {
   Comment,
   CommentPage,
   CreateUploadResult,
+  UploadPartsResult,
   Danmaku,
   DanmakuMode,
   DanmakuPage,
@@ -260,10 +261,24 @@ export interface VideoChanges {
 
 /**
  * Langkah 1 unggah: mencatat video baru (status PENDING_UPLOAD) dan
- * meminta URL presigned untuk mengirim file langsung ke storage.
+ * memulai multipart upload di storage (langkah 29).
  */
 export function createUpload(input: NewVideoInput): Promise<CreateUploadResult> {
   return apiRequest<CreateUploadResult>('/videos', { method: 'POST', body: input, auth: 'required' })
+}
+
+/**
+ * Langkah 2 unggah: URL presigned untuk bagian-bagian file (maksimal 20
+ * sekaligus), dan daftar bagian yang sudah tersimpan. `partNumbers` kosong
+ * = hanya menanyakan bagian yang sudah tersimpan (melanjutkan upload).
+ */
+export function requestUploadParts(id: string, partNumbers: number[], signal?: AbortSignal): Promise<UploadPartsResult> {
+  return apiRequest<UploadPartsResult>(`/videos/${encodeURIComponent(id)}/upload-parts`, {
+    method: 'POST',
+    body: { part_numbers: partNumbers },
+    auth: 'required',
+    signal,
+  })
 }
 
 /** Langkah 3 unggah: memberi tahu server file sudah lengkap, lalu transcoding dimulai. */

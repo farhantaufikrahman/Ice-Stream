@@ -24,9 +24,9 @@ import (
 // Dengan interface ini, test bisa memakai storage palsu, dan RustFS bisa
 // diganti AWS S3 atau Cloudflare R2 tanpa mengubah Service.
 type ObjectStore interface {
-	// PresignPut membuat URL untuk mengunggah satu file. contentType dan size
-	// ikut ditandatangani, jadi upload dengan tipe atau ukuran lain ditolak.
-	PresignPut(ctx context.Context, key, contentType string, size int64, ttl time.Duration) (PresignedRequest, error)
+	// Multipart upload (langkah 29, multipart.go): file video dikirim
+	// browser per bagian, lalu digabung storage menjadi satu file.
+	MultipartStore
 	// PresignGet membuat URL untuk mengunduh/memutar satu file.
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (PresignedRequest, error)
 	// Stat membaca ukuran dan tipe file. ErrObjectNotFound jika file tidak ada.
@@ -121,19 +121,6 @@ func (s *S3Store) EnsureBucket(ctx context.Context, allowedOrigins []string) err
 func (s *S3Store) Ping(ctx context.Context) error {
 	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)})
 	return err
-}
-
-func (s *S3Store) PresignPut(ctx context.Context, key, contentType string, size int64, ttl time.Duration) (PresignedRequest, error) {
-	req, err := s.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucket),
-		Key:           aws.String(key),
-		ContentType:   aws.String(contentType),
-		ContentLength: aws.Int64(size),
-	}, s3.WithPresignExpires(ttl))
-	if err != nil {
-		return PresignedRequest{}, fmt.Errorf("presign put: %w", err)
-	}
-	return toPresigned(req, ttl), nil
 }
 
 func (s *S3Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (PresignedRequest, error) {

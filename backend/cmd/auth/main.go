@@ -67,8 +67,15 @@ func run(logger *slog.Logger) error {
 	// service dimatikan, email yang sedang dikirim ditunggu paling lama
 	// SHUTDOWN_TIMEOUT.
 	if err := svc.EnablePasswordReset(auth.ResetConfig{
-		Repo:    authRepo,
-		Mailer:  mail.SMTPSender{Addr: cfg.Mail.SMTPAddr, From: cfg.Mail.From, Timeout: 10 * time.Second},
+		Repo: authRepo,
+		Mailer: mail.SMTPSender{
+			Addr:     cfg.Mail.SMTPAddr,
+			From:     cfg.Mail.From,
+			Timeout:  10 * time.Second,
+			TLS:      cfg.Mail.SMTPTLS,
+			Username: cfg.Mail.SMTPUsername,
+			Password: cfg.Mail.SMTPPassword,
+		},
 		BaseURL: cfg.Mail.AppBaseURL,
 		TTL:     cfg.Mail.PasswordResetTTL,
 		Logger:  logger,

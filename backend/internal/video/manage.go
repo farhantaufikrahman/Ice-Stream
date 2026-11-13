@@ -163,6 +163,14 @@ func (s *Service) DeleteVideo(ctx context.Context, requesterID, videoID int64) (
 // file yang dihapus. Aman dipanggil berulang.
 func (s *Service) PurgeMedia(ctx context.Context, v Video) (int, error) {
 	total := 0
+	// Bagian multipart yang belum digabung bukan file biasa, jadi tidak
+	// ikut terhapus DeletePrefix (langkah 29). Upload yang sudah digabung
+	// tidak dikenal lagi oleh storage, dan itu bukan error.
+	if v.UploadID != "" && v.Status == StatusPendingUpload {
+		if err := s.store.AbortMultipart(ctx, v.ObjectKey, v.UploadID); err != nil {
+			return total, err
+		}
+	}
 	for _, prefix := range mediaPrefixes(v) {
 		n, err := s.store.DeletePrefix(ctx, prefix)
 		total += n

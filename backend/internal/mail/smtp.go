@@ -2,8 +2,8 @@
 //
 // Di cluster lokal, SMTP-nya adalah Mailpit: semua email ditangkap dan
 // bisa dibaca di http://mail.ice-stream.localhost:4000, tidak ada yang
-// benar-benar terkirim ke internet. Di production, alamat SMTP diganti ke
-// layanan seperti Amazon SES, SendGrid, atau Mailgun.
+// benar-benar terkirim ke internet. Versi online (langkah 29) memakai
+// Resend (smtp.resend.com:465, TLS + login).
 //
 // Dibandingkan Node (nodemailer) atau Java (Spring JavaMailSender), Go
 // sudah punya net/smtp di library standar:
@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -34,9 +35,19 @@ type Message struct {
 	Text string
 }
 
-// SMTPSender mengirim email ke server SMTP tanpa login, seperti yang
-// dibutuhkan Mailpit. Layanan email sungguhan butuh login dan TLS; itu
-// ditambahkan nanti saat ada server production.
+// Cara mengamankan koneksi SMTP (SMTP_TLS).
+const (
+	// TLSNone: tanpa enkripsi, hanya untuk Mailpit di dalam cluster.
+	TLSNone = "none"
+	// TLSStartTLS: sambung biasa lalu "naik" ke TLS (port 587).
+	TLSStartTLS = "starttls"
+	// TLSImplicit: TLS sejak awal koneksi (port 465).
+	TLSImplicit = "tls"
+)
+
+// SMTPSender mengirim email ke server SMTP. Tanpa Username dan dengan
+// TLS = TLSNone cocok untuk Mailpit; layanan sungguhan (Resend) butuh
+// TLS dan login.
 type SMTPSender struct {
 	// Addr adalah host:port server SMTP, misalnya "mailpit:1025".
 	Addr string
@@ -44,6 +55,20 @@ type SMTPSender struct {
 	From string
 	// Timeout membatasi seluruh pengiriman (sambung + kirim).
 	Timeout time.Duration
+	// TLS adalah TLSNone (default jika kosong), TLSStartTLS, atau TLSImplicit.
+	TLS string
+	// Username dan Password untuk login SMTP (AUTH PLAIN). Kosong = tanpa login.
+	Username string
+	Password string
+	// tlsConfig hanya diisi tes (sertifikat buatan sendiri).
+	tlsConfig *tls.Config
+}
+
+func (s SMTPSender) clientTLS(host string) *tls.Config {
+	if s.tlsConfig != nil {
+		return s.tlsConfig
+	}
+	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
 // Send mengirim satu email.
@@ -70,21 +95,45 @@ func (s SMTPSender) Send(ctx context.Context, m Message) error {
 
 	// smtp.SendMail tidak menerima context, jadi koneksinya dibuat sendiri
 	// supaya bisa diberi batas waktu.
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", s.Addr)
+	host, _, _ := net.SplitHostPort(s.Addr)
+	var conn net.Conn
+	if s.TLS == TLSImplicit {
+		d := tls.Dialer{Config: s.clientTLS(host)}
+		conn, err = d.DialContext(ctx, "tcp", s.Addr)
+	} else {
+		var d net.Dialer
+		conn, err = d.DialContext(ctx, "tcp", s.Addr)
+	}
 	if err != nil {
 		return fmt.Errorf("sambung ke SMTP %s: %w", s.Addr, err)
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
-	host, _, _ := net.SplitHostPort(s.Addr)
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("SMTP hello: %w", err)
 	}
 	defer c.Close()
+
+	if s.TLS == TLSStartTLS {
+		// Server yang tidak menawarkan STARTTLS ditolak, supaya password
+		// tidak pernah terkirim tanpa enkripsi.
+		if ok, _ := c.Extension("STARTTLS"); !ok {
+			return errors.New("server SMTP tidak mendukung STARTTLS")
+		}
+		if err := c.StartTLS(s.clientTLS(host)); err != nil {
+			return fmt.Errorf("SMTP STARTTLS: %w", err)
+		}
+	}
+	if s.Username != "" {
+		// smtp.PlainAuth sendiri menolak mengirim password lewat koneksi
+		// tanpa TLS (kecuali ke localhost).
+		if err := c.Auth(smtp.PlainAuth("", s.Username, s.Password, host)); err != nil {
+			return fmt.Errorf("SMTP login: %w", err)
+		}
+	}
 
 	if err := c.Mail(from.Address); err != nil {
 		return fmt.Errorf("SMTP MAIL FROM: %w", err)

@@ -54,8 +54,9 @@ data:
     rtmpAddress: :1935
     hls: yes
     hlsAddress: :8888
-    # Browser di alamat ini boleh memutar HLS (CORS).
-    hlsAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000"]
+    # Browser di alamat ini boleh memutar HLS (CORS). Alamat https terakhir
+    # adalah frontend online di Vercel (langkah 29, infra/online/).
+    hlsAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000", "https://icestream.vzkyrielight.my.id"]
     rtsp: no
     srt: no
     moq: no
@@ -65,7 +66,7 @@ data:
     # Gateway), lalu video dan suaranya mengalir langsung ke port 8189.
     webrtc: yes
     webrtcAddress: :8889
-    webrtcAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000"]
+    webrtcAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000", "https://icestream.vzkyrielight.my.id"]
     # Port ICE untuk media. UDP lebih cepat; TCP jadi cadangan jika UDP
     # tidak bisa lewat (dua Service LoadBalancer di service-webrtc.yaml).
     webrtcLocalUDPAddress: :8189

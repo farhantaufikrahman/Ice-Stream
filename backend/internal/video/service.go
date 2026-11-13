@@ -290,7 +290,10 @@ const (
 type Options struct {
 	MaxUploadBytes int64
 	UploadURLTTL   time.Duration
-	PlaybackURLTTL time.Duration
+	// UploadPartBytes adalah ukuran bagian multipart upload (langkah 29).
+	// 0 = DefaultUploadPartBytes (50 MB).
+	UploadPartBytes int64
+	PlaybackURLTTL  time.Duration
 	// MediaBaseURL adalah alamat publik folder bucket, misalnya
 	// "http://media.ice-stream.localhost:4000/videos" (tanpa "/" di akhir).
 	MediaBaseURL string
@@ -338,18 +341,19 @@ type CreateUploadInput struct {
 	Language string
 }
 
-// Upload adalah hasil CreateUpload: video baru dan cara mengunggah filenya.
+// Upload adalah hasil CreateUpload: video baru dan cara memotong filenya.
 type Upload struct {
-	Video   Video
-	Request PresignedRequest
+	Video     Video
+	PartSize  int64
+	PartCount int32
 }
 
-// CreateUpload mencatat video baru lalu membuat URL presigned untuk PUT.
+// CreateUpload mencatat video baru lalu memulai multipart upload.
 //
 // File tidak lewat gateway maupun VideoService: browser mengirimnya
-// langsung ke storage. Server hanya memberi "izin sementara" berupa URL
-// bertanda tangan. Cara ini juga dipakai YouTube, Bilibili, dan aplikasi
-// yang memakai S3, karena server tidak perlu menahan file berukuran GB.
+// langsung ke storage per bagian (multipart.go) memakai URL bertanda
+// tangan. Cara ini juga dipakai YouTube, Bilibili, dan aplikasi yang
+// memakai S3, karena server tidak perlu menahan file berukuran GB.
 func (s *Service) CreateUpload(ctx context.Context, in CreateUploadInput) (Upload, error) {
 	nv, err := s.validateCreate(in)
 	if err != nil {
@@ -360,15 +364,19 @@ func (s *Service) CreateUpload(ctx context.Context, in CreateUploadInput) (Uploa
 	if err != nil {
 		return Upload{}, err
 	}
+	nv.UploadID, err = s.store.CreateMultipart(ctx, nv.ObjectKey, nv.ContentType)
+	if err != nil {
+		return Upload{}, err
+	}
 	v, err := s.repo.Create(ctx, nv)
 	if err != nil {
+		// Upload di storage tidak punya catatan video: batalkan supaya
+		// tidak tertinggal. Gagal pun tidak apa-apa (tidak ada bagian).
+		_ = s.store.AbortMultipart(context.WithoutCancel(ctx), nv.ObjectKey, nv.UploadID)
 		return Upload{}, err
 	}
-	req, err := s.store.PresignPut(ctx, v.ObjectKey, v.ContentType, v.SizeBytes, s.opts.UploadURLTTL)
-	if err != nil {
-		return Upload{}, err
-	}
-	return Upload{Video: v, Request: req}, nil
+	partSize := s.partBytes()
+	return Upload{Video: v, PartSize: partSize, PartCount: partPlan(v.SizeBytes, partSize)}, nil
 }
 
 func (s *Service) validateCreate(in CreateUploadInput) (NewVideo, error) {
@@ -474,6 +482,11 @@ func (s *Service) CompleteUpload(ctx context.Context, ownerID, videoID int64) (V
 		return v, nil
 	}
 
+	if v.UploadID != "" {
+		if err := s.finishMultipart(ctx, v); err != nil {
+			return Video{}, err
+		}
+	}
 	info, err := s.store.Stat(ctx, v.ObjectKey)
 	if errors.Is(err, ErrObjectNotFound) {
 		return Video{}, ErrUploadIncomplete
@@ -481,7 +494,7 @@ func (s *Service) CompleteUpload(ctx context.Context, ownerID, videoID int64) (V
 	if err != nil {
 		return Video{}, err
 	}
-	// URL presigned sudah mengunci ukuran dan tipe file, tapi tetap dicek
+	// URL presigned sudah mengunci ukuran tiap bagian, tapi tetap dicek
 	// di sini: jangan percaya begitu saja pada data yang diunggah user.
 	if info.Size != v.SizeBytes || !strings.EqualFold(info.ContentType, v.ContentType) {
 		return Video{}, ErrUploadIncomplete

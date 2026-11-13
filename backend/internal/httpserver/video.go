@@ -141,13 +141,35 @@ type recordViewResponse struct {
 	ViewCount int64 `json:"view_count"`
 }
 
-// uploadResponse memberi tahu browser cara mengunggah file:
-// fetch(upload.url, {method: upload.method, headers: upload.headers, body: file}).
+// uploadResponse memberi tahu browser cara memotong file (langkah 29):
+// bagian ke-n = file.slice((n-1)*part_size, n*part_size), n = 1..part_count.
+// URL tiap bagian diminta lewat POST /videos/:id/upload-parts.
 type uploadResponse struct {
-	URL       string            `json:"url"`
-	Method    string            `json:"method"`
-	Headers   map[string]string `json:"headers"`
-	ExpiresAt time.Time         `json:"expires_at"`
+	PartSize  int64 `json:"part_size"`
+	PartCount int32 `json:"part_count"`
+}
+
+// uploadPartsRequest adalah body POST /videos/:id/upload-parts.
+type uploadPartsRequest struct {
+	// Nomor bagian yang butuh URL (maksimal 20). Boleh kosong untuk hanya
+	// menanyakan bagian yang sudah tersimpan.
+	PartNumbers []int32 `json:"part_numbers"`
+}
+
+// uploadPartResponse: fetch(url, {method, headers, body: bagian file}).
+type uploadPartResponse struct {
+	PartNumber int32             `json:"part_number"`
+	URL        string            `json:"url"`
+	Method     string            `json:"method"`
+	Headers    map[string]string `json:"headers"`
+	Size       int64             `json:"size"`
+}
+
+type uploadPartsResponse struct {
+	Parts []uploadPartResponse `json:"parts"`
+	// Bagian yang sudah tersimpan di storage dan tidak perlu dikirim lagi.
+	UploadedPartNumbers []int32   `json:"uploaded_part_numbers"`
+	ExpiresAt           time.Time `json:"expires_at"`
 }
 
 // originalResponse berisi URL untuk mengunduh file asli (sebelum
@@ -220,12 +242,64 @@ func (h *videoHandler) create(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"video": toOwnerVideoResponse(resp.GetVideo()),
 		"upload": uploadResponse{
-			URL:       resp.GetUploadUrl(),
-			Method:    http.MethodPut,
-			Headers:   resp.GetUploadHeaders(),
-			ExpiresAt: resp.GetUploadUrlExpiresAt().AsTime(),
+			PartSize:  resp.GetPartSizeBytes(),
+			PartCount: resp.GetPartCount(),
 		},
 	})
+}
+
+// uploadParts: POST /api/v1/videos/:id/upload-parts  {"part_numbers":[1,2,3]}
+// URL presigned untuk bagian-bagian file (multipart upload, langkah 29).
+// URL hanya ada di jawaban ini, jadi Cache-Control: no-store.
+func (h *videoHandler) uploadParts(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+	videoID, ok := videoIDParam(c)
+	if !ok {
+		return
+	}
+	var req uploadPartsRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), videoCallTimeout)
+	defer cancel()
+
+	resp, err := h.client.PresignUploadParts(ctx, &videov1.PresignUploadPartsRequest{
+		RequesterId: userID,
+		VideoId:     videoID,
+		PartNumbers: req.PartNumbers,
+	})
+	if err != nil {
+		writeGRPCError(c, h.logger, err)
+		return
+	}
+	out := uploadPartsResponse{
+		Parts:               make([]uploadPartResponse, len(resp.GetParts())),
+		UploadedPartNumbers: resp.GetUploadedPartNumbers(),
+		ExpiresAt:           resp.GetExpiresAt().AsTime(),
+	}
+	if out.UploadedPartNumbers == nil {
+		out.UploadedPartNumbers = []int32{}
+	}
+	for i, p := range resp.GetParts() {
+		headers := p.GetHeaders()
+		if headers == nil {
+			// Selalu objek, supaya browser bisa langsung Object.entries().
+			headers = map[string]string{}
+		}
+		out.Parts[i] = uploadPartResponse{
+			PartNumber: p.GetPartNumber(),
+			URL:        p.GetUrl(),
+			Method:     http.MethodPut,
+			Headers:    headers,
+			Size:       p.GetSizeBytes(),
+		}
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *videoHandler) complete(c *gin.Context) {

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: ice-stream
+data:
+  MEDIA_PUBLIC_URL: https://media-icestream.vzkyrielight.my.id/images
+  # Tautan di email "Lupa kata sandi?" menuju frontend online.
+  APP_BASE_URL: https://icestream.vzkyrielight.my.id
+  # Email sungguhan lewat Resend (https://resend.com/docs/send-with-smtp):
+  # TLS sejak awal di port 465, username "resend", password = API key
+  # (Secret smtp-credentials dari secrets/smtp.env, bukan di sini).
+  SMTP_ADDR: smtp.resend.com:465
+  SMTP_TLS: tls
+  SMTP_USERNAME: resend
+  # Domain pengirim harus sudah diverifikasi di dashboard Resend.
+  MAIL_FROM: Ice-Stream <no-reply@vzkyrielight.my.id>
