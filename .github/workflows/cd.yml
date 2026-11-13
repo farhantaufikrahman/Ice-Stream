@@ -103,7 +103,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       # https://vercel.com/guides/how-can-i-use-github-actions-with-vercel
       - name: Pasang Vercel CLI
-        run: npm install --global vercel@65.5.0
+        run: npm install --global --ignore-scripts vercel@65.5.0
       - name: Ambil pengaturan project Vercel
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
         env:
