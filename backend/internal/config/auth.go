@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/mail"
@@ -44,6 +45,12 @@ type MailConfig struct {
 	// SMTPAddr adalah host:port server SMTP. Di cluster lokal: Mailpit
 	// ("mailpit:1025"), yang menangkap semua email tanpa mengirimnya.
 	SMTPAddr string
+	// SMTPTLS: "none" (Mailpit), "starttls" (port 587), atau "tls" (port 465).
+	SMTPTLS string
+	// SMTPUsername dan SMTPPassword untuk login SMTP. Resend: username
+	// "resend", password = API key (dari Secret, bukan ConfigMap).
+	SMTPUsername string
+	SMTPPassword string
 	// From adalah pengirim email, misalnya
 	// "Ice-Stream <no-reply@ice-stream.localhost>".
 	From string
@@ -98,6 +105,9 @@ func LoadAuth() (AuthConfig, error) {
 		MediaPublicURL:    loadMediaURL(storage),
 		Mail: MailConfig{
 			SMTPAddr:         getString("SMTP_ADDR", "localhost:1025"),
+			SMTPTLS:          strings.ToLower(getString("SMTP_TLS", "none")),
+			SMTPUsername:     getString("SMTP_USERNAME", ""),
+			SMTPPassword:     getString("SMTP_PASSWORD", ""),
 			From:             getString("MAIL_FROM", "Ice-Stream <no-reply@ice-stream.localhost>"),
 			AppBaseURL:       strings.TrimRight(getString("APP_BASE_URL", "http://localhost:5173"), "/"),
 			PasswordResetTTL: resetTTL,
@@ -147,6 +157,17 @@ func (m MailConfig) validate() error {
 	}
 	if err := validPort("SMTP_ADDR", port); err != nil {
 		return err
+	}
+	switch m.SMTPTLS {
+	case "none", "starttls", "tls":
+	default:
+		return fmt.Errorf("SMTP_TLS harus none, starttls, atau tls, dapat %q", m.SMTPTLS)
+	}
+	if m.SMTPUsername != "" && m.SMTPTLS == "none" {
+		return errors.New("SMTP_USERNAME butuh SMTP_TLS=starttls atau tls, supaya password tidak terkirim tanpa enkripsi")
+	}
+	if m.SMTPUsername != "" && m.SMTPPassword == "" {
+		return errors.New("SMTP_PASSWORD wajib diisi jika SMTP_USERNAME diisi")
 	}
 	if _, err := mail.ParseAddress(m.From); err != nil {
 		return fmt.Errorf("MAIL_FROM tidak valid (contoh: Ice-Stream <no-reply@contoh.com>): %w", err)

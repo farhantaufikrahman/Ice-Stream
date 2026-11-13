@@ -239,6 +239,26 @@ func (h *liveHandler) get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stream": out})
 }
 
+// requireLiveBroadcaster dipasang di /me/live saat LIVE_BROADCAST_ADMIN_ONLY
+// menyala (langkah 29): backend online lewat Cloudflare Tunnel hanya
+// meneruskan HTTP, jadi siaran (RTMP/WebRTC) hanya bisa dari laptop admin.
+// Kode LIVE_BROADCAST_ADMIN_ONLY dibaca frontend untuk menampilkan keterangan.
+// Dipanggil setelah requireAuth, jadi claims pasti ada.
+func requireLiveBroadcaster() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, ok := CurrentUser(c)
+		if !ok {
+			abortError(c, http.StatusUnauthorized, "UNAUTHENTICATED", "access token tidak ada")
+			return
+		}
+		if !isAdmin(claims) {
+			abortError(c, http.StatusForbidden, "LIVE_BROADCAST_ADMIN_ONLY", "siaran langsung belum tersedia untuk akun ini")
+			return
+		}
+		c.Next()
+	}
+}
+
 // myChannel: GET /api/v1/me/live  (wajib login)
 // Pengaturan siaran milik user, dibuat otomatis saat pertama kali dibuka.
 func (h *liveHandler) myChannel(c *gin.Context) {

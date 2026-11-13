@@ -14,7 +14,7 @@ func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{
 		"APP_ENV", "HTTP_PORT", "CORS_ALLOWED_ORIGINS", "SHUTDOWN_TIMEOUT",
 		"TRUSTED_PROXIES", "AUTH_GRPC_ADDR", "VIDEO_GRPC_ADDR", "COOKIE_SECURE", "COOKIE_SAMESITE",
-		"NATS_URL", "LIVE_MAX_CLIENTS", "OAUTH_REDIRECT_BASE_URL", "APP_BASE_URL", "RATE_LIMIT_ENABLED", "METRICS_PORT",
+		"NATS_URL", "LIVE_MAX_CLIENTS", "OAUTH_REDIRECT_BASE_URL", "APP_BASE_URL", "RATE_LIMIT_ENABLED", "METRICS_PORT", "LIVE_BROADCAST_ADMIN_ONLY",
 		"OAUTH_GOOGLE_CLIENT_ID", "OAUTH_GOOGLE_CLIENT_SECRET", "OAUTH_GITHUB_CLIENT_ID", "OAUTH_GITHUB_CLIENT_SECRET",
 	} {
 		t.Setenv(key, "")
@@ -37,6 +37,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 5000, cfg.LiveMaxClients)
 	// Langkah 28: rate limit menyala, metrik di port 9090.
 	assert.True(t, cfg.RateLimitEnabled)
+	assert.False(t, cfg.LiveBroadcastAdminOnly)
 	assert.Equal(t, ":9090", cfg.MetricsAddr)
 	// Di development cookie tidak Secure, karena localhost memakai http.
 	assert.Equal(t, CookieConfig{Secure: false, SameSite: http.SameSiteLaxMode}, cfg.Cookie)
@@ -61,6 +62,7 @@ func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("LIVE_MAX_CLIENTS", "200")
 	t.Setenv("RATE_LIMIT_ENABLED", "false")
 	t.Setenv("METRICS_PORT", "9190")
+	t.Setenv("LIVE_BROADCAST_ADMIN_ONLY", "true")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -76,6 +78,7 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "nats://nats:4222", cfg.NATSURL)
 	assert.Equal(t, 200, cfg.LiveMaxClients)
 	assert.False(t, cfg.RateLimitEnabled)
+	assert.True(t, cfg.LiveBroadcastAdminOnly)
 	assert.Equal(t, ":9190", cfg.MetricsAddr)
 	// Di production Secure otomatis true.
 	assert.Equal(t, CookieConfig{Secure: true, SameSite: http.SameSiteNoneMode}, cfg.Cookie)
@@ -83,23 +86,24 @@ func TestLoadFromEnv(t *testing.T) {
 
 func TestLoadInvalid(t *testing.T) {
 	tests := map[string]map[string]string{
-		"APP_ENV salah":                {"APP_ENV": "staging"},
-		"HTTP_PORT bukan angka":        {"HTTP_PORT": "abc"},
-		"HTTP_PORT di luar batas":      {"HTTP_PORT": "70000"},
-		"SHUTDOWN_TIMEOUT salah":       {"SHUTDOWN_TIMEOUT": "sepuluh"},
-		"JWT_PUBLIC_KEY_FILE kosong":   {"JWT_PUBLIC_KEY_FILE": ""},
-		"COOKIE_SECURE bukan boolean":  {"COOKIE_SECURE": "ya"},
-		"COOKIE_SAMESITE salah":        {"COOKIE_SAMESITE": "kadang"},
-		"SameSite none tanpa Secure":   {"COOKIE_SAMESITE": "none", "COOKIE_SECURE": "false"},
-		"NATS_URL salah":               {"NATS_URL": "http://nats:4222"},
-		"LIVE_MAX_CLIENTS nol":         {"LIVE_MAX_CLIENTS": "0"},
-		"LIVE_MAX_CLIENTS bukan angka": {"LIVE_MAX_CLIENTS": "banyak"},
-		"RATE_LIMIT_ENABLED salah":     {"RATE_LIMIT_ENABLED": "kadang"},
-		"METRICS_PORT sama":            {"METRICS_PORT": "8080", "HTTP_PORT": "8080"},
-		"METRICS_PORT bukan angka":     {"METRICS_PORT": "abc"},
-		"OAUTH redirect dengan path":   {"OAUTH_REDIRECT_BASE_URL": "http://localhost:4000/api"},
-		"APP_BASE_URL tanpa skema":     {"APP_BASE_URL": "ice-stream.localhost:4000"},
-		"Google tanpa secret":          {"OAUTH_GOOGLE_CLIENT_ID": "abc.apps.googleusercontent.com", "OAUTH_GOOGLE_CLIENT_SECRET": ""},
+		"APP_ENV salah":                   {"APP_ENV": "staging"},
+		"HTTP_PORT bukan angka":           {"HTTP_PORT": "abc"},
+		"HTTP_PORT di luar batas":         {"HTTP_PORT": "70000"},
+		"SHUTDOWN_TIMEOUT salah":          {"SHUTDOWN_TIMEOUT": "sepuluh"},
+		"JWT_PUBLIC_KEY_FILE kosong":      {"JWT_PUBLIC_KEY_FILE": ""},
+		"COOKIE_SECURE bukan boolean":     {"COOKIE_SECURE": "ya"},
+		"COOKIE_SAMESITE salah":           {"COOKIE_SAMESITE": "kadang"},
+		"SameSite none tanpa Secure":      {"COOKIE_SAMESITE": "none", "COOKIE_SECURE": "false"},
+		"NATS_URL salah":                  {"NATS_URL": "http://nats:4222"},
+		"LIVE_MAX_CLIENTS nol":            {"LIVE_MAX_CLIENTS": "0"},
+		"LIVE_MAX_CLIENTS bukan angka":    {"LIVE_MAX_CLIENTS": "banyak"},
+		"RATE_LIMIT_ENABLED salah":        {"RATE_LIMIT_ENABLED": "kadang"},
+		"LIVE_BROADCAST_ADMIN_ONLY salah": {"LIVE_BROADCAST_ADMIN_ONLY": "kadang"},
+		"METRICS_PORT sama":               {"METRICS_PORT": "8080", "HTTP_PORT": "8080"},
+		"METRICS_PORT bukan angka":        {"METRICS_PORT": "abc"},
+		"OAUTH redirect dengan path":      {"OAUTH_REDIRECT_BASE_URL": "http://localhost:4000/api"},
+		"APP_BASE_URL tanpa skema":        {"APP_BASE_URL": "ice-stream.localhost:4000"},
+		"Google tanpa secret":             {"OAUTH_GOOGLE_CLIENT_ID": "abc.apps.googleusercontent.com", "OAUTH_GOOGLE_CLIENT_SECRET": ""},
 	}
 	for name, env := range tests {
 		t.Run(name, func(t *testing.T) {

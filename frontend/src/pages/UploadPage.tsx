@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEven
 import { Link, useBlocker } from 'react-router'
 import { errorMessage, isAbortError } from '../api/client'
 import { completeUpload, createUpload, deleteVideo, updateVideo } from '../api/endpoints'
-import type { Video, VideoLanguage, VideoVisibility } from '../api/types'
-import { putFile } from '../api/upload'
+import type { UploadPlan, Video, VideoLanguage, VideoVisibility } from '../api/types'
+import { uploadMultipart } from '../api/upload'
 import { ErrorBox } from '../components/ErrorBox'
 import { StatusChip } from '../components/studio/StatusChip'
 import { StudioHeader, UploadIcon } from '../components/studio/StudioLayout'
@@ -80,6 +80,9 @@ export function UploadPage() {
   const [triedPublish, setTriedPublish] = useState(false)
   const tagsRef = useRef<TagFieldHandle>(null)
   const uploadCtrl = useRef<AbortController | null>(null)
+  // Cara memotong file dari POST /videos, disimpan untuk "Coba lagi"
+  // (melanjutkan bagian yang belum terkirim, langkah 29).
+  const planRef = useRef<UploadPlan | null>(null)
 
   // Menutup halaman = membatalkan unggahan yang sedang berjalan.
   useEffect(() => () => uploadCtrl.current?.abort(), [])
@@ -104,6 +107,35 @@ export function UploadPage() {
 
   // Setelah Terbitkan: cek status sampai transcoding selesai.
   useVideoPoll(video?.id ?? null, phase === 'published' && video !== null && isProcessing(video.status), setVideo)
+
+  /** Mengirim bagian file yang belum tersimpan (juga untuk melanjutkan). */
+  const sendParts = async (videoId: string, f: File, plan: UploadPlan, ctrl: AbortController) => {
+    setError(null)
+    setPhase('uploading')
+    const startedAt = performance.now()
+    let firstLoaded: number | null = null
+    try {
+      await uploadMultipart({
+        videoId,
+        file: f,
+        plan,
+        signal: ctrl.signal,
+        onProgress: (loaded, total) => {
+          // Kecepatan dihitung dari byte yang dikirim di sesi ini saja,
+          // bukan bagian yang sudah tersimpan sebelumnya.
+          firstLoaded ??= loaded
+          const speed = (loaded - firstLoaded) / ((performance.now() - startedAt) / 1000)
+          setProgress({ loaded, total, etaSeconds: speed > 0 ? (total - loaded) / speed : Number.NaN })
+        },
+      })
+      if (ctrl.signal.aborted) return
+      setPhase('uploaded')
+    } catch (err) {
+      if (isAbortError(err)) return
+      setError({ at: 'upload', message: errorMessage(err) })
+      setPhase('failed')
+    }
+  }
 
   const startUpload = useCallback(
     async (f: File, contentType: string, initialTitle: string, initialDescription: string) => {
@@ -136,22 +168,8 @@ export function UploadPage() {
         return
       }
       setVideo(created.video)
-      setPhase('uploading')
-      const startedAt = performance.now()
-      try {
-        await putFile(created.upload, f, {
-          signal: ctrl.signal,
-          onProgress: (loaded, total) => {
-            const speed = loaded / ((performance.now() - startedAt) / 1000)
-            setProgress({ loaded, total, etaSeconds: speed > 0 ? (total - loaded) / speed : Number.NaN })
-          },
-        })
-        setPhase('uploaded')
-      } catch (err) {
-        if (isAbortError(err)) return
-        setError({ at: 'upload', message: errorMessage(err) })
-        setPhase('failed')
-      }
+      planRef.current = created.upload
+      await sendParts(created.video.id, f, created.upload, ctrl)
     },
     [],
   )
@@ -198,11 +216,17 @@ export function UploadPage() {
       void publish(asDraft)
       return
     }
+    // Langkah 29: unggahan yang terputus dilanjutkan dari bagian yang belum
+    // tersimpan; video yang sudah dicatat tidak dibuat ulang.
+    if (error?.at === 'upload' && video && video.status === 'PENDING_UPLOAD' && planRef.current) {
+      uploadCtrl.current?.abort()
+      const ctrl = new AbortController()
+      uploadCtrl.current = ctrl
+      void sendParts(video.id, file, planRef.current, ctrl)
+      return
+    }
     const check = checkVideoFile(file)
     if (!check.ok) return
-    // URL presigned lama mungkin sudah kedaluwarsa dan backend tidak punya
-    // endpoint untuk meminta URL baru, jadi catatan lama dihapus lalu dibuat
-    // ulang.
     if (video && video.status === 'PENDING_UPLOAD') {
       deleteVideo(video.id).catch(() => {})
       setVideo(null)

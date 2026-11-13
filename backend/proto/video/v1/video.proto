@@ -8,12 +8,20 @@ package video.v1;
 import "google/protobuf/timestamp.proto";
 
 service VideoService {
-  // CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memberi URL
-  // presigned untuk mengunggah file langsung dari browser ke object storage.
+  // CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memulai
+  // multipart upload di object storage (langkah 29). File dikirim browser
+  // per bagian (part_size_bytes) memakai URL dari PresignUploadParts.
   // Error INVALID_ARGUMENT jika judul, tipe file, atau ukuran tidak valid.
   rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
-  // CompleteUpload dipanggil setelah browser selesai mengunggah. Service
-  // memeriksa file di storage, lalu mengubah status menjadi UPLOADED.
+  // PresignUploadParts (langkah 29) memberi URL presigned untuk bagian
+  // file yang diminta, dan daftar bagian yang SUDAH tersimpan di storage
+  // (untuk melanjutkan upload yang terputus). Error NOT_FOUND jika video
+  // tidak ada atau bukan milik requester, FAILED_PRECONDITION jika video
+  // tidak sedang menunggu upload, INVALID_ARGUMENT jika nomor bagian salah.
+  rpc PresignUploadParts(PresignUploadPartsRequest) returns (PresignUploadPartsResponse);
+  // CompleteUpload dipanggil setelah browser selesai mengunggah semua
+  // bagian. Service menggabungkan bagian-bagian itu menjadi satu file,
+  // memeriksanya, lalu mengubah status menjadi UPLOADED.
   // Error NOT_FOUND jika video tidak ada atau bukan milik requester,
   // FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
   rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
@@ -382,12 +390,39 @@ message CreateUploadRequest {
 
 message CreateUploadResponse {
   Video video = 1;
-  // URL tujuan PUT. Hanya berlaku sampai upload_url_expires_at.
-  string upload_url = 2;
-  google.protobuf.Timestamp upload_url_expires_at = 3;
-  // Header yang WAJIB ikut dikirim bersama PUT (termasuk Content-Type),
-  // karena ikut ditandatangani di dalam URL.
-  map<string, string> upload_headers = 4;
+  // Langkah 29: upload satu PUT (upload_url, upload_headers) diganti
+  // multipart, karena Cloudflare menolak request di atas 100 MB.
+  reserved 2, 3, 4;
+  reserved "upload_url", "upload_url_expires_at", "upload_headers";
+  // Ukuran tiap bagian; bagian terakhir boleh lebih kecil.
+  int64 part_size_bytes = 5;
+  // Jumlah bagian, nomor bagian 1 sampai part_count.
+  int32 part_count = 6;
+}
+
+message PresignUploadPartsRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Nomor bagian (1..part_count) yang butuh URL, maksimal 20 sekaligus.
+  // Boleh kosong untuk hanya menanyakan uploaded_part_numbers.
+  repeated int32 part_numbers = 3;
+}
+
+message UploadPart {
+  int32 part_number = 1;
+  // URL tujuan PUT. Hanya berlaku sampai expires_at.
+  string url = 2;
+  // Ukuran body yang wajib dikirim (ikut ditandatangani di URL).
+  int64 size_bytes = 3;
+  // Header yang WAJIB ikut dikirim bersama PUT.
+  map<string, string> headers = 4;
+}
+
+message PresignUploadPartsResponse {
+  repeated UploadPart parts = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  // Bagian yang sudah tersimpan lengkap di storage, urut dari kecil.
+  repeated int32 uploaded_part_numbers = 3;
 }
 
 message CompleteUploadRequest {

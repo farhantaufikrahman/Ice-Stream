@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { errorMessage } from '../api/client'
+import { ApiError, errorMessage } from '../api/client'
 import { getMyLive, resetStreamKey, updateMyLive } from '../api/endpoints'
 import type { LiveChannel, LiveRecording } from '../api/types'
 import { ErrorBox } from '../components/ErrorBox'
@@ -39,6 +39,9 @@ const MAX_TITLE = 100
 export function StudioLivePage() {
   const [channel, setChannel] = useState<LiveChannel | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Server online (lewat Cloudflare Tunnel) hanya mengizinkan admin siaran:
+  // RTMP/WebRTC dari luar laptop tidak bisa masuk (langkah 29).
+  const [adminOnly, setAdminOnly] = useState(false)
   const [reloads, setReloads] = useState(0)
   const [source, setSource] = useState<Source>('camera')
   const [cameraId, setCameraId] = useState('')
@@ -56,7 +59,13 @@ export function StudioLivePage() {
           setLoadError(null)
         })
         .catch((err) => {
-          if (!ctrl.signal.aborted) setLoadError(errorMessage(err))
+          if (ctrl.signal.aborted) return
+          if (err instanceof ApiError && err.code === 'LIVE_BROADCAST_ADMIN_ONLY') {
+            setAdminOnly(true)
+            clearInterval(timer)
+            return
+          }
+          setLoadError(errorMessage(err))
         })
     void load()
     const timer = setInterval(load, REFRESH_MS)
@@ -79,6 +88,18 @@ export function StudioLivePage() {
   // jalur yang sama (MediaMTX menolak publisher kedua).
   const otherPublisher = current !== null && pub.state === 'idle'
   const status = current ? 'Sedang siaran' : pub.state === 'starting' ? 'Menyambung…' : 'Belum siaran'
+
+  if (adminOnly) {
+    return (
+      <StudioLayout>
+        <h1 className="studio-title">Siaran langsung</h1>
+        <p className="muted" role="status">
+          Siaran langsung belum tersedia untuk akun kamu di server ini. Kamu tetap bisa menonton siaran dan ikut chat di halaman{' '}
+          <Link to="/live">Live</Link>.
+        </p>
+      </StudioLayout>
+    )
+  }
 
   if (!channel && loadError) {
     return (

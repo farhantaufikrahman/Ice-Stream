@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
@@ -28,6 +29,7 @@ type fakeVideoClient struct {
 	getStatus videov1.VideoStatus
 
 	lastCreate   *videov1.CreateUploadRequest
+	lastParts    *videov1.PresignUploadPartsRequest
 	lastComplete *videov1.CompleteUploadRequest
 	lastGet      *videov1.GetVideoRequest
 	lastList     *videov1.ListMyVideosRequest
@@ -91,10 +93,29 @@ func (f *fakeVideoClient) CreateUpload(_ context.Context, in *videov1.CreateUplo
 		return nil, f.err
 	}
 	return &videov1.CreateUploadResponse{
-		Video:              testVideo(videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD),
-		UploadUrl:          "http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x",
-		UploadUrlExpiresAt: timestamppb.New(testCreatedAt.Add(15 * time.Minute)),
-		UploadHeaders:      map[string]string{"Content-Type": "video/mp4"},
+		Video:         testVideo(videov1.VideoStatus_VIDEO_STATUS_PENDING_UPLOAD),
+		PartSizeBytes: 50 << 20,
+		PartCount:     3,
+	}, nil
+}
+
+func (f *fakeVideoClient) PresignUploadParts(_ context.Context, in *videov1.PresignUploadPartsRequest, _ ...grpc.CallOption) (*videov1.PresignUploadPartsResponse, error) {
+	f.lastParts = in
+	if f.err != nil {
+		return nil, f.err
+	}
+	parts := make([]*videov1.UploadPart, len(in.GetPartNumbers()))
+	for i, n := range in.GetPartNumbers() {
+		parts[i] = &videov1.UploadPart{
+			PartNumber: n,
+			Url:        fmt.Sprintf("http://localhost:9000/videos/raw/abc/source?partNumber=%d&uploadId=u1&X-Amz-Signature=x", n),
+			SizeBytes:  50 << 20,
+		}
+	}
+	return &videov1.PresignUploadPartsResponse{
+		Parts:               parts,
+		ExpiresAt:           timestamppb.New(testCreatedAt.Add(15 * time.Minute)),
+		UploadedPartNumbers: []int32{1},
 	}, nil
 }
 
@@ -193,6 +214,35 @@ func newRoleTokenSigner(t *testing.T) (*accesstoken.Verifier, func(userID int64)
 	return accesstoken.NewVerifier(pub), sign("USER"), sign("ADMIN")
 }
 
+// Langkah 29: URL presigned per bagian (multipart upload).
+func TestUploadParts(t *testing.T) {
+	verifier, as := newTokenSigner(t)
+	fake := &fakeVideoClient{}
+	r := newTestRouter(t, Deps{Videos: fake, Verifier: verifier})
+
+	rec := do(r, http.MethodPost, "/api/v1/videos/42/upload-parts", `{"part_numbers":[2,3]}`)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "wajib login")
+
+	rec = do(r, http.MethodPost, "/api/v1/videos/42/upload-parts", `{"part_numbers":[2,3]}`, as(7))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.JSONEq(t, `{
+		"parts":[
+			{"part_number":2,"url":"http://localhost:9000/videos/raw/abc/source?partNumber=2&uploadId=u1&X-Amz-Signature=x","method":"PUT","headers":{},"size":52428800},
+			{"part_number":3,"url":"http://localhost:9000/videos/raw/abc/source?partNumber=3&uploadId=u1&X-Amz-Signature=x","method":"PUT","headers":{},"size":52428800}
+		],
+		"uploaded_part_numbers":[1],
+		"expires_at":"2026-10-29T04:15:00Z"
+	}`, rec.Body.String())
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, int64(7), fake.lastParts.GetRequesterId())
+	assert.Equal(t, int64(42), fake.lastParts.GetVideoId())
+	assert.Equal(t, []int32{2, 3}, fake.lastParts.GetPartNumbers())
+
+	fake.err = status.Error(codes.FailedPrecondition, "video tidak sedang menunggu upload")
+	rec = do(r, http.MethodPost, "/api/v1/videos/42/upload-parts", `{"part_numbers":[1]}`, as(7))
+	assert.Equal(t, http.StatusConflict, rec.Code)
+}
+
 func TestCreateVideo(t *testing.T) {
 	verifier, as := newTokenSigner(t)
 	fake := &fakeVideoClient{}
@@ -205,8 +255,7 @@ func TestCreateVideo(t *testing.T) {
 		"video": {"id":"42","owner_id":"7","title":"Tes","description":"","status":"PENDING_UPLOAD",
 		          "content_type":"video/mp4","size_bytes":1234,"created_at":"2026-10-29T04:00:00Z","view_count":0,"comment_count":0,"like_count":0,"danmaku_count":0,
 		          "category":"","tags":[],"visibility":"PUBLIC","draft":false,"language":"","custom_thumbnail":false},
-		"upload": {"url":"http://localhost:9000/videos/raw/abc/source?X-Amz-Signature=x","method":"PUT",
-		           "headers":{"Content-Type":"video/mp4"},"expires_at":"2026-10-29T04:15:00Z"}
+		"upload": {"part_size":52428800,"part_count":3}
 	}`, rec.Body.String())
 	// Id pemilik diambil dari access token, bukan dari body.
 	assert.Equal(t, int64(7), fake.lastCreate.GetRequesterId())

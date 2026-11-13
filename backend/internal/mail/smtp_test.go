@@ -3,10 +3,13 @@ package mail
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"mime"
 	"mime/quotedprintable"
 	"net"
+	"net/http/httptest"
 	"net/mail"
 	"strings"
 	"testing"
@@ -57,6 +60,52 @@ func TestSMTPSenderSend(t *testing.T) {
 	assert.Error(t, SMTPSender{Addr: s.Addr, From: "bukan email"}.Send(context.Background(), Message{To: "budi@example.com"}))
 }
 
+// TestSMTPSenderImplicitTLS: seperti Resend di port 465, koneksi TLS
+// sejak awal lalu login AUTH PLAIN (langkah 29).
+func TestSMTPSenderImplicitTLS(t *testing.T) {
+	// Sertifikat buatan httptest (berlaku untuk 127.0.0.1).
+	srv := httptest.NewUnstartedServer(nil)
+	srv.StartTLS()
+	defer srv.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: srv.TLS.Certificates, MinVersion: tls.VersionTLS12})
+	require.NoError(t, err)
+	defer ln.Close()
+	got := make(chan string, 1)
+	go fakeSMTP(t, ln, got)
+
+	s := SMTPSender{
+		Addr:      ln.Addr().String(),
+		From:      "Ice-Stream <no-reply@vzkyrielight.my.id>",
+		Timeout:   5 * time.Second,
+		TLS:       TLSImplicit,
+		Username:  "resend",
+		Password:  "re_rahasia",
+		tlsConfig: &tls.Config{RootCAs: roots, ServerName: "127.0.0.1", MinVersion: tls.VersionTLS12},
+	}
+	require.NoError(t, s.Send(context.Background(), Message{To: "budi@example.com", Subject: "Tes", Text: "isi"}))
+	data := <-got
+	// AUTH PLAIN base64("\x00resend\x00re_rahasia")
+	assert.Contains(t, data, "AUTH PLAIN AHJlc2VuZAByZV9yYWhhc2lh")
+	assert.Contains(t, data, "RCPT TO:<budi@example.com>")
+}
+
+// Login tanpa TLS ke server bukan localhost ditolak smtp.PlainAuth,
+// jadi password tidak pernah terkirim polos.
+func TestSMTPSenderStartTLSRequired(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	go fakeSMTP(t, ln, make(chan string, 1))
+
+	s := SMTPSender{Addr: ln.Addr().String(), From: "a@b.co", Timeout: 5 * time.Second, TLS: TLSStartTLS, Username: "u", Password: "p"}
+	err = s.Send(context.Background(), Message{To: "budi@example.com", Subject: "Tes", Text: "isi"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "STARTTLS")
+}
+
 // fakeSMTP menjawab satu sesi SMTP minimal dan mengirim semua yang
 // diterima ke got.
 func fakeSMTP(t *testing.T, ln net.Listener, got chan<- string) {
@@ -84,7 +133,10 @@ func fakeSMTP(t *testing.T, ln net.Listener, got chan<- string) {
 				reply("250 OK")
 			}
 		case strings.HasPrefix(line, "EHLO"), strings.HasPrefix(line, "HELO"):
-			reply("250 fake")
+			reply("250-fake")
+			reply("250 AUTH PLAIN")
+		case strings.HasPrefix(line, "AUTH PLAIN"):
+			reply("235 2.7.0 Authentication successful")
 		case strings.HasPrefix(line, "DATA"):
 			inData = true
 			reply("354 go ahead")

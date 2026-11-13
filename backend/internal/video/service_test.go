@@ -3,7 +3,9 @@ package video
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -103,7 +105,7 @@ func (r *fakeRepo) Create(_ context.Context, nv NewVideo) (Video, error) {
 	v := Video{
 		ID: r.nextID, OwnerID: nv.OwnerID, Title: nv.Title, Description: nv.Description,
 		Status: StatusPendingUpload, ObjectKey: nv.ObjectKey, ContentType: nv.ContentType,
-		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(), Category: nv.Category, Tags: nv.Tags,
+		SizeBytes: nv.SizeBytes, CreatedAt: time.Now().UTC(), Category: nv.Category, Tags: nv.Tags, UploadID: nv.UploadID,
 		Visibility: nv.Visibility, Draft: nv.Draft, Language: nv.Language,
 	}
 	r.videos[v.ID] = v
@@ -299,10 +301,71 @@ type fakeStore struct {
 	// putErr diisi test untuk mensimulasikan storage yang mati saat
 	// PutStream (lihat import_test.go).
 	putErr error
+	// uploads adalah multipart upload yang belum digabung (langkah 29),
+	// per upload id. aborted mencatat upload id yang dibatalkan.
+	uploads map[string]*fakeUpload
+	aborted []string
 }
 
-func (s *fakeStore) PresignPut(_ context.Context, key, contentType string, _ int64, ttl time.Duration) (PresignedRequest, error) {
-	return PresignedRequest{URL: "http://storage.test/videos/" + key + "?sig=put", Headers: map[string]string{"Content-Type": contentType}, ExpiresAt: time.Now().Add(ttl)}, nil
+type fakeUpload struct {
+	key, contentType string
+	parts            map[int32]int64
+}
+
+func (s *fakeStore) CreateMultipart(_ context.Context, key, contentType string) (string, error) {
+	if s.uploads == nil {
+		s.uploads = map[string]*fakeUpload{}
+	}
+	id := "up-" + key
+	s.uploads[id] = &fakeUpload{key: key, contentType: contentType, parts: map[int32]int64{}}
+	return id, nil
+}
+
+func (s *fakeStore) PresignUploadPart(_ context.Context, key, uploadID string, n int32, size int64, ttl time.Duration) (PresignedRequest, error) {
+	return PresignedRequest{
+		URL:       fmt.Sprintf("http://storage.test/videos/%s?uploadId=%s&partNumber=%d&size=%d", key, uploadID, n, size),
+		Headers:   map[string]string{},
+		ExpiresAt: time.Now().Add(ttl),
+	}, nil
+}
+
+// putPart mensimulasikan browser yang mengirim satu bagian.
+func (s *fakeStore) putPart(uploadID string, n int32, size int64) {
+	s.uploads[uploadID].parts[n] = size
+}
+
+func (s *fakeStore) ListParts(_ context.Context, key, uploadID string) ([]UploadedPart, error) {
+	up, ok := s.uploads[uploadID]
+	// Seperti S3: setelah digabung (file sudah ada), upload id tidak dikenal lagi.
+	if _, done := s.objects[key]; done || !ok {
+		return nil, ErrUploadNotFound
+	}
+	parts := make([]UploadedPart, 0, len(up.parts))
+	for n, size := range up.parts {
+		parts = append(parts, UploadedPart{Number: n, Size: size, ETag: fmt.Sprintf(`"etag-%d"`, n)})
+	}
+	sort.Slice(parts, func(i, j int) bool { return parts[i].Number < parts[j].Number })
+	return parts, nil
+}
+
+func (s *fakeStore) CompleteMultipart(_ context.Context, key, uploadID string, parts []UploadedPart) error {
+	up, ok := s.uploads[uploadID]
+	if !ok {
+		return ErrUploadNotFound
+	}
+	var total int64
+	for _, p := range parts {
+		total += p.Size
+	}
+	s.objects[key] = ObjectInfo{Size: total, ContentType: up.contentType}
+	delete(s.uploads, uploadID)
+	return nil
+}
+
+func (s *fakeStore) AbortMultipart(_ context.Context, _, uploadID string) error {
+	s.aborted = append(s.aborted, uploadID)
+	delete(s.uploads, uploadID)
+	return nil
 }
 
 func (s *fakeStore) PresignGet(_ context.Context, key string, ttl time.Duration) (PresignedRequest, error) {
@@ -359,8 +422,10 @@ func TestCreateUpload(t *testing.T) {
 	assert.Equal(t, "video/mp4", up.Video.ContentType, "tipe dijadikan huruf kecil")
 	assert.Equal(t, StatusPendingUpload, up.Video.Status)
 	assert.Regexp(t, `^raw/[0-9a-f]{32}/source$`, up.Video.ObjectKey)
-	assert.Contains(t, up.Request.URL, up.Video.ObjectKey)
-	assert.Equal(t, "video/mp4", up.Request.Headers["Content-Type"])
+	// Langkah 29: multipart upload dimulai, 1234 byte = 1 bagian 50 MB.
+	assert.Equal(t, "up-"+up.Video.ObjectKey, up.Video.UploadID)
+	assert.Equal(t, DefaultUploadPartBytes, up.PartSize)
+	assert.Equal(t, int32(1), up.PartCount)
 }
 
 func TestCreateUploadValidation(t *testing.T) {

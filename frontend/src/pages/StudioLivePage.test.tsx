@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/client'
 import type { LiveChannel, LiveChannelChanges, StreamKeyResult } from '../api/types'
 import { StudioLivePage } from './StudioLivePage'
 
@@ -41,6 +42,19 @@ describe('StudioLivePage', () => {
     getMyLive.mockReset().mockResolvedValue(channel)
     resetStreamKey.mockReset()
     updateMyLive.mockReset()
+  })
+
+  it('server hanya mengizinkan admin siaran: keterangan, bukan error', async () => {
+    getMyLive.mockRejectedValue(new ApiError(403, 'LIVE_BROADCAST_ADMIN_ONLY', 'siaran langsung belum tersedia untuk akun ini'))
+    render(
+      <MemoryRouter>
+        <StudioLivePage />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText(/Siaran langsung belum tersedia untuk akun kamu/)).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('link', { name: 'Live' })).toHaveAttribute('href', '/live')
+    expect(screen.queryByRole('button', { name: 'Mulai siaran' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Coba lagi' })).not.toBeInTheDocument()
   })
 
   it('kamera tidak bisa dibuka di luar secure context', async () => {

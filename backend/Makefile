@@ -2,7 +2,7 @@
 -include .env
 export
 
-.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web k8s-make-admin
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web k8s-make-admin test-coverage monitoring-up monitoring-down grafana-forward prometheus-forward deploy deploy-local
 
 IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
 
@@ -60,6 +60,10 @@ test: ## Jalankan semua test
 
 test-race: ## Test + pendeteksi race condition (butuh gcc: sudo apt install build-essential)
 	go test -race ./...
+
+test-coverage: ## Test + laporan coverage.out (dibaca SonarQube: sonar.go.coverage.reportPaths)
+	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out | tail -1
 
 fmt: ## Rapikan format kode
 	gofmt -w .
@@ -163,3 +167,50 @@ k8s-make-admin: ## Jadikan user admin: make k8s-make-admin USERNAME=budi
 	@echo "$(USERNAME)" | grep -Eq '^[a-z0-9_]{3,30}$$' || { echo "Isi USERNAME (huruf kecil, angka, _), misalnya: make k8s-make-admin USERNAME=budi"; exit 1; }
 	@printf "SET FEEDBACK ON\nUPDATE users SET role = 'ADMIN', updated_at = SYSTIMESTAMP WHERE username = '%s';\nCOMMIT;\nSELECT username, role FROM users WHERE username = '%s';\nEXIT\n" "$(USERNAME)" "$(USERNAME)" | \
 		kubectl -n ice-stream exec -i oracle-0 -c oracle -- bash -c 'sqlplus -s "$$APP_USER/$$APP_USER_PASSWORD@FREEPDB1"'
+
+# ---------- Monitoring (langkah 29): Prometheus + Grafana ----------
+KPS_VERSION ?= 93.2.2
+
+monitoring-up: ## Pasang/perbarui Prometheus + Grafana (butuh helm dan infra/k8s/secrets/grafana.env)
+	@test -s ../infra/k8s/secrets/grafana.env || { echo "Buat dulu ../infra/k8s/secrets/grafana.env (salin dari grafana.env.example)"; exit 1; }
+	kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n monitoring create secret generic grafana-admin --from-env-file=../infra/k8s/secrets/grafana.env --dry-run=client -o yaml | kubectl apply -f -
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KPS_VERSION) --namespace monitoring \
+		--values ../infra/monitoring/values.yaml --wait --timeout 10m
+	kubectl apply -k ../infra/monitoring/
+
+monitoring-down: ## Hapus Prometheus + Grafana (data metrik ikut hilang)
+	-kubectl delete -k ../infra/monitoring/
+	helm uninstall monitoring --namespace monitoring
+
+grafana-forward: ## Buka Grafana di http://localhost:3000
+	kubectl -n monitoring port-forward service/monitoring-grafana 3000:80
+
+prometheus-forward: ## Buka Prometheus di http://localhost:9095 (menu Status > Targets)
+	kubectl -n monitoring port-forward service/monitoring-kube-prometheus-prometheus 9095:9090
+
+# ---------- Online (langkah 29): backend di kube laptop + Cloudflare Tunnel ----------
+# Image :main dibuat GitHub Actions (.github/workflows/cd.yml) setiap ada
+# push ke branch main. Jalankan target ini SETELAH workflow CD hijau.
+
+DEPLOY_TAG ?= main
+
+deploy: ## Online: pasang infra/online + image :main (atau DEPLOY_TAG=dev), migrasi, restart service
+	@test -s ../infra/online/secrets/cloudflared.env || { echo "Buat dulu ../infra/online/secrets/cloudflared.env (salin dari cloudflared.env.example)"; exit 1; }
+	@test -s ../infra/online/secrets/smtp.env || { echo "Buat dulu ../infra/online/secrets/smtp.env (salin dari smtp.env.example)"; exit 1; }
+	@echo "$(DEPLOY_TAG)" | grep -Eq '^[A-Za-z0-9_.-]+$$' || { echo "DEPLOY_TAG tidak valid"; exit 1; }
+	kubectl kustomize ../infra/online/ | sed -E 's#(/ice-stream-[a-z]+):main$$#\1:$(DEPLOY_TAG)#' | kubectl apply -f -
+	kubectl -n ice-stream delete job migrate-auth migrate-video --ignore-not-found
+	sed 's#ice-stream-migrations:dev#ice-stream-migrations:$(DEPLOY_TAG)#' ../infra/k8s/jobs/migrate-auth.yaml | kubectl apply -f -
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-auth --timeout=300s
+	sed 's#ice-stream-migrations:dev#ice-stream-migrations:$(DEPLOY_TAG)#' ../infra/k8s/jobs/migrate-video.yaml | kubectl apply -f -
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-video --timeout=300s
+	$(MAKE) k8s-restart
+	kubectl -n ice-stream rollout status deployment/cloudflared --timeout=120s
+
+deploy-local: ## Kembali ke versi lokal (image :dev, tanpa tunnel)
+	kubectl -n ice-stream delete deployment cloudflared --ignore-not-found
+	kubectl apply -k ../infra/k8s/
+	$(MAKE) k8s-restart

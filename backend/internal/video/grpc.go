@@ -42,10 +42,25 @@ func (s *GRPCServer) CreateUpload(ctx context.Context, req *videov1.CreateUpload
 		return nil, s.toStatus(ctx, err)
 	}
 	return &videov1.CreateUploadResponse{
-		Video:              s.toProtoVideo(up.Video),
-		UploadUrl:          up.Request.URL,
-		UploadUrlExpiresAt: timestamppb.New(up.Request.ExpiresAt),
-		UploadHeaders:      up.Request.Headers,
+		Video:         s.toProtoVideo(up.Video),
+		PartSizeBytes: up.PartSize,
+		PartCount:     up.PartCount,
+	}, nil
+}
+
+func (s *GRPCServer) PresignUploadParts(ctx context.Context, req *videov1.PresignUploadPartsRequest) (*videov1.PresignUploadPartsResponse, error) {
+	out, err := s.svc.PresignUploadParts(ctx, req.GetRequesterId(), req.GetVideoId(), req.GetPartNumbers())
+	if err != nil {
+		return nil, s.toStatus(ctx, err)
+	}
+	parts := make([]*videov1.UploadPart, len(out.Parts))
+	for i, p := range out.Parts {
+		parts[i] = &videov1.UploadPart{PartNumber: p.Number, Url: p.Request.URL, SizeBytes: p.Size, Headers: p.Request.Headers}
+	}
+	return &videov1.PresignUploadPartsResponse{
+		Parts:               parts,
+		ExpiresAt:           timestamppb.New(out.ExpiresAt),
+		UploadedPartNumbers: out.Uploaded,
 	}, nil
 }
 
@@ -310,7 +325,7 @@ func (s *GRPCServer) toStatus(ctx context.Context, err error) error {
 		return status.Error(codes.InvalidArgument, verr.Error())
 	case errors.Is(err, ErrNotFound), errors.Is(err, ErrPlaylistNotFound), errors.Is(err, ErrFrameNotFound):
 		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading):
+	case errors.Is(err, ErrUploadIncomplete), errors.Is(err, ErrNotUploading), errors.Is(err, ErrUploadNotFound):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrVideoBusy), errors.Is(err, ErrAlreadyBlocked), errors.Is(err, ErrNotBlocked):
 		return status.Error(codes.FailedPrecondition, err.Error())
