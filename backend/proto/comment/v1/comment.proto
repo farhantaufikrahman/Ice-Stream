@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+// Kontrak gRPC CommentService: komentar di bawah video. Berjalan di proses
+// yang sama dengan VideoService (cmd/video, port 50052) dan memakai schema
+// VIDEO_SVC, tapi kontraknya terpisah supaya nanti bisa dipindah ke service
+// sendiri tanpa mengubah gateway. Hanya dipanggil oleh API gateway; id user
+// di requester_id sudah diverifikasi gateway dari access token.
+//
+// Semua RPC hanya berlaku untuk video READY. Untuk video lain hasilnya
+// NOT_FOUND, sama seperti GetVideo untuk orang yang bukan pemiliknya.
+package comment.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service CommentService {
+  // CreateComment menulis komentar baru, atau balasan jika parent_id diisi.
+  // Membalas sebuah balasan otomatis disimpan di bawah komentar utamanya.
+  // Error INVALID_ARGUMENT jika isi kosong atau lebih dari 1000 karakter,
+  // NOT_FOUND jika video atau komentar yang dibalas tidak ada.
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  // ListComments mengambil komentar utama sebuah video, terbaru lebih dulu.
+  // Boleh dipanggil tanpa login.
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+  // ListReplies mengambil balasan untuk satu komentar utama, terlama lebih
+  // dulu (urutan percakapan). Boleh dipanggil tanpa login.
+  rpc ListReplies(ListRepliesRequest) returns (ListRepliesResponse);
+  // DeleteComment menghapus komentar. Yang boleh menghapus: penulisnya, atau
+  // pemilik video (moderasi channel). Menghapus komentar utama ikut
+  // menghapus semua balasannya.
+  // Error NOT_FOUND jika komentar tidak ada, PERMISSION_DENIED jika
+  // requester bukan penulis atau pemilik video.
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+  // ListChannelComments mengambil komentar dan balasan di semua video milik
+  // requester (atau satu video jika video_id diisi), terbaru lebih dulu.
+  // Untuk halaman Komentar di Creator Studio (langkah 26). Video draf dan
+  // Pribadi ikut, video yang sudah dihapus tidak.
+  rpc ListChannelComments(ListChannelCommentsRequest) returns (ListChannelCommentsResponse);
+}
+
+message ListChannelCommentsRequest {
+  int64 requester_id = 1;
+  // 0 = semua video milik requester.
+  int64 video_id = 2;
+  // 0 = default (20). Maksimal 50.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// ChannelComment adalah komentar beserta judul videonya.
+message ChannelComment {
+  Comment comment = 1;
+  string video_title = 2;
+}
+
+message ListChannelCommentsResponse {
+  repeated ChannelComment comments = 1;
+  string next_page_token = 2;
+}
+
+message Comment {
+  int64 id = 1;
+  int64 video_id = 2;
+  int64 author_id = 3;
+  // 0 untuk komentar utama.
+  int64 parent_id = 4;
+  string body = 5;
+  // Jumlah balasan. Selalu 0 untuk balasan.
+  int64 reply_count = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message CreateCommentRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // 0 = komentar utama.
+  int64 parent_id = 3;
+  string body = 4;
+}
+
+message CreateCommentResponse {
+  Comment comment = 1;
+}
+
+message ListCommentsRequest {
+  int64 video_id = 1;
+  // 0 = default (20). Maksimal 50.
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message ListRepliesRequest {
+  int64 video_id = 1;
+  int64 comment_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListRepliesResponse {
+  repeated Comment comments = 1;
+  string next_page_token = 2;
+}
+
+message DeleteCommentRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  int64 comment_id = 3;
+}
+
+message DeleteCommentResponse {}

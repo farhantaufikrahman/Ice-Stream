@@ -1,0 +1,39 @@
+# Memberi tahu Prometheus (kube-prometheus-stack) pod mana yang di-scrape.
+# PodMonitor adalah CRD dari Prometheus Operator, jadi file ini baru bisa
+# dipasang SETELAH `make monitoring-up` (Helm) selesai.
+# Referensi: https://prometheus-operator.dev/docs/developer/getting-started/
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ice-stream-services
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [api, auth, video]
+  podMetricsEndpoints:
+    # Port bernama "metrics" di deployment api (9090), auth (9091), video (9092).
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ice-stream-transcoder
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: transcoder
+  podMetricsEndpoints:
+    # Transcoder menyajikan /metrics di port HTTP-nya (8080).
+    - port: http
+      path: /metrics
+      interval: 30s

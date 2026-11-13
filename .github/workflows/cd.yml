@@ -1,0 +1,118 @@
+# CD Ice-Stream (langkah 29): berjalan setiap ada push ke branch main
+# (biasanya setelah PR dev -> main di-merge), atau manual lewat tab Actions.
+#
+#   1. Tes yang sama dengan CI (workflow ci.yml dipanggil ulang).
+#   2. Image backend di-push ke Docker Hub dengan tag :main dan :sha-<commit>.
+#   3. Frontend di-build lalu di-deploy ke Vercel (production).
+#
+# Backend di Kubernetes laptop TIDAK di-deploy dari sini: server GitHub tidak
+# bisa menjangkau laptop, dan self-hosted runner tidak disarankan untuk repo
+# publik. Setelah workflow ini hijau, jalankan `make deploy` di WSL.
+#
+# Secrets (Settings > Secrets and variables > Actions > Secrets):
+#   DOCKERHUB_TOKEN, VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, SONAR_TOKEN
+# Variables (tab Variables):
+#   DOCKERHUB_USER, SONAR_ORGANIZATION, SONAR_PROJECT_KEY
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Dua deploy tidak boleh berjalan bersamaan; yang baru menunggu yang lama.
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Tes
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  images:
+    name: Push image ${{ matrix.name }}
+    needs: checks
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: api, context: backend, target: api }
+          - { name: auth, context: backend, target: auth }
+          - { name: video, context: backend, target: video }
+          - { name: transcoder, context: backend, target: transcoder }
+          - { name: migrations, context: backend/migrations, target: "" }
+          - { name: web, context: frontend, target: "" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Token Docker Hub (Account settings > Personal access tokens), bukan
+      # password akun. https://github.com/docker/login-action
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ vars.DOCKERHUB_USER }}/ice-stream-${{ matrix.name }}
+          tags: |
+            type=raw,value=main
+            type=sha,prefix=sha-
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+  vercel:
+    name: Deploy frontend ke Vercel
+    needs: checks
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: https://icestream.vzkyrielight.my.id
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Dibaca Vite saat build (src/api/client.ts): browser memanggil API
+      # lewat Cloudflare Tunnel.
+      VITE_API_BASE_URL: https://api-icestream.vzkyrielight.my.id/api/v1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.22.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # https://vercel.com/guides/how-can-i-use-github-actions-with-vercel
+      - name: Pasang Vercel CLI
+        run: npm install --global --ignore-scripts vercel@65.5.0
+      - name: Ambil pengaturan project Vercel
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Build
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

@@ -1,0 +1,19 @@
+# Nilai online untuk API gateway. Kunci yang tidak ditulis di sini tetap
+# memakai nilai dari infra/k8s/api/configmap.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: ice-stream
+data:
+  # Frontend di Vercel. localhost:5173 tetap boleh untuk npm run dev.
+  CORS_ALLOWED_ORIGINS: https://icestream.vzkyrielight.my.id,http://localhost:5173
+  # Situs online memakai HTTPS (Cloudflare), jadi cookie refresh token
+  # hanya dikirim lewat HTTPS. Lax cukup: icestream.vzkyrielight.my.id dan
+  # api-icestream.vzkyrielight.my.id dihitung satu situs ("my.id" ada di Public Suffix List).
+  COOKIE_SECURE: "true"
+  COOKIE_SAMESITE: lax
+  APP_BASE_URL: https://icestream.vzkyrielight.my.id
+  OAUTH_REDIRECT_BASE_URL: https://api-icestream.vzkyrielight.my.id
+  # RTMP/WebRTC dari luar laptop tidak bisa lewat tunnel: siaran hanya admin.
+  LIVE_BROADCAST_ADMIN_ONLY: "true"

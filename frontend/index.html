@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0B1220" />
+    <title>Ice-Stream</title>
+    <!-- Font dari desain Ice-Stream UI: Bricolage Grotesque (logo & judul),
+         Plus Jakarta Sans (teks), JetBrains Mono (durasi & angka). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+    />
+    <script>
+      // Pasang tema SEBELUM React jalan, supaya halaman tidak sempat
+      // berkedip putih/gelap. Pilihan user disimpan di localStorage
+      // (src/lib/theme.ts); default-nya gelap, sesuai desain.
+      try {
+        var t = localStorage.getItem('ice-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      # Harus lebih lama dari SHUTDOWN_TIMEOUT (10s), supaya graceful
+      # shutdown sempat selesai sebelum Kubernetes memaksa pod berhenti.
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: farhanrahman27/ice-stream-api:dev
+          # Image dibuat lokal dengan `docker build`, jadi jangan tarik dari registry.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+            # Metrik Prometheus (langkah 28): GET /metrics. Tidak dibuka di
+            # Service maupun HTTPRoute, jadi hanya bisa diambil dari dalam cluster.
+            - name: metrics
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: api-config
+            # Client id/secret Google dan GitHub (langkah 26).
+            - secretRef:
+                name: oauth-credentials
+          volumeMounts:
+            - name: jwt-public
+              mountPath: /etc/ice-stream/jwt
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        # Hanya kunci PUBLIK. Gateway bisa memeriksa token, tapi tidak bisa membuatnya.
+        - name: jwt-public
+          configMap:
+            name: jwt-public

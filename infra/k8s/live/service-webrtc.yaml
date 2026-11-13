@@ -1,0 +1,41 @@
+# Port media WebRTC untuk siaran dari browser (langkah 25b): 127.0.0.1:8189.
+#
+# Seperti RTMP, media WebRTC bukan HTTP, jadi tidak bisa lewat Gateway.
+# Dibuat dua Service (UDP dan TCP) karena satu Service LoadBalancer dengan
+# dua protokol belum tentu didukung semua cluster. Browser mencoba UDP
+# dulu; jika tidak tersambung, otomatis memakai TCP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-webrtc-udp
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: mediamtx
+  ports:
+    - name: ice-udp
+      port: 8189
+      targetPort: ice-udp
+      protocol: UDP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx-webrtc-tcp
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: mediamtx
+  ports:
+    - name: ice-tcp
+      port: 8189
+      targetPort: ice-tcp
+      protocol: TCP

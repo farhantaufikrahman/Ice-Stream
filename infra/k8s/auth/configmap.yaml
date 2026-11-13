@@ -1,0 +1,39 @@
+# Konfigurasi non-rahasia untuk AuthService (dan UserService yang berjalan
+# di proses yang sama). Password Oracle diambil dari Secret
+# oracle-credentials, kunci JWT dari Secret auth-jwt, kunci storage dari
+# Secret storage-credentials.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: ice-stream
+data:
+  APP_ENV: production
+  GRPC_PORT: "50051"
+  # Port /metrics Prometheus (langkah 28), hanya di dalam cluster.
+  METRICS_PORT: "9091"
+  SHUTDOWN_TIMEOUT: 10s
+  DB_HOST: oracle
+  DB_PORT: "1521"
+  DB_SERVICE: FREEPDB1
+  DB_USER: auth_svc
+  DB_MAX_OPEN_CONNS: "10"
+  # Lokasi file kunci privat di dalam container (lihat volumeMounts).
+  JWT_PRIVATE_KEY_FILE: /etc/ice-stream/jwt/jwt-private.pem
+  ACCESS_TOKEN_TTL: 15m
+  REFRESH_TOKEN_TTL: 720h
+  # Foto profil (UserService) disimpan di bucket images di RustFS.
+  STORAGE_ENDPOINT: http://storage:9000
+  STORAGE_BUCKET: images
+  # Alamat publik foto profil (lewat Gateway, storage/httproute.yaml).
+  MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/images
+  # Email "Lupa kata sandi?" (langkah 24c). Di cluster lokal semua email
+  # ditangkap Mailpit (mail/deployment.yaml).
+  SMTP_ADDR: mailpit:1025
+  MAIL_FROM: Ice-Stream <no-reply@ice-stream.localhost>
+  # Alamat frontend untuk tautan di email (web/httproute.yaml).
+  APP_BASE_URL: http://ice-stream.localhost:4000
+  PASSWORD_RESET_TTL: 30m

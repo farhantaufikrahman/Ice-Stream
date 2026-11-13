@@ -1,0 +1,613 @@
+// Bentuk JSON yang dikirim API gateway (backend/internal/httpserver).
+// Semua id dikirim sebagai string karena int64 bisa melebihi angka aman
+// JavaScript (Number.MAX_SAFE_INTEGER = 2^53 - 1).
+
+import type { ReportReason } from '../lib/report'
+
+export type VideoStatus = 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED'
+
+/**
+ * Langkah 26 (desain Upload): PUBLIC = "Publik", UNLISTED = "Tidak publik"
+ * (hanya lewat tautan), PRIVATE = "Pribadi" (hanya pemilik).
+ */
+export type VideoVisibility = 'PUBLIC' | 'UNLISTED' | 'PRIVATE'
+
+/**
+ * Visibilitas yang dikirim server. Langkah 28: "BLOCKED" = diturunkan
+ * admin. Hanya pemilik video (dan admin) yang masih bisa membukanya, dan
+ * pemilik tidak bisa memilih nilai ini sendiri.
+ */
+export type VideoVisibilityState = VideoVisibility | 'BLOCKED'
+
+/** Langkah 28: alasan video diturunkan. Hanya ada jika visibility = "BLOCKED". */
+export interface VideoModeration {
+  reason: ReportReason
+  note: string
+  blocked_at: string
+}
+
+/** Kode bahasa video (ISO 639-1). "" = tidak diisi. */
+export type VideoLanguage = '' | 'id' | 'en' | 'ja'
+
+/** Satu pilihan "Bingkai" thumbnail. Hanya ada di jawaban untuk pemilik video. */
+export interface ThumbnailFrame {
+  position_ms: number
+  url: string
+  /** true jika bingkai ini sedang dipakai sebagai thumbnail. */
+  selected: boolean
+}
+
+export interface Owner {
+  id: string
+  username: string
+  display_name: string
+  /** "" jika belum ada foto profil. */
+  avatar_url: string
+}
+
+export interface Video {
+  id: string
+  owner_id: string
+  title: string
+  description: string
+  status: VideoStatus
+  /** Tipe file asli, misalnya "video/mp4". */
+  content_type: string
+  size_bytes: number
+  created_at: string
+  duration_ms?: number
+  /** Kualitas hasil transcoding, misalnya ["720p", "480p"]. Ada saat READY. */
+  renditions?: string[]
+  hls_url?: string
+  thumbnail_url?: string
+  failure_reason?: string
+  view_count: number
+  comment_count: number
+  like_count: number
+  /** Langkah 24a: jumlah danmaku yang pernah dikirim ke video ini. */
+  danmaku_count: number
+  /** Langkah 23. "" jika video tidak punya kategori. */
+  category: string
+  /** Tanpa "#", misalnya ["esKrim", "anakKos"]. Bisa kosong. */
+  tags: string[]
+  owner?: Owner
+  /** Langkah 26; "BLOCKED" sejak langkah 28. */
+  visibility: VideoVisibilityState
+  /** Langkah 28: hanya ada di video BLOCKED yang dibuka pemiliknya. */
+  moderation?: VideoModeration
+  /** true = disimpan sebagai draf (belum terbit). */
+  draft: boolean
+  /** Waktu pertama kali terbit; tanggal di kartu video memakai ini. */
+  published_at?: string
+  language: VideoLanguage
+  /** true jika thumbnail diunggah kreator (bukan bingkai dari video). */
+  custom_thumbnail: boolean
+  /** Hanya untuk pemilik video yang sudah READY. */
+  thumbnail_frames?: ThumbnailFrame[]
+}
+
+export interface VideoPage {
+  videos: Video[]
+  /** "" jika tidak ada halaman berikutnya. */
+  next_page_token: string
+}
+
+/** Satu video Trending (GET /trending/videos). */
+export interface TrendingVideo extends Video {
+  /** Tayangan 7 hari terakhir (termasuk hari ini, tanggal WIB): angka urutannya. */
+  recent_views: number
+}
+
+export interface TrendingList {
+  videos: TrendingVideo[]
+}
+
+export interface VideoDetail {
+  video: Video
+  /** Hanya untuk pemilik video: URL sementara untuk mengunduh file asli. */
+  original?: { url: string; expires_at: string }
+  /** Hanya ada jika penonton sudah login. */
+  viewer_liked?: boolean
+  /** Hanya ada jika penonton sudah login. 0 = belum pernah menonton. */
+  resume_position_ms?: number
+  /** Hanya ada jika penonton sudah login: true jika video ada di Tonton nanti. */
+  viewer_saved?: boolean
+  /** Hanya ada jika penonton sudah login: true jika video ada di salah satu playlist miliknya. */
+  viewer_in_playlist?: boolean
+}
+
+/** Langkah 28: dibaca dari access token. */
+export type UserRole = 'USER' | 'ADMIN'
+
+export interface Profile {
+  id: string
+  username: string
+  display_name: string
+  bio: string
+  avatar_url: string
+  created_at: string
+  /** Hanya ada di profil milik sendiri (/me/profile). */
+  email?: string
+  /** Langkah 28: hanya ada di GET /me/profile. */
+  role?: UserRole
+  subscriber_count: number
+}
+
+export interface AccessToken {
+  access_token: string
+  token_type: 'Bearer'
+  expires_at: string
+}
+
+export interface LikeResult {
+  liked: boolean
+  like_count: number
+}
+
+export interface ViewResult {
+  counted: boolean
+  view_count: number
+}
+
+/**
+ * Cara mengirim satu request langsung ke storage (RustFS) memakai URL
+ * presigned: kirim `method` ke `url` dengan semua `headers`.
+ */
+export interface UploadTicket {
+  url: string
+  method: string
+  headers: Record<string, string>
+}
+
+/**
+ * Langkah 29: file video dikirim per bagian (multipart upload), karena
+ * Cloudflare menolak request di atas 100 MB. Bagian ke-n (mulai 1) =
+ * file.slice((n - 1) * part_size, n * part_size).
+ */
+export interface UploadPlan {
+  part_size: number
+  part_count: number
+}
+
+/** Jawaban POST /videos. */
+export interface CreateUploadResult {
+  video: Video
+  upload: UploadPlan
+}
+
+/** URL presigned untuk satu bagian file. `size` ikut ditandatangani. */
+export interface UploadPartTicket extends UploadTicket {
+  part_number: number
+  size: number
+}
+
+/** Jawaban POST /videos/:id/upload-parts. */
+export interface UploadPartsResult {
+  parts: UploadPartTicket[]
+  /** Bagian yang sudah tersimpan di storage (tidak perlu dikirim lagi). */
+  uploaded_part_numbers: number[]
+  expires_at: string
+}
+
+// ---------- Komentar dan danmaku (langkah 17c) ----------
+
+export interface Comment {
+  id: string
+  video_id: string
+  /** Hanya ada pada balasan: id komentar utama yang dibalas. */
+  parent_id?: string
+  author_id: string
+  /** Bisa kosong jika profil penulis gagal diambil server. */
+  author?: Owner
+  body: string
+  /** Jumlah balasan (hanya bermakna pada komentar utama). */
+  reply_count: number
+  created_at: string
+}
+
+export interface CommentPage {
+  comments: Comment[]
+  next_page_token: string
+}
+
+export type DanmakuMode = 'SCROLL' | 'TOP' | 'BOTTOM'
+
+export interface Danmaku {
+  id: string
+  video_id: string
+  /** Detik ke berapa (dalam milidetik) danmaku muncul di video. */
+  position_ms: number
+  body: string
+  /** Format "#RRGGBB". */
+  color: string
+  mode: DanmakuMode
+  created_at: string
+}
+
+export interface DanmakuPage {
+  danmaku: Danmaku[]
+  next_page_token: string
+}
+
+// ---------- Kanal dan langganan (langkah 17d) ----------
+
+/** Jawaban GET /users/:username (halaman kanal). */
+export interface ChannelDetail {
+  user: Profile
+  /** Hanya ada jika penonton sudah login. */
+  viewer_subscribed?: boolean
+  /**
+   * Angka di kepala halaman kanal (langkah 27): hanya video publik yang
+   * sudah terbit. Tidak ada jika VideoService sedang gagal.
+   */
+  stats?: ChannelCounts
+  /** "Video unggulan" pilihan kreator; null jika belum dipilih. Tidak ada jika VideoService gagal. */
+  featured_video?: Video | null
+}
+
+export interface ChannelCounts {
+  video_count: number
+  total_views: number
+  total_likes: number
+}
+
+/** Jumlah hasil satu tab pencarian (GET /search/counts, langkah 27). */
+export interface TabCount {
+  count: number
+  /** true: hasilnya lebih banyak dari count ("1.000+"). */
+  capped: boolean
+}
+
+/** null = tab itu gagal dihitung (angkanya tidak ditampilkan). */
+export interface SearchCounts {
+  video: TabCount | null
+  channel: TabCount | null
+  playlist: TabCount | null
+  live: TabCount | null
+}
+
+/** Jawaban PUT dan DELETE /users/:username/subscription. */
+export interface SubscriptionResult {
+  subscribed: boolean
+  subscriber_count: number
+}
+
+/** Jawaban GET /me/subscriptions. */
+export interface ChannelPage {
+  channels: Profile[]
+  next_page_token: string
+}
+
+// ---------- Notifikasi dan riwayat tonton (langkah 17f) ----------
+
+export interface AppNotification {
+  id: string
+  /**
+   * "NEW_VIDEO": kanal yang diikuti mengunggah video.
+   * Langkah 28: "VIDEO_BLOCKED" (video milikmu diturunkan admin) dan
+   * "VIDEO_RESTORED" (video milikmu dipulihkan).
+   */
+  kind: 'NEW_VIDEO' | 'VIDEO_BLOCKED' | 'VIDEO_RESTORED'
+  /** Hanya ada pada VIDEO_BLOCKED. */
+  moderation_reason?: ReportReason
+  video: Video
+  read: boolean
+  read_at?: string
+  created_at: string
+}
+
+export interface NotificationPage {
+  notifications: AppNotification[]
+  next_page_token: string
+}
+
+/** Jawaban POST .../read dan .../read-all. */
+export interface MarkReadResult {
+  updated: number
+  unread_count: number
+}
+
+export interface HistoryEntry {
+  video: Video
+  /** Posisi terakhir yang ditonton. Dibagi video.duration_ms = panjang garis progres. */
+  position_ms: number
+  watched_at: string
+}
+
+export interface HistoryPage {
+  entries: HistoryEntry[]
+  next_page_token: string
+}
+
+// ---------- Tonton nanti (langkah 21b) ----------
+
+export interface WatchLaterEntry {
+  video: Video
+  /** Waktu video disimpan. */
+  added_at: string
+}
+
+export interface WatchLaterPage {
+  entries: WatchLaterEntry[]
+  next_page_token: string
+}
+
+/** Jawaban PUT dan DELETE /me/watch-later/:id. */
+export interface WatchLaterResult {
+  saved: boolean
+  /** Hanya ada jika saved = true. */
+  added_at?: string
+}
+
+// ---------- Playlist (langkah 21c) ----------
+
+export type PlaylistVisibility = 'PUBLIC' | 'PRIVATE'
+
+export interface Playlist {
+  id: string
+  owner_id: string
+  title: string
+  description: string
+  visibility: PlaylistVisibility
+  /** Jumlah video yang bisa diputar (READY). */
+  video_count: number
+  /** Thumbnail video pertama, "" jika playlist masih kosong. */
+  thumbnail_url: string
+  created_at: string
+  updated_at: string
+  /** Hanya ada di GET /me/playlists?video_id=...: true jika video itu ada di playlist ini. */
+  contains_video?: boolean
+  /** Hanya ada di GET /playlists/:id. */
+  owner?: Owner
+}
+
+export interface PlaylistPage {
+  playlists: Playlist[]
+  next_page_token: string
+}
+
+export interface PlaylistEntry {
+  video: Video
+  /** Waktu video ditambahkan ke playlist. */
+  added_at: string
+}
+
+export interface PlaylistVideoPage {
+  entries: PlaylistEntry[]
+  next_page_token: string
+}
+
+/** Jawaban PUT dan DELETE /playlists/:id/videos/:videoId (bentuknya sama dengan Tonton nanti). */
+export type PlaylistVideoResult = WatchLaterResult
+
+/** Pilihan rentang di dasbor Creator Studio (desain Studio.dc.html). */
+export type StatsDays = 7 | 28 | 90
+
+export interface DailyViews {
+  /** Tanggal WIB, misalnya "2026-11-11". */
+  date: string
+  views: number
+}
+
+export interface ChannelTotals {
+  views: number
+  danmaku: number
+  comments: number
+  /** null jika jumlahnya sedang tidak bisa dimuat. */
+  new_subscribers: number | null
+}
+
+/** Jawaban GET /me/channel-stats?days=... */
+export interface ChannelStats {
+  days: StatsDays
+  /** Tepat sebanyak days, dari yang terlama sampai hari ini. */
+  daily: DailyViews[]
+  current: ChannelTotals
+  /** Periode sebelumnya dengan panjang yang sama, untuk persentase naik/turun. */
+  previous: ChannelTotals
+  /** Langkah 26: "" = seluruh channel, selain itu id video yang diminta. */
+  video_id: string
+  /** Maksimal 10 video dengan tayangan terbanyak di periode ini (kosong jika video_id diisi). */
+  top_videos: TopVideo[]
+}
+
+/** Satu baris "Video terpopuler" di halaman Analitik (langkah 26). */
+export interface TopVideo {
+  video_id: string
+  title: string
+  thumbnail_url?: string
+  views: number
+}
+
+/** Komentar di halaman Komentar Creator Studio (GET /me/comments). */
+export interface ChannelComment extends Comment {
+  video_title: string
+}
+
+export interface ChannelCommentPage {
+  comments: ChannelComment[]
+  next_page_token: string
+}
+
+/** Danmaku di halaman Danmaku Creator Studio (GET /me/danmaku). */
+export interface ChannelDanmaku extends Danmaku {
+  user_id: string
+  /** Bisa kosong jika profil pengirim gagal diambil server. */
+  author?: Owner
+  video_title: string
+}
+
+export interface ChannelDanmakuPage {
+  danmaku: ChannelDanmaku[]
+  next_page_token: string
+}
+
+/** Penyedia "Masuk dengan Google / GitHub" yang dinyalakan server. */
+export interface OAuthProvider {
+  id: 'google' | 'github'
+  /** Dibuka dengan pindah halaman (window.location.assign). */
+  start_url: string
+}
+
+/** Satu kreator di hasil pencarian (GET /search/channels). */
+export interface ChannelResult extends Profile {
+  /** Hanya ada jika sudah login: true jika sudah mengikuti kreator ini. */
+  viewer_subscribed?: boolean
+}
+
+export interface ChannelSearchPage {
+  channels: ChannelResult[]
+  next_page_token: string
+}
+
+// ---------- Siaran langsung (langkah 25) ----------
+
+export type LiveStatus = 'LIVE' | 'ENDED'
+
+/** Satu kali siaran (GET /live, GET /live/:id). */
+export interface LiveStream {
+  id: string
+  owner_id: string
+  /** Kosong jika UserService sedang gagal. */
+  owner?: Owner
+  title: string
+  /** "" = tanpa kategori. */
+  category: string
+  status: LiveStatus
+  started_at: string
+  /** Hanya ada setelah siaran selesai. */
+  ended_at?: string
+  /** Alamat HLS untuk hls.js. Hanya ada selama LIVE. */
+  playback_url?: string
+  viewer_count: number
+  peak_viewers: number
+  /** Pilihan chat kanal saat ini. Hanya ada di GET /live/:id (langkah 27). */
+  chat?: LiveChatOptions
+}
+
+export interface LiveChatOptions {
+  /** "Mode lambat chat (3 detik per pesan)". */
+  slow_mode: boolean
+  /** "Chat hanya untuk pengikut". */
+  followers_only: boolean
+}
+
+/** Status rekaman siaran (langkah 27). */
+export type RecordingStatus = 'PENDING' | 'IMPORTING' | 'DONE' | 'FAILED'
+
+export interface LiveRecording {
+  stream_id: string
+  status: RecordingStatus
+  /** Video draf hasil rekaman, hanya jika DONE. */
+  video_id?: string
+  /** Alasan, hanya jika FAILED. */
+  error?: string
+  ended_at?: string
+}
+
+/** Pengaturan siaran milik sendiri (GET /me/live). */
+export interface LiveChannel {
+  title: string
+  category: string
+  /** Isi kolom "Server" di OBS, misalnya rtmp://localhost:1935/live. */
+  ingest_url: string
+  has_stream_key: boolean
+  stream_key_created_at?: string
+  /** Siaran yang sedang berjalan, null jika tidak sedang live. */
+  current: LiveStream | null
+  /** Pilihan siaran (langkah 27, desain GoLive "Detail siaran"). */
+  record_enabled: boolean
+  slow_mode: boolean
+  followers_only: boolean
+  /** Rekaman siaran terakhir, null jika belum pernah ada. */
+  last_recording: LiveRecording | null
+}
+
+/** Isi PATCH /me/live. Pilihan yang tidak dikirim tidak diubah. */
+export interface LiveChannelChanges {
+  title: string
+  category: string
+  record_enabled?: boolean
+  slow_mode?: boolean
+  followers_only?: boolean
+}
+
+/** Jawaban POST /me/live/stream-key. stream_key hanya muncul sekali. */
+export interface StreamKeyResult {
+  channel: LiveChannel
+  stream_key: string
+}
+
+/** Jawaban POST /me/live/publish-token (siaran dari browser). */
+export interface PublishToken {
+  whip_url: string
+  token: string
+  expires_at: string
+}
+
+/** Satu pesan chat siaran (GET /live/:id/chat, event SSE "chat"). */
+export interface LiveChatMessage {
+  id: string
+  stream_id: string
+  /** null jika profil pengirim sedang tidak bisa dimuat. */
+  user: Owner | null
+  body: string
+  /** Format "#RRGGBB". */
+  color: string
+  created_at: string
+}
+
+// ---------- Moderasi admin (langkah 28) ----------
+
+export interface ReasonCount {
+  reason: ReportReason
+  count: number
+}
+
+/** Satu baris antrean GET /admin/reports. */
+export interface ReportedVideo {
+  video: Video
+  /** Jumlah laporan yang belum ditangani. */
+  open_reports: number
+  /** Jumlah per alasan, terbanyak dulu. */
+  reasons: ReasonCount[]
+  first_reported_at: string
+  last_reported_at: string
+}
+
+export interface ReportedVideoPage {
+  videos: ReportedVideo[]
+  next_page_token: string
+}
+
+/** Satu laporan (GET /admin/reports/:id). */
+export interface VideoReport {
+  /** Tidak ada jika profil pelapor gagal diambil server. */
+  reporter?: Owner
+  reporter_id: string
+  reason: ReportReason
+  details: string
+  reported_at: string
+}
+
+/** Video yang sedang diturunkan (GET /admin/blocked). */
+export interface BlockedVideo {
+  video: Video
+  reason: ReportReason
+  note: string
+  /** Admin yang menurunkan. Tidak ada jika profilnya gagal diambil. */
+  moderator?: Owner
+  blocked_at: string
+}
+
+export interface BlockedVideoPage {
+  videos: BlockedVideo[]
+  next_page_token: string
+}
+
+/** Jawaban POST /admin/videos/:id/block. */
+export interface BlockResult {
+  blocked: BlockedVideo
+  /** Jumlah laporan yang ikut ditutup. */
+  closed_reports: number
+}

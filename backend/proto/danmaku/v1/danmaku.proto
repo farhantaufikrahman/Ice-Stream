@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+// Kontrak gRPC DanmakuService: komentar melayang yang menempel pada detik
+// tertentu di video. Berjalan di proses yang sama dengan VideoService
+// (cmd/video, port 50052) dan memakai schema VIDEO_SVC, seperti
+// CommentService. Hanya dipanggil oleh API gateway; requester_id sudah
+// diverifikasi gateway dari access token.
+//
+// Siaran real-time TIDAK lewat gRPC. Setelah danmaku tersimpan,
+// VideoService mengirimnya ke NATS (subject "danmaku.live.<video_id>"), lalu
+// gateway meneruskannya ke browser yang sedang menonton (Server-Sent Events).
+//
+// Semua RPC hanya berlaku untuk video READY. Untuk video lain hasilnya
+// NOT_FOUND.
+package danmaku.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service DanmakuService {
+  // SendDanmaku menyimpan danmaku baru lalu menyiarkannya ke penonton lain.
+  // Error INVALID_ARGUMENT jika isi kosong, lebih dari 100 karakter, berisi
+  // baris baru, atau posisinya melewati durasi video. NOT_FOUND jika video
+  // tidak ada. RESOURCE_EXHAUSTED jika user mengirim terlalu cepat.
+  rpc SendDanmaku(SendDanmakuRequest) returns (SendDanmakuResponse);
+  // ListDanmaku mengambil danmaku dalam satu rentang waktu video, urut dari
+  // posisi paling awal. Boleh dipanggil tanpa login.
+  rpc ListDanmaku(ListDanmakuRequest) returns (ListDanmakuResponse);
+  // ListChannelDanmaku mengambil danmaku di semua video milik requester
+  // (atau satu video jika video_id diisi), terbaru lebih dulu. Untuk
+  // halaman Danmaku di Creator Studio (langkah 26).
+  rpc ListChannelDanmaku(ListChannelDanmakuRequest) returns (ListChannelDanmakuResponse);
+  // DeleteDanmaku menghapus satu danmaku. Yang boleh: pengirimnya, atau
+  // pemilik video (moderasi channel). NOT_FOUND jika danmaku tidak ada,
+  // PERMISSION_DENIED jika requester bukan keduanya.
+  rpc DeleteDanmaku(DeleteDanmakuRequest) returns (DeleteDanmakuResponse);
+}
+
+message ListChannelDanmakuRequest {
+  int64 requester_id = 1;
+  // 0 = semua video milik requester.
+  int64 video_id = 2;
+  // 0 = default (50). Maksimal 100.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// ChannelDanmaku adalah danmaku beserta judul videonya.
+message ChannelDanmaku {
+  Danmaku danmaku = 1;
+  string video_title = 2;
+}
+
+message ListChannelDanmakuResponse {
+  repeated ChannelDanmaku danmaku = 1;
+  string next_page_token = 2;
+}
+
+message DeleteDanmakuRequest {
+  int64 requester_id = 1;
+  int64 danmaku_id = 2;
+}
+
+message DeleteDanmakuResponse {}
+
+enum DanmakuMode {
+  DANMAKU_MODE_UNSPECIFIED = 0;
+  // Melayang dari kanan ke kiri (default).
+  DANMAKU_MODE_SCROLL = 1;
+  // Diam di bagian atas layar.
+  DANMAKU_MODE_TOP = 2;
+  // Diam di bagian bawah layar.
+  DANMAKU_MODE_BOTTOM = 3;
+}
+
+message Danmaku {
+  int64 id = 1;
+  int64 video_id = 2;
+  // Pengirim. Gateway tidak menampilkannya ke penonton lain.
+  int64 user_id = 3;
+  // Milidetik dari awal video.
+  int64 position_ms = 4;
+  string body = 5;
+  // Warna RGB, 0x000000 sampai 0xFFFFFF.
+  uint32 color = 6;
+  DanmakuMode mode = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message SendDanmakuRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  int64 position_ms = 3;
+  string body = 4;
+  // Opsional: tidak dikirim = putih (0xFFFFFF). Memakai "optional" supaya
+  // warna hitam (0) bisa dibedakan dari "tidak dikirim".
+  optional uint32 color = 5;
+  // UNSPECIFIED = SCROLL.
+  DanmakuMode mode = 6;
+}
+
+message SendDanmakuResponse {
+  Danmaku danmaku = 1;
+}
+
+message ListDanmakuRequest {
+  int64 video_id = 1;
+  // Rentang posisi (milidetik), termasuk kedua ujungnya. Selisihnya
+  // maksimal 6 menit (360000), seperti potongan danmaku di Bilibili.
+  int64 from_ms = 2;
+  int64 to_ms = 3;
+  // 0 = default (500). Maksimal 1000.
+  int32 page_size = 4;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 5;
+}
+
+message ListDanmakuResponse {
+  repeated Danmaku danmaku = 1;
+  // Kosong jika rentang ini sudah habis.
+  string next_page_token = 2;
+}

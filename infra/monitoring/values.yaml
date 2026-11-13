@@ -1,0 +1,59 @@
+# Nilai Helm untuk chart kube-prometheus-stack (Prometheus + Grafana).
+# Dipasang oleh `make monitoring-up` (backend/Makefile) ke namespace
+# "monitoring", terpisah dari namespace ice-stream.
+#
+# Daftar semua kunci: https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml
+#
+# Dibuat hemat RAM untuk Docker Desktop: Alertmanager dimatikan (belum ada
+# aturan alert), dan target control-plane yang tidak bisa di-scrape di
+# Docker Desktop dimatikan supaya tidak muncul sebagai target "down".
+
+alertmanager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Baca SEMUA PodMonitor/ServiceMonitor di cluster, termasuk milik
+    # namespace ice-stream (infra/monitoring/podmonitor.yaml), bukan hanya
+    # yang berlabel release Helm ini.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 7d
+    retentionSize: 4GB
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+grafana:
+  # Username dan password admin dibaca dari Secret "grafana-admin" yang
+  # dibuat `make monitoring-up` dari infra/k8s/secrets/grafana.env.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsTimezone: browser
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 768Mi
+
+prometheus-node-exporter:
+  # Docker Desktop: folder root node bukan "shared mount", jadi mount ini
+  # membuat pod node-exporter gagal start.
+  hostRootFsMount:
+    enabled: false

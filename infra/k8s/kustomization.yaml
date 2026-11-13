@@ -1,0 +1,98 @@
+# Daftar manifest yang dipasang dengan `kubectl apply -k infra/k8s/`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  # Pintu masuk dari PC (NGINX Gateway Fabric, port 4000)
+  - gateway/gateway.yaml
+  # API gateway (REST, Gin)
+  - api/configmap.yaml
+  - api/deployment.yaml
+  - api/service.yaml
+  - api/httproute.yaml
+  # Callback login Google/GitHub di http://localhost:4000 (langkah 26)
+  - api/httproute-oauth.yaml
+  # AuthService (gRPC :50051)
+  - auth/configmap.yaml
+  - auth/deployment.yaml
+  - auth/service.yaml
+  # VideoService (gRPC :50052)
+  - video/configmap.yaml
+  - video/deployment.yaml
+  - video/service.yaml
+  # Folder data tetap untuk Oracle, RustFS, dan NATS (langkah 30)
+  - volumes/persistent-volumes.yaml
+  # Database Oracle
+  - oracle/service.yaml
+  - oracle/statefulset.yaml
+  # Penyimpanan file video (RustFS, S3-compatible)
+  - storage/service.yaml
+  - storage/service-public.yaml
+  - storage/statefulset.yaml
+  - storage/httproute.yaml
+  # Antrean event antar service (NATS JetStream)
+  - nats/configmap.yaml
+  - nats/service.yaml
+  - nats/statefulset.yaml
+  # Worker transcoding HLS (ffmpeg)
+  - transcoder/configmap.yaml
+  - transcoder/deployment.yaml
+  # Frontend React (nginx), dibuka di http://ice-stream.localhost:4000
+  - web/deployment.yaml
+  - web/service.yaml
+  - web/httproute.yaml
+  # Siaran langsung: MediaMTX (RTMP di localhost:1935, HLS di
+  # http://live.ice-stream.localhost:4000)
+  - live/configmap.yaml
+  - live/deployment.yaml
+  - live/service.yaml
+  - live/service-rtmp.yaml
+  - live/service-webrtc.yaml
+  - live/httproute.yaml
+  - live/httproute-webrtc.yaml
+  # Server SMTP palsu untuk development (kotak masuk di
+  # http://mail.ice-stream.localhost:4000)
+  - mail/deployment.yaml
+  - mail/service.yaml
+  - mail/httproute.yaml
+
+# Membuat Secret "oracle-credentials" dari file secrets/oracle.env
+# (file itu tidak di-commit; contohnya ada di secrets/oracle.env.example).
+secretGenerator:
+  - name: oracle-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/oracle.env
+    options:
+      # Nama Secret tetap "oracle-credentials" (tanpa akhiran acak), supaya
+      # Job migrasi yang dipasang terpisah bisa memakainya juga.
+      disableNameSuffixHash: true
+  # Kunci PRIVAT JWT, hanya untuk AuthService. File-nya disalin dari
+  # backend/secrets/ (tidak di-commit). Tanpa disableNameSuffixHash, nama
+  # Secret mendapat akhiran acak (misalnya auth-jwt-7h2k9), dan Deployment
+  # otomatis di-restart saat kunci diganti.
+  - name: auth-jwt
+    namespace: ice-stream
+    files:
+      - secrets/jwt-private.pem
+  # Access key dan secret key admin RustFS (dari secrets/storage.env, tidak
+  # di-commit). Dipakai RustFS dan VideoService.
+  - name: storage-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/storage.env
+  # Client id dan secret login Google/GitHub untuk API gateway (dari
+  # secrets/oauth.env, tidak di-commit; contohnya di oauth.env.example).
+  # Nama Secret mendapat akhiran acak, jadi gateway otomatis di-restart
+  # saat isinya diganti.
+  - name: oauth-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/oauth.env
+
+# Kunci PUBLIK JWT untuk gateway. Bukan rahasia, jadi cukup ConfigMap.
+configMapGenerator:
+  - name: jwt-public
+    namespace: ice-stream
+    files:
+      - secrets/jwt-public.pem

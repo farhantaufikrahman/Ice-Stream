@@ -1,0 +1,28 @@
+# Hasil build
+bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Rahasia: jangan pernah commit file .env
+.env
+.env.*
+!.env.example
+# Password untuk Secret Kubernetes (dibaca secretGenerator)
+infra/k8s/secrets/*.env
+# Token Cloudflare Tunnel (langkah 29)
+infra/online/secrets/*.env
+*.pem
+backend/secrets/
+
+# Installer yang tidak sengaja ter-download ke folder project
+*.tar.gz
+*.zip
+/kubectl
+/minikube-linux-amd64
+
+# Editor & OS
+.idea/
+.DS_Store
+.vscode

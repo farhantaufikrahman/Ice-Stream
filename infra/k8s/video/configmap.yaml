@@ -1,0 +1,65 @@
+# Konfigurasi non-rahasia untuk VideoService.
+# Password Oracle dari Secret oracle-credentials, kunci storage dari Secret
+# storage-credentials (keduanya dibuat oleh kustomization.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: video-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: video
+    app.kubernetes.io/part-of: ice-stream
+data:
+  APP_ENV: production
+  GRPC_PORT: "50052"
+  # Port /metrics Prometheus (langkah 28), hanya di dalam cluster.
+  METRICS_PORT: "9092"
+  SHUTDOWN_TIMEOUT: 10s
+  DB_HOST: oracle
+  DB_PORT: "1521"
+  DB_SERVICE: FREEPDB1
+  DB_USER: video_svc
+  DB_MAX_OPEN_CONNS: "10"
+  # Dipakai VideoService sendiri (nama Service RustFS di dalam cluster).
+  STORAGE_ENDPOINT: http://storage:9000
+  # Dipakai di URL upload/putar yang dibuka browser. Untuk sekarang lewat
+  # Service storage-public (storage/service-public.yaml), yang dibuka Docker
+  # Desktop di localhost PC.
+  STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+  STORAGE_REGION: us-east-1
+  STORAGE_BUCKET: videos
+  # Origin frontend yang boleh mengunggah langsung ke bucket dan memutar
+  # HLS, pisahkan dengan koma. Dipasang ke bucket saat VideoService start.
+  CORS_ALLOWED_ORIGINS: http://localhost:5173,http://ice-stream.localhost:4000
+  # Alamat publik file HLS dan thumbnail (lewat Gateway, storage/httproute.yaml).
+  MEDIA_PUBLIC_URL: http://media.ice-stream.localhost:4000/videos
+  # Penonton yang sama baru dihitung sebagai view baru setelah 30 menit.
+  VIEW_DEDUP_WINDOW: 30m
+  # Antrean event ke transcoder (NATS JetStream).
+  NATS_URL: nats://nats:4222
+  # Proses AuthService (UserService ada di dalamnya). Dipakai untuk meminta
+  # daftar subscriber saat membuat notifikasi video baru.
+  AUTH_GRPC_ADDR: auth:50051
+  MAX_UPLOAD_MB: "2048"
+  UPLOAD_URL_TTL: 15m
+  PLAYBACK_URL_TTL: 1h
+  # Siaran langsung (langkah 25a). VideoService membaca daftar stream dari
+  # Control API MediaMTX setiap 5 detik, dan MediaMTX bertanya ke port 8090
+  # setiap kali OBS mulai siaran (lihat live/configmap.yaml).
+  MEDIAMTX_API_URL: http://mediamtx:9997
+  # Server playback MediaMTX: rekaman siaran yang diimpor menjadi video
+  # draf (langkah 27).
+  MEDIAMTX_PLAYBACK_URL: http://mediamtx:9996
+  LIVE_HOOK_PORT: "8090"
+  # Diisi kreator di kolom "Server" OBS (Service mediamtx-rtmp, port 1935
+  # di localhost).
+  LIVE_INGEST_URL: rtmp://localhost:1935/live
+  # Alamat HLS untuk penonton (live/httproute.yaml).
+  LIVE_PLAYBACK_URL: http://live.ice-stream.localhost:4000
+  # Alamat WHIP untuk siaran dari browser (langkah 25b,
+  # live/httproute-webrtc.yaml). Token siaran berlaku 5 menit, cukup untuk
+  # menekan tombol "Mulai siaran".
+  LIVE_WHIP_URL: http://webrtc.ice-stream.localhost:4000
+  LIVE_PUBLISH_TOKEN_TTL: 5m
+  LIVE_POLL_INTERVAL: 5s
+  LIVE_GRACE: 15s

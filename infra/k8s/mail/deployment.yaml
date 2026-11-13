@@ -1,0 +1,83 @@
+# Mailpit: server SMTP palsu untuk development (langkah 24c).
+#
+# Semua email yang dikirim AuthService (misalnya tautan "Lupa kata
+# sandi?") DITANGKAP Mailpit dan TIDAK diteruskan ke internet. Kotak
+# masuknya dibuka di http://mail.ice-stream.localhost:4000 (httproute.yaml).
+#
+# Padanannya: MailHog atau MailDev (populer di proyek Node), GreenMail
+# (sering dipakai di test Java/Spring). Di production, SMTP_ADDR di
+# auth/configmap.yaml diganti ke layanan sungguhan (Amazon SES, SendGrid,
+# Mailgun), dan Mailpit tidak dipasang.
+#
+# Email disimpan di /tmp (emptyDir), jadi hilang saat pod di-restart.
+# Untuk development itu justru yang diinginkan.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailpit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailpit
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      securityContext:
+        # Image Mailpit berjalan sebagai root jika tidak diatur. Mailpit
+        # tidak butuh root, jadi dijalankan sebagai user biasa.
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.32.0
+          imagePullPolicy: IfNotPresent
+          env:
+            # Simpan paling banyak 500 email; yang paling lama dihapus.
+            - name: MP_MAX_MESSAGES
+              value: "500"
+          ports:
+            - name: smtp
+              containerPort: 1025
+            - name: http
+              containerPort: 8025
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Satu-satunya folder yang boleh ditulis: database email Mailpit.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

@@ -1,0 +1,102 @@
+# Versi ONLINE Ice-Stream (langkah 29): sama dengan infra/k8s/ (lokal),
+# ditambah Cloudflare Tunnel dan alamat publik https://*.vzkyrielight.my.id.
+#
+#   kubectl apply -k infra/online/      (lewat: make deploy, dari backend/)
+#
+# Frontend TIDAK di sini: frontend online di Vercel
+# (https://icestream.vzkyrielight.my.id). Yang dibuka lewat tunnel:
+#   api-icestream.vzkyrielight.my.id     -> Gateway -> api (REST + SSE)
+#   media-icestream.vzkyrielight.my.id   -> Gateway -> RustFS (hls/, avatars/)
+#   live-icestream.vzkyrielight.my.id    -> Gateway -> MediaMTX (HLS siaran)
+#   webrtc-icestream.vzkyrielight.my.id  -> Gateway -> MediaMTX (WHIP, siaran admin dari browser)
+#   upload-icestream.vzkyrielight.my.id  -> RustFS langsung (URL presigned upload)
+#
+# Nama subdomain sengaja SATU tingkat (api-icestream, bukan
+# api.icestream): sertifikat HTTPS gratis Cloudflare (Universal SSL) hanya
+# mencakup *.vzkyrielight.my.id.
+# https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../k8s
+  - cloudflared/deployment.yaml
+
+# Image hasil CD (.github/workflows/cd.yml), bukan :dev dari laptop.
+images:
+  - name: farhanrahman27/ice-stream-api
+    newTag: main
+  - name: farhanrahman27/ice-stream-auth
+    newTag: main
+  - name: farhanrahman27/ice-stream-video
+    newTag: main
+  - name: farhanrahman27/ice-stream-transcoder
+    newTag: main
+  - name: farhanrahman27/ice-stream-web
+    newTag: main
+
+patches:
+  - path: patches/api-config.yaml
+  - path: patches/auth-config.yaml
+  - path: patches/video-config.yaml
+  # Tambah hostname online ke HTTPRoute yang sudah ada (hostname lokal tetap).
+  # Password SMTP (API key Resend) untuk AuthService.
+  - target: { kind: Deployment, name: auth }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smtp-credentials
+              key: SMTP_PASSWORD
+  - target: { kind: HTTPRoute, name: api }
+    patch: |-
+      - op: add
+        path: /spec/hostnames/-
+        value: api-icestream.vzkyrielight.my.id
+  - target: { kind: HTTPRoute, name: api-oauth }
+    patch: |-
+      - op: add
+        path: /spec/hostnames/-
+        value: api-icestream.vzkyrielight.my.id
+  - target: { kind: HTTPRoute, name: media }
+    patch: |-
+      - op: add
+        path: /spec/hostnames/-
+        value: media-icestream.vzkyrielight.my.id
+  - target: { kind: HTTPRoute, name: live }
+    patch: |-
+      - op: add
+        path: /spec/hostnames/-
+        value: live-icestream.vzkyrielight.my.id
+  - target: { kind: HTTPRoute, name: live-webrtc }
+    patch: |-
+      - op: add
+        path: /spec/hostnames/-
+        value: webrtc-icestream.vzkyrielight.my.id
+
+# Token tunnel dan API key Resend dari secrets/*.env (tidak di-commit;
+# contohnya secrets/*.env.example).
+secretGenerator:
+  - name: cloudflared-token
+    namespace: ice-stream
+    envs:
+      - secrets/cloudflared.env
+    options:
+      disableNameSuffixHash: true
+  # Tanpa disableNameSuffixHash: nama Secret mendapat akhiran acak, jadi
+  # Deployment auth otomatis restart saat API key diganti.
+  - name: smtp-credentials
+    namespace: ice-stream
+    envs:
+      - secrets/smtp.env
+  # Login Google/GitHub versi online. GitHub OAuth App hanya menerima SATU
+  # callback URL, jadi versi online memakai OAuth App GitHub sendiri.
+  # behavior: replace = Secret oauth-credentials dari base (localhost)
+  # diganti isinya, tanpa mengubah Deployment api.
+  - name: oauth-credentials
+    namespace: ice-stream
+    behavior: replace
+    envs:
+      - secrets/oauth.env

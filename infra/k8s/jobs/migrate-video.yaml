@@ -1,0 +1,115 @@
+# Job sekali jalan untuk database VideoService, dua tahap berurutan:
+#   1. initContainer "bootstrap" (sebagai SYSTEM): membuat user VIDEO_SVC.
+#   2. container "video" (sebagai VIDEO_SVC): membuat tabel videos.
+# Keduanya Flyway, jadi aman dijalankan berkali-kali: yang sudah dijalankan
+# tidak diulang. Seperti migrate-auth, sengaja TIDAK masuk kustomization.yaml.
+# Jalankan lewat: make k8s-migrate-video (dari folder backend).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-video
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: migrate-video
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate-video
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: bootstrap
+          # Image dari akun Docker Hub kamu (farhanrahman27).
+          image: farhanrahman27/ice-stream-migrations:dev
+          imagePullPolicy: Always
+          args: ["migrate"]
+          env:
+            - name: FLYWAY_URL
+              value: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+            - name: FLYWAY_USER
+              value: system
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: ORACLE_PASSWORD
+            - name: FLYWAY_LOCATIONS
+              value: filesystem:/flyway/migrations/bootstrap
+            # Riwayat migrasi bootstrap disimpan di tabel terpisah di schema
+            # SYSTEM, supaya tidak tercampur dengan tabel bawaan Oracle.
+            - name: FLYWAY_TABLE
+              value: ICE_STREAM_BOOTSTRAP_HISTORY
+            # Schema SYSTEM sudah berisi tabel bawaan Oracle. Tanpa dua baris
+            # ini Flyway menolak jalan ("non-empty schema").
+            - name: FLYWAY_BASELINE_ON_MIGRATE
+              value: "true"
+            - name: FLYWAY_BASELINE_VERSION
+              value: "0"
+            # Mengisi ${video_svc_password} di file SQL.
+            - name: FLYWAY_PLACEHOLDERS_VIDEO_SVC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: VIDEO_SVC_PASSWORD
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "30"
+            - name: FLYWAY_CONNECT_RETRIES_INTERVAL
+              value: "10"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: video
+          # Image dari akun Docker Hub kamu (farhanrahman27).
+          image: farhanrahman27/ice-stream-migrations:dev
+          imagePullPolicy: Always
+          args: ["migrate"]
+          env:
+            - name: FLYWAY_URL
+              value: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+            - name: FLYWAY_USER
+              value: system
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: ORACLE_PASSWORD
+            # Tabel videos dan tabel riwayat Flyway tetap dibuat di schema
+            # VIDEO_SVC, bukan di SYSTEM.
+            - name: FLYWAY_DEFAULT_SCHEMA
+              value: VIDEO_SVC
+            - name: FLYWAY_SCHEMAS
+              value: VIDEO_SVC
+            - name: FLYWAY_LOCATIONS
+              value: filesystem:/flyway/migrations/video
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "30"
+            - name: FLYWAY_CONNECT_RETRIES_INTERVAL
+              value: "10"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

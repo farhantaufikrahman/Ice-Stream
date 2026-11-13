@@ -1,0 +1,1013 @@
+syntax = "proto3";
+
+// Kontrak gRPC VideoService. Seperti AuthService, hanya dipanggil oleh API
+// gateway dari dalam cluster. Gateway yang memeriksa access token, lalu
+// mengirim id user yang sudah terverifikasi di field requester_id/viewer_id.
+package video.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service VideoService {
+  // CreateUpload mencatat video baru (status PENDING_UPLOAD) dan memulai
+  // multipart upload di object storage (langkah 29). File dikirim browser
+  // per bagian (part_size_bytes) memakai URL dari PresignUploadParts.
+  // Error INVALID_ARGUMENT jika judul, tipe file, atau ukuran tidak valid.
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+  // PresignUploadParts (langkah 29) memberi URL presigned untuk bagian
+  // file yang diminta, dan daftar bagian yang SUDAH tersimpan di storage
+  // (untuk melanjutkan upload yang terputus). Error NOT_FOUND jika video
+  // tidak ada atau bukan milik requester, FAILED_PRECONDITION jika video
+  // tidak sedang menunggu upload, INVALID_ARGUMENT jika nomor bagian salah.
+  rpc PresignUploadParts(PresignUploadPartsRequest) returns (PresignUploadPartsResponse);
+  // CompleteUpload dipanggil setelah browser selesai mengunggah semua
+  // bagian. Service menggabungkan bagian-bagian itu menjadi satu file,
+  // memeriksanya, lalu mengubah status menjadi UPLOADED.
+  // Error NOT_FOUND jika video tidak ada atau bukan milik requester,
+  // FAILED_PRECONDITION jika file belum ada atau ukurannya tidak sesuai.
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+  // GetVideo mengambil satu video. Video READY bisa dilihat siapa saja dan
+  // diputar lewat video.hls_url. Video yang belum READY (belum selesai
+  // diunggah, sedang atau gagal di-transcode) hanya bisa dilihat pemiliknya.
+  rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
+  // ListMyVideos mengambil video milik requester, terbaru lebih dulu.
+  rpc ListMyVideos(ListMyVideosRequest) returns (ListMyVideosResponse);
+  // ListVideos mengambil feed publik: hanya video READY, yang paling baru
+  // selesai diproses lebih dulu. Boleh dipanggil tanpa login. Isi owner_id
+  // untuk daftar video satu channel.
+  // Error INVALID_ARGUMENT jika page_size atau page_token tidak valid.
+  rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
+  // RecordView menambah views video READY, maksimal sekali per penonton
+  // dalam satu window (default 30 menit). Error NOT_FOUND jika video tidak
+  // ada atau belum READY, UNAVAILABLE jika pencatatan views sedang mati.
+  rpc RecordView(RecordViewRequest) returns (RecordViewResponse);
+  // LikeVideo menandai video READY disukai requester. Aman dipanggil ulang:
+  // like kedua tidak menambah like_count. Error NOT_FOUND jika video tidak
+  // ada atau belum READY.
+  rpc LikeVideo(LikeVideoRequest) returns (LikeVideoResponse);
+  // UnlikeVideo membatalkan like. Aman dipanggil walau belum pernah like.
+  rpc UnlikeVideo(UnlikeVideoRequest) returns (UnlikeVideoResponse);
+  // SearchVideos mencari video READY yang judul atau deskripsinya berisi
+  // SEMUA kata di query. Setiap kata cocok dengan awal kata, jadi "gol"
+  // menemukan "Golang". Urutan: paling relevan (kata di judul lebih
+  // penting), lalu views terbanyak. Boleh dipanggil tanpa login.
+  // Error INVALID_ARGUMENT jika query kosong, terlalu panjang, atau tidak
+  // berisi kata dengan 2 huruf atau lebih.
+  rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
+  // SaveWatchProgress menyimpan sampai detik berapa requester menonton
+  // video READY, untuk riwayat tonton dan "lanjut menonton". Dipanggil
+  // player setiap beberapa detik. Aman dipanggil ulang: video yang sama
+  // hanya punya satu entri riwayat. Error INVALID_ARGUMENT jika
+  // position_ms negatif, NOT_FOUND jika video tidak ada atau belum READY.
+  rpc SaveWatchProgress(SaveWatchProgressRequest) returns (SaveWatchProgressResponse);
+  // ListWatchHistory mengambil riwayat tonton requester, yang terakhir
+  // ditonton lebih dulu. Hanya video READY.
+  rpc ListWatchHistory(ListWatchHistoryRequest) returns (ListWatchHistoryResponse);
+  // DeleteWatchHistory menghapus satu video dari riwayat requester. Aman
+  // dipanggil walau video itu tidak ada di riwayat.
+  rpc DeleteWatchHistory(DeleteWatchHistoryRequest) returns (DeleteWatchHistoryResponse);
+  // ClearWatchHistory menghapus seluruh riwayat tonton requester.
+  rpc ClearWatchHistory(ClearWatchHistoryRequest) returns (ClearWatchHistoryResponse);
+  // UpdateVideo mengganti judul dan/atau deskripsi video milik requester
+  // (status apa pun). Kata pencarian ikut diperbarui. Error
+  // INVALID_ARGUMENT jika tidak ada field yang dikirim atau isinya tidak
+  // valid, NOT_FOUND jika video tidak ada, sudah dihapus, atau bukan milik
+  // requester.
+  rpc UpdateVideo(UpdateVideoRequest) returns (UpdateVideoResponse);
+  // DeleteVideo menghapus video milik requester dari feed, pencarian,
+  // channel, riwayat, komentar, dan danmaku, lalu menghapus file-nya di
+  // storage. Error NOT_FOUND jika video tidak ada, sudah dihapus, atau
+  // bukan milik requester; FAILED_PRECONDITION jika video sedang
+  // di-transcode (UPLOADED atau PROCESSING).
+  rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+  // ListNotifications mengambil notifikasi requester, terbaru lebih dulu.
+  // Notifikasi untuk video yang sudah dihapus tidak ikut.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+  // CountUnreadNotifications menghitung notifikasi requester yang belum
+  // dibaca, maksimal 100 (untuk badge "99+").
+  rpc CountUnreadNotifications(CountUnreadNotificationsRequest) returns (CountUnreadNotificationsResponse);
+  // MarkNotificationsRead menandai satu notifikasi, atau semuanya, sebagai
+  // sudah dibaca. Aman dipanggil berulang.
+  rpc MarkNotificationsRead(MarkNotificationsReadRequest) returns (MarkNotificationsReadResponse);
+  // AddToWatchLater menyimpan video READY ke daftar Tonton nanti requester.
+  // Aman dipanggil ulang: video yang sudah tersimpan tidak berubah
+  // (added_at tetap waktu pertama disimpan). NOT_FOUND jika video tidak ada
+  // atau belum READY.
+  rpc AddToWatchLater(AddToWatchLaterRequest) returns (AddToWatchLaterResponse);
+  // RemoveFromWatchLater mengeluarkan video dari daftar Tonton nanti. Aman
+  // dipanggil walau video itu tidak ada di daftar.
+  rpc RemoveFromWatchLater(RemoveFromWatchLaterRequest) returns (RemoveFromWatchLaterResponse);
+  // ListWatchLater mengambil daftar Tonton nanti requester, yang terakhir
+  // disimpan lebih dulu. Hanya video READY.
+  rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
+
+  // Playlist (langkah 21c). Playlist PRIVATE hanya terlihat oleh pemiliknya:
+  // bagi orang lain jawabannya NOT_FOUND, sama seperti playlist yang tidak
+  // ada. Mengubah playlist orang lain juga dijawab NOT_FOUND.
+
+  // CreatePlaylist membuat playlist kosong milik requester.
+  // INVALID_ARGUMENT jika judul/deskripsi/visibilitas tidak valid atau
+  // requester sudah mencapai batas jumlah playlist.
+  rpc CreatePlaylist(CreatePlaylistRequest) returns (CreatePlaylistResponse);
+  // UpdatePlaylist mengubah judul, deskripsi, dan/atau visibilitas.
+  rpc UpdatePlaylist(UpdatePlaylistRequest) returns (UpdatePlaylistResponse);
+  // DeletePlaylist menghapus playlist beserta isinya (videonya tidak).
+  rpc DeletePlaylist(DeletePlaylistRequest) returns (DeletePlaylistResponse);
+  // GetPlaylist mengambil satu playlist, termasuk jumlah video dan thumbnail.
+  rpc GetPlaylist(GetPlaylistRequest) returns (GetPlaylistResponse);
+  // ListPlaylists mengambil playlist milik owner_id, terbaru lebih dulu.
+  // PRIVATE hanya ikut jika viewer_id = owner_id.
+  rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
+  // AddToPlaylist menambahkan video READY ke akhir playlist. Aman dipanggil
+  // ulang: video yang sudah ada tidak berpindah posisi.
+  rpc AddToPlaylist(AddToPlaylistRequest) returns (AddToPlaylistResponse);
+  // RemoveFromPlaylist mengeluarkan video dari playlist. Aman dipanggil
+  // walau video itu tidak ada di playlist.
+  rpc RemoveFromPlaylist(RemoveFromPlaylistRequest) returns (RemoveFromPlaylistResponse);
+  // ListPlaylistVideos mengambil isi playlist sesuai urutan ditambahkan.
+  // Hanya video READY.
+  rpc ListPlaylistVideos(ListPlaylistVideosRequest) returns (ListPlaylistVideosResponse);
+
+  // GetChannelStats mengambil statistik channel milik requester untuk
+  // dasbor Creator Studio (langkah 22b): tayangan per hari, jumlah danmaku
+  // dan komentar yang diterima, untuk periode ini dan periode sebelumnya
+  // yang panjangnya sama. Hari dihitung dalam WIB (UTC+7).
+  // INVALID_ARGUMENT jika days bukan 7, 28, atau 90.
+  rpc GetChannelStats(GetChannelStatsRequest) returns (GetChannelStatsResponse);
+
+  // SearchPlaylists mencari playlist PUBLIC yang judulnya berisi setiap
+  // kata di query (langkah 22c, tab Playlist di halaman pencarian).
+  // Playlist tanpa video READY tidak ikut. Urutan: judul yang diawali kata
+  // pertama lebih dulu, lalu yang paling baru diperbarui.
+  rpc SearchPlaylists(SearchPlaylistsRequest) returns (SearchPlaylistsResponse);
+
+  // ListTrendingVideos mengambil video READY dengan tayangan terbanyak dalam
+  // 7 hari terakhir, termasuk hari ini (tanggal WIB). Langkah 24a, bagian
+  // Trending di beranda. Video tanpa tayangan dalam 7 hari tidak ikut.
+  rpc ListTrendingVideos(ListTrendingVideosRequest) returns (ListTrendingVideosResponse);
+
+  // ReportVideo menyimpan laporan requester atas video READY milik orang
+  // lain (langkah 24b, tombol Laporkan). Satu laporan per user per video:
+  // melapor lagi mengganti alasan dan keterangan. INVALID_ARGUMENT jika
+  // alasan tidak dikenal, keterangan terlalu panjang atau kosong untuk
+  // alasan OTHER, atau video milik requester sendiri; NOT_FOUND jika video
+  // tidak ada atau belum READY.
+  rpc ReportVideo(ReportVideoRequest) returns (ReportVideoResponse);
+
+  // ChooseThumbnailFrame memakai salah satu bingkai buatan transcoder
+  // (Video.thumbnail_frames) sebagai thumbnail (langkah 26). NOT_FOUND jika
+  // video tidak ada, bukan milik requester, atau posisi bingkai tidak ada.
+  rpc ChooseThumbnailFrame(ChooseThumbnailFrameRequest) returns (ChooseThumbnailFrameResponse);
+  // UploadThumbnail menyimpan gambar buatan kreator (JPEG, PNG, atau WebP,
+  // maksimal 2 MiB, minimal 320x180) sebagai thumbnail. Gambar dipotong
+  // 16:9 dan disimpan ulang sebagai JPEG 1280x720. Boleh sebelum video
+  // selesai diproses. INVALID_ARGUMENT jika gambar tidak valid.
+  rpc UploadThumbnail(UploadThumbnailRequest) returns (UploadThumbnailResponse);
+
+  // ListRecommendedVideos menyusun "Rekomendasi untukmu" di Beranda
+  // (langkah 27): video publik dengan skor dari tayangan, umur video,
+  // kategori yang sering ditonton viewer, kanal yang diikuti viewer, dan
+  // sedikit acak dari seed. Video milik viewer dan video yang sudah
+  // ditonton sampai hampir habis tidak ikut. Maksimal 2 video per kanal.
+  rpc ListRecommendedVideos(ListRecommendedVideosRequest) returns (ListRecommendedVideosResponse);
+
+  // GetChannelSummary mengambil angka di kepala halaman kanal (jumlah
+  // video publik, total tayangan, total suka) dan Video unggulan (langkah
+  // 27). Kanal tanpa video menghasilkan angka 0, bukan NOT_FOUND.
+  rpc GetChannelSummary(GetChannelSummaryRequest) returns (GetChannelSummaryResponse);
+  // SetFeaturedVideo memilih Video unggulan kanal requester. video_id 0 =
+  // tidak ada video unggulan. NOT_FOUND jika video tidak ada atau bukan
+  // milik requester; INVALID_ARGUMENT jika video bukan video publik.
+  rpc SetFeaturedVideo(SetFeaturedVideoRequest) returns (SetFeaturedVideoResponse);
+}
+
+// Visibilitas video (langkah 26, desain Upload).
+enum VideoVisibility {
+  // Sama dengan VIDEO_VISIBILITY_PUBLIC.
+  VIDEO_VISIBILITY_UNSPECIFIED = 0;
+  // Tampil di feed, pencarian, Trending, dan halaman kanal.
+  VIDEO_VISIBILITY_PUBLIC = 1;
+  // "Tidak publik": hanya orang yang punya tautannya.
+  VIDEO_VISIBILITY_UNLISTED = 2;
+  // "Pribadi": hanya pemiliknya.
+  VIDEO_VISIBILITY_PRIVATE = 3;
+  // "Diturunkan" oleh admin (langkah 28, ModerationService): hanya
+  // pemiliknya yang bisa melihatnya, dan pemilik tidak bisa mengubah
+  // visibilitasnya. Tidak pernah diterima di CreateUpload/UpdateVideo.
+  VIDEO_VISIBILITY_BLOCKED = 4;
+}
+
+// VideoModeration: keterangan untuk pemilik video yang diturunkan admin
+// (langkah 28). Hanya diisi jika visibility = BLOCKED.
+message VideoModeration {
+  ReportReason reason = 1;
+  // Catatan admin untuk pemilik. Boleh kosong.
+  string note = 2;
+  google.protobuf.Timestamp blocked_at = 3;
+}
+
+// ThumbnailFrame adalah satu bingkai pilihan thumbnail.
+message ThumbnailFrame {
+  // Posisi bingkai di video, dalam milidetik.
+  int64 position_ms = 1;
+  // URL publik gambar JPEG (tinggi 360 piksel).
+  string url = 2;
+  // true jika bingkai ini sedang dipakai sebagai thumbnail.
+  bool selected = 3;
+}
+
+message ChooseThumbnailFrameRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  int64 position_ms = 3;
+}
+
+message ChooseThumbnailFrameResponse {
+  Video video = 1;
+}
+
+message UploadThumbnailRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Isi file gambar apa adanya.
+  bytes image = 3;
+}
+
+message UploadThumbnailResponse {
+  Video video = 1;
+}
+
+// Alasan laporan (dialog Laporkan).
+enum ReportReason {
+  REPORT_REASON_UNSPECIFIED = 0;
+  // Spam atau penipuan.
+  REPORT_REASON_SPAM = 1;
+  // Konten seksual.
+  REPORT_REASON_SEXUAL = 2;
+  // Kekerasan atau konten berbahaya.
+  REPORT_REASON_VIOLENCE = 3;
+  // Ujaran kebencian.
+  REPORT_REASON_HATE = 4;
+  // Perundungan atau pelecehan.
+  REPORT_REASON_HARASSMENT = 5;
+  // Informasi yang menyesatkan.
+  REPORT_REASON_MISLEADING = 6;
+  // Pelanggaran hak cipta.
+  REPORT_REASON_COPYRIGHT = 7;
+  // Lainnya: details wajib diisi.
+  REPORT_REASON_OTHER = 8;
+}
+
+// Urutan hasil pencarian video (desain Search: "Urutkan").
+enum SearchSort {
+  // Sama dengan SEARCH_SORT_RELEVANCE.
+  SEARCH_SORT_UNSPECIFIED = 0;
+  // Skor kecocokan kata, lalu tayangan terbanyak.
+  SEARCH_SORT_RELEVANCE = 1;
+  // Paling baru tayang lebih dulu.
+  SEARCH_SORT_NEWEST = 2;
+  // Tayangan sepanjang masa terbanyak lebih dulu.
+  SEARCH_SORT_MOST_VIEWED = 3;
+  // Danmaku terbanyak lebih dulu.
+  SEARCH_SORT_MOST_DANMAKU = 4;
+}
+
+// Filter durasi pencarian (desain Search: "Durasi").
+enum DurationFilter {
+  // Semua durasi.
+  DURATION_FILTER_UNSPECIFIED = 0;
+  // Kurang dari 10 menit.
+  DURATION_FILTER_SHORT = 1;
+  // 10 sampai 30 menit.
+  DURATION_FILTER_MEDIUM = 2;
+  // Lebih dari 30 menit.
+  DURATION_FILTER_LONG = 3;
+}
+
+// Urutan ListVideos.
+enum VideoSort {
+  // Sama dengan VIDEO_SORT_NEWEST.
+  VIDEO_SORT_UNSPECIFIED = 0;
+  // Paling baru tayang lebih dulu (feed biasa).
+  VIDEO_SORT_NEWEST = 1;
+  // Tayangan terbanyak lebih dulu (tab Terpopuler di halaman channel).
+  // Hanya untuk tepat satu pemilik (owner_id), tanpa category.
+  VIDEO_SORT_POPULAR = 2;
+}
+
+enum VideoStatus {
+  VIDEO_STATUS_UNSPECIFIED = 0;
+  // Baris sudah dibuat, file belum (selesai) diunggah.
+  VIDEO_STATUS_PENDING_UPLOAD = 1;
+  // File sudah ada di storage dan ukurannya sudah dicek. Menunggu transcoder.
+  VIDEO_STATUS_UPLOADED = 2;
+  // Transcoder sedang membuat file HLS dan thumbnail.
+  VIDEO_STATUS_PROCESSING = 3;
+  // File HLS siap diputar. Hanya video READY yang terlihat oleh semua orang.
+  VIDEO_STATUS_READY = 4;
+  // Transcoding gagal, alasannya ada di failure_reason.
+  VIDEO_STATUS_FAILED = 5;
+}
+
+message Video {
+  int64 id = 1;
+  int64 owner_id = 2;
+  string title = 3;
+  string description = 4;
+  VideoStatus status = 5;
+  string content_type = 6;
+  int64 size_bytes = 7;
+  google.protobuf.Timestamp created_at = 8;
+  // Kosong selama status masih PENDING_UPLOAD.
+  google.protobuf.Timestamp uploaded_at = 9;
+  // Durasi video dalam milidetik. 0 sampai status READY.
+  int64 duration_ms = 10;
+  // Resolusi HLS yang tersedia, misalnya ["360p", "720p"]. Kosong sampai READY.
+  repeated string renditions = 11;
+  // Alasan gagal. Hanya terisi jika status FAILED.
+  string failure_reason = 12;
+  // Waktu transcoding selesai (READY atau FAILED).
+  google.protobuf.Timestamp processed_at = 13;
+  // URL publik daftar putar HLS (master.m3u8), untuk player seperti hls.js.
+  // Tidak kedaluwarsa. Hanya terisi jika status READY.
+  string hls_url = 14;
+  // URL publik gambar thumbnail (JPEG, tinggi 360 piksel). Hanya terisi jika
+  // status READY.
+  string thumbnail_url = 15;
+  // Jumlah views (lihat RecordView).
+  int64 view_count = 16;
+  // Jumlah komentar dan balasan yang belum dihapus (langkah 9).
+  int64 comment_count = 17;
+  // Jumlah like (langkah 10).
+  int64 like_count = 18;
+  // Kategori (langkah 23), misalnya "game". Kosong = tanpa kategori.
+  // Daftar lengkapnya ada di dokumentasi CreateUploadRequest.category.
+  string category = 19;
+  // Tag tanpa "#", sesuai urutan yang diketik kreator, misalnya
+  // ["esKrim", "anakKos"]. Maksimal 10.
+  repeated string tags = 20;
+  // Jumlah danmaku (langkah 24a).
+  int64 danmaku_count = 21;
+  // Langkah 26.
+  VideoVisibility visibility = 22;
+  // true = draf ("Simpan draf"), hanya terlihat oleh pemiliknya.
+  bool draft = 23;
+  // Waktu video pertama kali bisa ditonton orang lain. Kosong untuk draf
+  // dan video yang belum READY. Feed diurutkan dengan waktu ini.
+  google.protobuf.Timestamp published_at = 24;
+  // Bahasa video: "id", "en", atau "ja". Kosong = tidak diisi.
+  string language = 25;
+  // Bingkai pilihan thumbnail. Hanya diisi untuk pemilik video (GetVideo,
+  // ListMyVideos); kosong untuk video lama dan video yang belum READY.
+  repeated ThumbnailFrame thumbnail_frames = 26;
+  // true jika thumbnail adalah gambar yang diunggah kreator.
+  bool custom_thumbnail = 27;
+  // Langkah 28: diisi untuk pemilik video jika visibility = BLOCKED.
+  VideoModeration moderation = 28;
+}
+
+message CreateUploadRequest {
+  int64 requester_id = 1;
+  string title = 2;
+  string description = 3;
+  // Misalnya "video/mp4". Harus sama persis dengan header Content-Type
+  // yang dikirim browser saat mengunggah.
+  string content_type = 4;
+  int64 size_bytes = 5;
+  // Boleh kosong. Jika diisi, salah satu dari: anime, game, musik,
+  // teknologi, kuliner, vlog, edukasi, olahraga.
+  string category = 6;
+  // Boleh kosong. Maksimal 10 tag, masing-masing 2-30 huruf atau angka.
+  // "#" di depan dibuang, tag dobel (tanpa melihat huruf besar/kecil)
+  // disimpan sekali.
+  repeated string tags = 7;
+  // Langkah 26. UNSPECIFIED = PUBLIC.
+  VideoVisibility visibility = 8;
+  // true = "Simpan draf": video tidak terbit otomatis setelah READY.
+  bool draft = 9;
+  // Boleh kosong. Jika diisi: "id", "en", atau "ja".
+  string language = 10;
+}
+
+message CreateUploadResponse {
+  Video video = 1;
+  // Langkah 29: upload satu PUT (upload_url, upload_headers) diganti
+  // multipart, karena Cloudflare menolak request di atas 100 MB.
+  reserved 2, 3, 4;
+  reserved "upload_url", "upload_url_expires_at", "upload_headers";
+  // Ukuran tiap bagian; bagian terakhir boleh lebih kecil.
+  int64 part_size_bytes = 5;
+  // Jumlah bagian, nomor bagian 1 sampai part_count.
+  int32 part_count = 6;
+}
+
+message PresignUploadPartsRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Nomor bagian (1..part_count) yang butuh URL, maksimal 20 sekaligus.
+  // Boleh kosong untuk hanya menanyakan uploaded_part_numbers.
+  repeated int32 part_numbers = 3;
+}
+
+message UploadPart {
+  int32 part_number = 1;
+  // URL tujuan PUT. Hanya berlaku sampai expires_at.
+  string url = 2;
+  // Ukuran body yang wajib dikirim (ikut ditandatangani di URL).
+  int64 size_bytes = 3;
+  // Header yang WAJIB ikut dikirim bersama PUT.
+  map<string, string> headers = 4;
+}
+
+message PresignUploadPartsResponse {
+  repeated UploadPart parts = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  // Bagian yang sudah tersimpan lengkap di storage, urut dari kecil.
+  repeated int32 uploaded_part_numbers = 3;
+}
+
+message CompleteUploadRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message CompleteUploadResponse {
+  Video video = 1;
+}
+
+message GetVideoRequest {
+  int64 video_id = 1;
+  // 0 berarti pengunjung belum login.
+  int64 viewer_id = 2;
+}
+
+message GetVideoResponse {
+  Video video = 1;
+  // URL presigned untuk mengunduh file asli (sebelum di-transcode). Hanya
+  // untuk pemilik video, dan kosong selama PENDING_UPLOAD. Untuk memutar
+  // video, pakai video.hls_url.
+  string original_url = 2;
+  google.protobuf.Timestamp original_url_expires_at = 3;
+  // true jika viewer_id sudah like video ini. Selalu false tanpa login.
+  bool viewer_liked = 4;
+  // Detik (milidetik) tempat viewer berhenti menonton terakhir kali, untuk
+  // "lanjut menonton". 0 = putar dari awal: belum pernah ditonton, baru
+  // ditonton kurang dari 5 detik, atau sisa videonya kurang dari 10 detik.
+  // Selalu 0 tanpa login.
+  int64 resume_position_ms = 5;
+  // true jika viewer_id sudah menyimpan video ini ke Tonton nanti. Selalu
+  // false tanpa login.
+  bool viewer_saved = 6;
+  // true jika video ini ada di salah satu playlist milik viewer_id. Selalu
+  // false tanpa login.
+  bool viewer_in_playlist = 7;
+}
+
+message ListMyVideosRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListMyVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message ListVideosRequest {
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 1;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  // Isinya tidak perlu dipahami client.
+  string page_token = 2;
+  // Jika diisi, hanya video milik user ini (halaman channel). 0 = semua.
+  int64 owner_id = 3;
+  // Jika diisi, hanya video milik salah satu user ini (feed subscription).
+  // Maksimal 1000 id. Boleh digabung dengan owner_id.
+  repeated int64 owner_ids = 4;
+  // Jika diisi, hanya video kategori ini (chip di beranda). Kosong = semua.
+  string category = 5;
+  // Bawaan: terbaru. Token halaman berbeda untuk setiap urutan.
+  VideoSort sort = 6;
+}
+
+message ListVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message SearchVideosRequest {
+  // Kata kunci dari kotak pencarian, maksimal 100 karakter. Hanya 5 kata
+  // pertama yang dipakai.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+  // Halaman berikutnya harus memakai sort dan duration yang sama.
+  SearchSort sort = 4;
+  DurationFilter duration = 5;
+}
+
+message SearchVideosResponse {
+  repeated Video videos = 1;
+  // Kosong jika sudah halaman terakhir. Pencarian dibatasi 10 halaman.
+  string next_page_token = 2;
+  // Jumlah semua hasil (langkah 27), hanya diisi di halaman pertama
+  // (page_token kosong). Dihitung paling banyak 1001: nilai 1001 berarti
+  // "lebih dari 1000".
+  int64 total_size = 3;
+}
+
+message RecordViewRequest {
+  int64 video_id = 1;
+  // Penanda penonton dari gateway, misalnya "u-7" (user login) atau
+  // "a-<hash>" (tanpa login). 1 sampai 64 karakter: huruf, angka, - dan _.
+  string viewer_key = 2;
+}
+
+message RecordViewResponse {
+  // false jika penonton ini sudah dihitung dalam window yang sama.
+  bool counted = 1;
+  // Jumlah views setelah request ini.
+  int64 view_count = 2;
+}
+
+message LikeVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message LikeVideoResponse {
+  // Selalu true.
+  bool liked = 1;
+  int64 like_count = 2;
+}
+
+message UnlikeVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message UnlikeVideoResponse {
+  // Selalu false.
+  bool liked = 1;
+  int64 like_count = 2;
+}
+
+message SaveWatchProgressRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Posisi player, milidetik dari awal video. Nilai yang melewati durasi
+  // video dipotong menjadi durasi.
+  int64 position_ms = 3;
+}
+
+message SaveWatchProgressResponse {
+  // Posisi yang benar-benar disimpan.
+  int64 position_ms = 1;
+  google.protobuf.Timestamp watched_at = 2;
+}
+
+// WatchHistoryEntry adalah satu video di riwayat tonton.
+message WatchHistoryEntry {
+  Video video = 1;
+  // Detik terakhir yang ditonton (milidetik). Untuk garis progres:
+  // position_ms / video.duration_ms.
+  int64 position_ms = 2;
+  // Waktu terakhir video ini ditonton.
+  google.protobuf.Timestamp watched_at = 3;
+}
+
+message ListWatchHistoryRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListWatchHistoryResponse {
+  repeated WatchHistoryEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message DeleteWatchHistoryRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message DeleteWatchHistoryResponse {}
+
+message ClearWatchHistoryRequest {
+  int64 requester_id = 1;
+}
+
+message ClearWatchHistoryResponse {
+  // Jumlah video yang dihapus dari riwayat.
+  int64 deleted = 1;
+}
+
+message UpdateVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  // Tidak dikirim = tidak diubah. Memakai "optional" supaya deskripsi
+  // kosong ("" = hapus deskripsi) bisa dibedakan dari "tidak dikirim".
+  // Aturannya sama dengan CreateUpload: judul wajib, maksimal 100 karakter.
+  optional string title = 3;
+  // Maksimal 1000 karakter.
+  optional string description = 4;
+  // Tidak dikirim = tidak diubah, "" = hapus kategori.
+  optional string category = 5;
+  // Tidak dikirim = tidak diubah. Dikirim dengan daftar kosong = hapus
+  // semua tag. Dibungkus message karena field "repeated" tidak bisa
+  // "optional": tanpa pembungkus, "tidak dikirim" dan "daftar kosong"
+  // terlihat sama.
+  TagList tags = 6;
+  // Langkah 26. Tidak dikirim = tidak diubah.
+  optional VideoVisibility visibility = 7;
+  // false = terbitkan draf; true = jadikan draf (sembunyikan lagi).
+  optional bool draft = 8;
+  // "" = hapus bahasa.
+  optional string language = 9;
+}
+
+// TagList membungkus daftar tag supaya bisa dibedakan antara "tidak
+// dikirim" (nil) dan "kosong" (TagList tanpa isi). Pola ini sama dengan
+// google.protobuf.ListValue / wrapper types.
+message TagList {
+  repeated string tags = 1;
+}
+
+message UpdateVideoResponse {
+  Video video = 1;
+}
+
+message DeleteVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message DeleteVideoResponse {}
+
+message Notification {
+  int64 id = 1;
+  // Jenis notifikasi:
+  //   - "NEW_VIDEO": channel yang di-subscribe merilis video baru;
+  //   - "VIDEO_BLOCKED": video milikmu diturunkan admin (langkah 28);
+  //   - "VIDEO_RESTORED": video milikmu dipulihkan admin (langkah 28).
+  string kind = 2;
+  // Video yang dibicarakan. Pemiliknya (owner_id) adalah channel-nya.
+  Video video = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // Kosong jika belum dibaca.
+  google.protobuf.Timestamp read_at = 5;
+  // Untuk VIDEO_BLOCKED: alasan penurunan. UNSPECIFIED untuk jenis lain.
+  ReportReason moderation_reason = 6;
+}
+
+message ListNotificationsRequest {
+  int64 requester_id = 1;
+  // 1 sampai 50. 0 = 20.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListNotificationsResponse {
+  repeated Notification notifications = 1;
+  string next_page_token = 2;
+}
+
+message CountUnreadNotificationsRequest {
+  int64 requester_id = 1;
+}
+
+message CountUnreadNotificationsResponse {
+  // 0 sampai 100. Nilai 100 berarti "100 atau lebih".
+  int64 unread_count = 1;
+}
+
+message MarkNotificationsReadRequest {
+  int64 requester_id = 1;
+  // 0 = tandai SEMUA notifikasi requester.
+  int64 notification_id = 2;
+}
+
+message MarkNotificationsReadResponse {
+  // Jumlah notifikasi yang baru ditandai dibaca (0 jika sudah dibaca
+  // sebelumnya atau bukan milik requester).
+  int64 updated = 1;
+  // Sisa yang belum dibaca, sama seperti CountUnreadNotifications.
+  int64 unread_count = 2;
+}
+
+message WatchLaterEntry {
+  Video video = 1;
+  // Waktu video ini disimpan ke Tonton nanti.
+  google.protobuf.Timestamp added_at = 2;
+}
+
+message AddToWatchLaterRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message AddToWatchLaterResponse {
+  // Waktu video pertama kali disimpan (tidak berubah jika disimpan ulang).
+  google.protobuf.Timestamp added_at = 1;
+}
+
+message RemoveFromWatchLaterRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+}
+
+message RemoveFromWatchLaterResponse {}
+
+message ListWatchLaterRequest {
+  int64 requester_id = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message ListWatchLaterResponse {
+  repeated WatchLaterEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+// ---------- Playlist (langkah 21c) ----------
+
+enum PlaylistVisibility {
+  PLAYLIST_VISIBILITY_UNSPECIFIED = 0;
+  // Terlihat di halaman kanal dan bisa dibuka siapa saja.
+  PLAYLIST_VISIBILITY_PUBLIC = 1;
+  // Hanya pemiliknya yang bisa melihat.
+  PLAYLIST_VISIBILITY_PRIVATE = 2;
+}
+
+message Playlist {
+  int64 id = 1;
+  int64 owner_id = 2;
+  string title = 3;
+  string description = 4;
+  PlaylistVisibility visibility = 5;
+  // Jumlah video READY di playlist.
+  int64 video_count = 6;
+  // Thumbnail video pertama. Kosong jika playlist belum berisi video READY.
+  string thumbnail_url = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  // Hanya diisi ListPlaylists yang memakai video_id: true jika video itu
+  // ada di playlist ini.
+  bool contains_video = 10;
+}
+
+message PlaylistEntry {
+  Video video = 1;
+  // Waktu video ditambahkan ke playlist.
+  google.protobuf.Timestamp added_at = 2;
+}
+
+message CreatePlaylistRequest {
+  int64 requester_id = 1;
+  // Wajib, maksimal 100 karakter.
+  string title = 2;
+  // Boleh kosong, maksimal 1000 karakter.
+  string description = 3;
+  // UNSPECIFIED = PRIVATE.
+  PlaylistVisibility visibility = 4;
+}
+
+message CreatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message UpdatePlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  // Tidak dikirim = tidak diubah (sama seperti UpdateVideoRequest).
+  optional string title = 3;
+  optional string description = 4;
+  // UNSPECIFIED = tidak diubah.
+  PlaylistVisibility visibility = 5;
+}
+
+message UpdatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message DeletePlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+}
+
+message DeletePlaylistResponse {}
+
+message GetPlaylistRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 playlist_id = 2;
+}
+
+message GetPlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message ListPlaylistsRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 owner_id = 2;
+  // Opsional, hanya untuk playlist milik viewer sendiri: isi id video untuk
+  // mengisi Playlist.contains_video (dialog Simpan di halaman tonton).
+  int64 video_id = 3;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 4;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 5;
+}
+
+message ListPlaylistsResponse {
+  repeated Playlist playlists = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message AddToPlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  int64 video_id = 3;
+}
+
+message AddToPlaylistResponse {
+  // Waktu video pertama kali ditambahkan (tidak berubah jika ditambah ulang).
+  google.protobuf.Timestamp added_at = 1;
+}
+
+message RemoveFromPlaylistRequest {
+  int64 requester_id = 1;
+  int64 playlist_id = 2;
+  int64 video_id = 3;
+}
+
+message RemoveFromPlaylistResponse {}
+
+message ListPlaylistVideosRequest {
+  // 0 = pengunjung belum login.
+  int64 viewer_id = 1;
+  int64 playlist_id = 2;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 3;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 4;
+}
+
+message ListPlaylistVideosResponse {
+  repeated PlaylistEntry entries = 1;
+  // Kosong jika sudah halaman terakhir.
+  string next_page_token = 2;
+}
+
+message GetChannelStatsRequest {
+  int64 requester_id = 1;
+  // Panjang periode dalam hari: 7, 28, atau 90.
+  int32 days = 2;
+  // Langkah 26 (halaman Analitik): 0 = seluruh channel, selain itu hanya
+  // video ini. NOT_FOUND jika video tidak ada atau bukan milik requester.
+  int64 video_id = 3;
+}
+
+// TopVideo adalah satu baris tabel "Video terpopuler" di halaman Analitik.
+message TopVideo {
+  int64 video_id = 1;
+  string title = 2;
+  string thumbnail_url = 3;
+  // Tayangan dalam periode ini (bukan sepanjang masa).
+  int64 views = 4;
+}
+
+// DailyViews adalah jumlah tayangan semua video channel pada satu hari.
+message DailyViews {
+  // Tanggal dalam WIB, format "2006-01-02".
+  string date = 1;
+  int64 views = 2;
+}
+
+// ChannelTotals adalah jumlah dalam satu periode.
+message ChannelTotals {
+  int64 views = 1;
+  int64 danmaku = 2;
+  int64 comments = 3;
+}
+
+message GetChannelStatsResponse {
+  // Tepat sebanyak days, urut dari yang terlama sampai hari ini. Hari tanpa
+  // tayangan tetap ada dengan views = 0.
+  repeated DailyViews daily = 1;
+  ChannelTotals current = 2;
+  ChannelTotals previous = 3;
+  // Batas periode, supaya gateway bisa menanyakan jumlah subscriber baru
+  // ke UserService dengan rentang waktu yang sama persis:
+  // periode ini = [current_start, end), sebelumnya = [previous_start, current_start).
+  google.protobuf.Timestamp previous_start = 4;
+  google.protobuf.Timestamp current_start = 5;
+  google.protobuf.Timestamp end = 6;
+  // Maksimal 10 video dengan tayangan terbanyak dalam periode ini, hanya
+  // jika video_id = 0. Video yang sudah dihapus tidak ikut.
+  repeated TopVideo top_videos = 7;
+}
+
+message SearchPlaylistsRequest {
+  // Sama dengan SearchVideosRequest: maksimal 100 karakter, 5 kata pertama.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message SearchPlaylistsResponse {
+  repeated Playlist playlists = 1;
+  // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
+  string next_page_token = 2;
+  // Sama dengan SearchVideosResponse.total_size.
+  int64 total_size = 3;
+}
+
+message ListTrendingVideosRequest {
+  // Jika diisi, hanya video kategori ini. Kosong = semua kategori.
+  string category = 1;
+  // Jumlah maksimal (1 sampai 50, default 10).
+  int32 limit = 2;
+}
+
+message ListTrendingVideosResponse {
+  repeated TrendingVideo videos = 1;
+}
+
+message TrendingVideo {
+  Video video = 1;
+  // Tayangan 7 hari terakhir, angka yang dipakai untuk mengurutkan.
+  int64 recent_views = 2;
+}
+
+message ReportVideoRequest {
+  int64 requester_id = 1;
+  int64 video_id = 2;
+  ReportReason reason = 3;
+  // Keterangan tambahan, maksimal 500 karakter. Wajib untuk REPORT_REASON_OTHER.
+  string details = 4;
+}
+
+message ReportVideoResponse {
+  // Waktu laporan terakhir disimpan.
+  google.protobuf.Timestamp reported_at = 1;
+}
+
+message ListRecommendedVideosRequest {
+  // 0 = tamu.
+  int64 viewer_id = 1;
+  // Kanal yang diikuti viewer (diambil gateway dari UserService).
+  repeated int64 followed_owner_ids = 2;
+  // Kosong = semua kategori.
+  string category = 3;
+  // Bagian acak. Seed yang sama menghasilkan urutan yang sama; tombol
+  // "Muat ulang" mengirim seed baru.
+  uint64 seed = 4;
+  // 1 sampai 24, default 12.
+  int32 limit = 5;
+}
+
+message ListRecommendedVideosResponse {
+  repeated Video videos = 1;
+}
+
+message GetChannelSummaryRequest {
+  int64 owner_id = 1;
+}
+
+message GetChannelSummaryResponse {
+  // Hanya video publik (yang tampil di halaman kanal).
+  int64 video_count = 1;
+  int64 total_views = 2;
+  int64 total_likes = 3;
+  // Kosong jika kreator belum memilih, atau video itu sudah tidak publik.
+  Video featured_video = 4;
+}
+
+message SetFeaturedVideoRequest {
+  int64 requester_id = 1;
+  // 0 = hapus pilihan.
+  int64 video_id = 2;
+}
+
+message SetFeaturedVideoResponse {
+  // Kosong jika pilihan dihapus.
+  Video featured_video = 1;
+}

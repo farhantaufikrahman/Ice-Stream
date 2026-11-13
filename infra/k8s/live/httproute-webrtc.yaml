@@ -1,0 +1,27 @@
+# WHIP untuk siaran dari browser (langkah 25b):
+#   POST http://webrtc.ice-stream.localhost:4000/live/<id user>/whip
+# Alamat ini dikirim VideoService sebagai whip_url (LIVE_WHIP_URL di
+# video/configmap.yaml). Hostname dipisah dari live.ice-stream.localhost
+# karena path-nya juga diawali /live/, tetapi port tujuannya berbeda
+# (8889, bukan 8888).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: live-webrtc
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  parentRefs:
+    - name: ice-stream-gateway
+  hostnames:
+    - webrtc.ice-stream.localhost
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /live/
+      backendRefs:
+        - name: mediamtx
+          port: 8889

@@ -1,0 +1,59 @@
+# Job sekali jalan: menjalankan migrasi Flyway untuk schema AUTH_SVC.
+# Sengaja TIDAK masuk kustomization.yaml, karena Job tidak bisa di-update.
+# Jalankan lewat: make k8s-migrate (dari folder backend).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-auth
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: migrate-auth
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate-auth
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flyway
+          # Ganti dengan username Docker Hub kamu.
+          image: farhanrahman27/ice-stream-migrations:dev
+          imagePullPolicy: Always
+          args: ["migrate"]
+          env:
+            - name: FLYWAY_URL
+              value: jdbc:oracle:thin:@//oracle:1521/FREEPDB1
+            - name: FLYWAY_USER
+              value: auth_svc
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: AUTH_SVC_PASSWORD
+            - name: FLYWAY_LOCATIONS
+              value: filesystem:/flyway/migrations/auth
+            # Kalau Oracle belum siap, coba lagi tiap 10 detik, maksimal 30 kali.
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "30"
+            - name: FLYWAY_CONNECT_RETRIES_INTERVAL
+              value: "10"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

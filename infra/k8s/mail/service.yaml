@@ -1,0 +1,21 @@
+# Alamat Mailpit di dalam cluster:
+#   mailpit:1025  SMTP (dipakai AuthService, lihat SMTP_ADDR di auth/configmap.yaml)
+#   mailpit:8025  kotak masuk web (diteruskan Gateway, lihat httproute.yaml)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: smtp
+    - name: http
+      port: 8025
+      targetPort: http

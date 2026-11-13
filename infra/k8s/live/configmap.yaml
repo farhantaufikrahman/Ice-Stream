@@ -1,0 +1,100 @@
+# Konfigurasi MediaMTX, server media untuk siaran langsung (langkah 25a).
+# Isi file ini dipasang sebagai /mediamtx.yml di dalam container.
+# Semua pilihan lengkap: https://mediamtx.org/docs/references/configuration-file
+#
+# Alurnya:
+#   OBS ------RTMP :1935------> MediaMTX --HLS :8888--> browser penonton
+#   Studio (browser) --WHIP :8889 + ICE :8189--^  (langkah 25b)
+#                          |
+#                          +-- "boleh siaran?" --> VideoService :8090 (hook)
+#                          +-- Control API :9997 <-- VideoService (status, penonton)
+#                          +-- Playback :9996 <-- VideoService (rekaman, langkah 27)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediamtx-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mediamtx
+    app.kubernetes.io/part-of: ice-stream
+data:
+  mediamtx.yml: |
+    logLevel: info
+
+    # Setiap kali OBS mulai mengirim video, MediaMTX bertanya ke VideoService
+    # apakah stream key-nya benar. Jawaban 2xx = boleh.
+    authMethod: http
+    authHTTPAddress: http://video:8090/mediamtx/auth
+    # Aksi di bawah TIDAK ditanyakan ke VideoService (selalu boleh):
+    # - read/playback: siaran bisa ditonton siapa saja, dan penonton tidak
+    #   membebani Oracle;
+    # - api/metrics: port 9997/9998 hanya ada di dalam cluster (Service
+    #   mediamtx), tidak ada HTTPRoute ke sana.
+    authHTTPExclude:
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+
+    # Control API untuk VideoService (GET /v3/paths/list).
+    api: yes
+    apiAddress: :9997
+
+    # Server playback (langkah 27): VideoService mengambil rekaman siaran
+    # lewat GET /list dan GET /get, lalu menyimpannya sebagai video draf
+    # jika kreator mencentang "Simpan rekaman sebagai video". Hanya di
+    # dalam cluster (Service mediamtx), tidak ada HTTPRoute ke port ini.
+    # https://mediamtx.org/docs/features/playback
+    playback: yes
+    playbackAddress: :9996
+
+    # RTMP (dari OBS), WebRTC (siaran dari browser, langkah 25b), dan HLS
+    # (ke browser penonton).
+    rtmp: yes
+    rtmpAddress: :1935
+    hls: yes
+    hlsAddress: :8888
+    # Browser di alamat ini boleh memutar HLS (CORS). Alamat https terakhir
+    # adalah frontend online di Vercel (langkah 29, infra/online/).
+    hlsAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000", "https://icestream.vzkyrielight.my.id"]
+    rtsp: no
+    srt: no
+    moq: no
+
+    # Siaran dari browser (langkah 25b). Studio mengirim offer SDP ke
+    # http://webrtc.ice-stream.localhost:4000/live/<id>/whip (WHIP, lewat
+    # Gateway), lalu video dan suaranya mengalir langsung ke port 8189.
+    webrtc: yes
+    webrtcAddress: :8889
+    webrtcAllowOrigins: ["http://localhost:5173", "http://ice-stream.localhost:4000", "https://icestream.vzkyrielight.my.id"]
+    # Port ICE untuk media. UDP lebih cepat; TCP jadi cadangan jika UDP
+    # tidak bisa lewat (dua Service LoadBalancer di service-webrtc.yaml).
+    webrtcLocalUDPAddress: :8189
+    webrtcLocalTCPAddress: :8189
+    # IP Pod (10.x) tidak bisa dihubungi browser di Windows. Yang dikirim ke
+    # browser hanya 127.0.0.1:8189, yaitu port LoadBalancer Docker Desktop.
+    webrtcIPsFromInterfaces: no
+    webrtcAdditionalHosts: ["127.0.0.1"]
+
+    pathDefaults:
+      # Jika stream sudah berjalan, publisher kedua dengan key yang sama
+      # ditolak (bukan menggantikan yang pertama).
+      overridePublisher: no
+      # Rekaman (langkah 27, https://mediamtx.org/docs/features/record).
+      # SEMUA siaran direkam ke /recordings (volume di deployment.yaml),
+      # karena kreator boleh mencentang pilihan rekaman kapan saja selama
+      # siaran. VideoService hanya mengimpor siaran yang pilihannya aktif
+      # saat selesai; rekaman lain terhapus sendiri setelah 1 hari.
+      record: yes
+      recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f_%z
+      # fMP4 mendukung H264 (OBS dan browser, lihat frontend/src/lib/whip.ts),
+      # AAC (OBS), dan Opus (browser).
+      recordFormat: fmp4
+      recordPartDuration: 1s
+      recordSegmentDuration: 1h
+      recordDeleteAfter: 1d
+
+    paths:
+      # Hanya nama "live/<id user>" yang diterima, sama dengan
+      # livestream.PathFor di backend.
+      "~^live/[1-9][0-9]{0,18}$": {}

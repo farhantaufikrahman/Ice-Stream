@@ -1,0 +1,295 @@
+// Package config membaca konfigurasi aplikasi dari environment variable.
+//
+// Hampir semua nilai punya default yang aman untuk development lokal.
+// Yang wajib diisi hanya rahasia dan lokasi file kunci (lihat .env.example).
+package config
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Config menampung semua pengaturan yang dibutuhkan API gateway.
+type Config struct {
+	// Env bernilai "development" atau "production".
+	Env string
+	// HTTPAddr adalah alamat yang didengarkan server, misalnya ":8080".
+	HTTPAddr string
+	// CORSAllowedOrigins berisi domain frontend yang boleh memanggil API.
+	CORSAllowedOrigins []string
+	// ShutdownTimeout adalah batas waktu menunggu request yang sedang berjalan
+	// selesai saat server dimatikan.
+	ShutdownTimeout time.Duration
+	// TrustedProxies berisi IP/CIDR proxy yang boleh mengisi header
+	// X-Forwarded-For. Kosong = header itu diabaikan (paling aman).
+	TrustedProxies []string
+	// AuthGRPCAddr adalah alamat AuthService, misalnya "auth:50051".
+	AuthGRPCAddr string
+	// VideoGRPCAddr adalah alamat VideoService, misalnya "video:50052".
+	VideoGRPCAddr string
+	// JWTPublicKeyFile adalah file kunci publik untuk memeriksa access token.
+	JWTPublicKeyFile string
+	// NATSURL adalah alamat server NATS, misalnya "nats://nats:4222".
+	// Gateway mendengarkan siaran danmaku dari sini.
+	NATSURL string
+	// LiveMaxClients adalah batas penonton danmaku live (koneksi SSE) yang
+	// tersambung ke satu pod gateway sekaligus.
+	LiveMaxClients int
+	// Cookie mengatur cookie refresh token.
+	Cookie CookieConfig
+	// OAuth mengatur login Google/GitHub (langkah 26, oauth.go).
+	OAuth OAuthConfig
+	// RateLimitEnabled menyalakan rate limit gateway (langkah 28). Default
+	// true; matikan hanya untuk uji beban di laptop.
+	RateLimitEnabled bool
+	// LiveBroadcastAdminOnly membatasi pengaturan siaran (/me/live) hanya
+	// untuk admin (langkah 29). Dinyalakan saat backend online lewat
+	// Cloudflare Tunnel, karena RTMP/WebRTC dari luar laptop tidak bisa
+	// masuk; menonton dan chat tetap terbuka untuk semua.
+	LiveBroadcastAdminOnly bool
+	// MetricsAddr adalah alamat server /metrics Prometheus (langkah 28),
+	// terpisah dari HTTPAddr supaya tidak terbuka ke internet.
+	MetricsAddr string
+}
+
+// CookieConfig mengatur cookie refresh token.
+type CookieConfig struct {
+	// Secure = cookie hanya dikirim lewat HTTPS. Wajib true di production.
+	Secure bool
+	// SameSite mengatur kapan browser mengirim cookie ke domain lain.
+	SameSite http.SameSite
+}
+
+// DBConfig berisi pengaturan koneksi ke Oracle.
+type DBConfig struct {
+	Host string
+	Port int
+	// Service adalah nama service Oracle. Oracle Free memakai "FREEPDB1"
+	// untuk database aplikasi (pluggable database).
+	Service  string
+	User     string
+	Password string
+	// MaxOpenConns membatasi jumlah koneksi sekaligus ke Oracle.
+	MaxOpenConns int
+}
+
+// IsProduction mengembalikan true jika aplikasi berjalan di mode production.
+func (c Config) IsProduction() bool {
+	return c.Env == "production"
+}
+
+// Load membaca konfigurasi API gateway dari environment variable dan memvalidasinya.
+func Load() (Config, error) {
+	shutdownTimeout, err := getDuration("SHUTDOWN_TIMEOUT", 10*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	env := getString("APP_ENV", "development")
+	// Default Secure mengikuti APP_ENV: true di production, false di laptop
+	// (http://localhost tidak memakai HTTPS).
+	cookieSecure, err := getBool("COOKIE_SECURE", env == "production")
+	if err != nil {
+		return Config{}, err
+	}
+	sameSite, err := parseSameSite(getString("COOKIE_SAMESITE", "lax"))
+	if err != nil {
+		return Config{}, err
+	}
+	liveMax, err := getInt("LIVE_MAX_CLIENTS", 5000)
+	if err != nil {
+		return Config{}, err
+	}
+	rateLimit, err := getBool("RATE_LIMIT_ENABLED", true)
+	if err != nil {
+		return Config{}, err
+	}
+	liveAdminOnly, err := getBool("LIVE_BROADCAST_ADMIN_ONLY", false)
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg := Config{
+		Env:                    env,
+		HTTPAddr:               ":" + getString("HTTP_PORT", "8080"),
+		CORSAllowedOrigins:     getList("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
+		ShutdownTimeout:        shutdownTimeout,
+		TrustedProxies:         getList("TRUSTED_PROXIES", nil),
+		AuthGRPCAddr:           getString("AUTH_GRPC_ADDR", "localhost:50051"),
+		VideoGRPCAddr:          getString("VIDEO_GRPC_ADDR", "localhost:50052"),
+		JWTPublicKeyFile:       getString("JWT_PUBLIC_KEY_FILE", ""),
+		NATSURL:                getString("NATS_URL", "nats://localhost:4222"),
+		LiveMaxClients:         liveMax,
+		Cookie:                 CookieConfig{Secure: cookieSecure, SameSite: sameSite},
+		OAuth:                  loadOAuth(),
+		RateLimitEnabled:       rateLimit,
+		LiveBroadcastAdminOnly: liveAdminOnly,
+		MetricsAddr:            ":" + getString("METRICS_PORT", "9090"),
+	}
+
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c Config) validate() error {
+	if c.Env != "development" && c.Env != "production" {
+		return fmt.Errorf("APP_ENV harus \"development\" atau \"production\", dapat %q", c.Env)
+	}
+	if err := validPort("HTTP_PORT", strings.TrimPrefix(c.HTTPAddr, ":")); err != nil {
+		return err
+	}
+	if err := validMetricsPort(c.MetricsAddr, c.HTTPAddr); err != nil {
+		return err
+	}
+	if len(c.CORSAllowedOrigins) == 0 {
+		return fmt.Errorf("CORS_ALLOWED_ORIGINS tidak boleh kosong")
+	}
+	if c.JWTPublicKeyFile == "" {
+		return fmt.Errorf("JWT_PUBLIC_KEY_FILE wajib diisi")
+	}
+	if err := validNATSURL(c.NATSURL); err != nil {
+		return err
+	}
+	if c.LiveMaxClients < 1 {
+		return fmt.Errorf("LIVE_MAX_CLIENTS minimal 1, dapat %d", c.LiveMaxClients)
+	}
+	// Browser menolak cookie SameSite=None yang tidak Secure.
+	if c.Cookie.SameSite == http.SameSiteNoneMode && !c.Cookie.Secure {
+		return fmt.Errorf("COOKIE_SAMESITE=none wajib disertai COOKIE_SECURE=true")
+	}
+	return c.OAuth.validate()
+}
+
+// parseSameSite mengubah "lax", "strict", atau "none" menjadi http.SameSite.
+func parseSameSite(v string) (http.SameSite, error) {
+	switch strings.ToLower(v) {
+	case "lax":
+		return http.SameSiteLaxMode, nil
+	case "strict":
+		return http.SameSiteStrictMode, nil
+	case "none":
+		return http.SameSiteNoneMode, nil
+	}
+	return 0, fmt.Errorf("COOKIE_SAMESITE harus lax, strict, atau none, dapat %q", v)
+}
+
+// loadDB membaca pengaturan Oracle (DB_*). Dipakai oleh service yang
+// memegang database, seperti AuthService. Gateway tidak memakainya.
+func loadDB(defaultUser string) (DBConfig, error) {
+	port, err := getInt("DB_PORT", 1521)
+	if err != nil {
+		return DBConfig{}, err
+	}
+	maxOpen, err := getInt("DB_MAX_OPEN_CONNS", 10)
+	if err != nil {
+		return DBConfig{}, err
+	}
+	return DBConfig{
+		Host:         getString("DB_HOST", "localhost"),
+		Port:         port,
+		Service:      getString("DB_SERVICE", "FREEPDB1"),
+		User:         getString("DB_USER", defaultUser),
+		Password:     os.Getenv("DB_PASSWORD"), // sengaja tanpa default
+		MaxOpenConns: maxOpen,
+	}, nil
+}
+
+func (d DBConfig) validate() error {
+	if d.Port < 1 || d.Port > 65535 {
+		return fmt.Errorf("DB_PORT tidak valid: %d", d.Port)
+	}
+	if d.MaxOpenConns < 1 {
+		return fmt.Errorf("DB_MAX_OPEN_CONNS minimal 1, dapat %d", d.MaxOpenConns)
+	}
+	// Password tidak diberi default agar tidak ada password bawaan yang
+	// ikut ter-commit. Isi lewat .env (lokal) atau Secret (Kubernetes).
+	if d.Password == "" {
+		return fmt.Errorf("DB_PASSWORD wajib diisi")
+	}
+	return nil
+}
+
+// validPort memeriksa bahwa nilai port berupa angka 1 sampai 65535.
+// validMetricsPort memeriksa METRICS_PORT (langkah 28): angka port yang
+// sah dan tidak bentrok dengan port lain di proses yang sama.
+func validMetricsPort(metricsAddr string, others ...string) error {
+	if err := validPort("METRICS_PORT", strings.TrimPrefix(metricsAddr, ":")); err != nil {
+		return err
+	}
+	for _, o := range others {
+		if o == metricsAddr {
+			return fmt.Errorf("METRICS_PORT %s bentrok dengan port lain di service ini", strings.TrimPrefix(metricsAddr, ":"))
+		}
+	}
+	return nil
+}
+
+func validPort(key, port string) error {
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return fmt.Errorf("%s tidak valid: %q", key, port)
+	}
+	return nil
+}
+
+func getString(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	return fallback
+}
+
+func getDuration(key string, fallback time.Duration) (time.Duration, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(strings.TrimSpace(v))
+	if err != nil {
+		return 0, fmt.Errorf("%s tidak valid (contoh: 10s, 1m): %w", key, err)
+	}
+	return d, nil
+}
+
+func getBool(key string, fallback bool) (bool, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	b, err := strconv.ParseBool(strings.TrimSpace(v))
+	if err != nil {
+		return false, fmt.Errorf("%s harus true atau false: %w", key, err)
+	}
+	return b, nil
+}
+
+func getInt(key string, fallback int) (int, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return 0, fmt.Errorf("%s harus berupa angka: %w", key, err)
+	}
+	return n, nil
+}
+
+// getList memecah nilai yang dipisah koma, misalnya "http://a.com, http://b.com".
+func getList(key string, fallback []string) []string {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}

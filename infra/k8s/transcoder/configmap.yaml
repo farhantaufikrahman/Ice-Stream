@@ -1,0 +1,27 @@
+# Konfigurasi non-rahasia untuk transcoder. Kunci storage dari Secret
+# storage-credentials (dibuat oleh kustomization.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: transcoder-config
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: transcoder
+    app.kubernetes.io/part-of: ice-stream
+data:
+  APP_ENV: production
+  HTTP_PORT: "8080"
+  # Harus lebih pendek dari terminationGracePeriodSeconds (30s).
+  SHUTDOWN_TIMEOUT: 20s
+  NATS_URL: nats://nats:4222
+  STORAGE_ENDPOINT: http://storage:9000
+  STORAGE_REGION: us-east-1
+  STORAGE_BUCKET: videos
+  # Folder kerja sementara (volume emptyDir "work" di Deployment).
+  WORK_DIR: /work
+  # veryfast: ringan untuk CPU PC lokal. Di server sungguhan bisa "medium"
+  # (file lebih kecil, tapi encode lebih lama).
+  FFMPEG_PRESET: veryfast
+  # 2 thread: PC tetap responsif saat video diproses.
+  FFMPEG_THREADS: "2"
+  JOB_TIMEOUT: 1h

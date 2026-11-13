@@ -1,0 +1,144 @@
+import { useState, type FormEvent } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useAuth } from '../auth/useAuth'
+import { Avatar } from './Avatar'
+import { HistoryLink, NotificationBell, WatchLaterLink } from './HeaderIcons'
+import { UploadIcon } from './studio/StudioLayout'
+import { LogoMark, Wordmark } from './Logo'
+import { ThemeToggle } from './ThemeToggle'
+import { INFO_LINKS } from '../lib/info'
+
+/** Kerangka halaman: header, isi halaman (<Outlet />), lalu footer. */
+export function Layout() {
+  return (
+    <div className="app">
+      <Header />
+      <main className="page">
+        <Outlet />
+      </main>
+      <footer className="footer">
+        <span>© 2026 Ice-Stream</span>
+        <nav className="footer-nav" aria-label="Tautan footer">
+          {INFO_LINKS.map((l) => (
+            <Link key={l.topic} to={l.path}>
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+      </footer>
+    </div>
+  )
+}
+
+function Header() {
+  const { status, user, logout } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [params] = useSearchParams()
+  const currentQuery = location.pathname === '/search' ? (params.get('q') ?? '') : ''
+
+  const onSearch = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const q = String(new FormData(e.currentTarget).get('q') ?? '').trim()
+    if (q) navigate(`/search?q=${encodeURIComponent(q)}`)
+  }
+
+  const next = encodeURIComponent(location.pathname + location.search)
+  return (
+    <header className="header">
+      <Link to="/" className="brand" aria-label="Beranda Ice-Stream">
+        <LogoMark size={38} />
+        <Wordmark size={22} />
+      </Link>
+      {/* Menu utama (desain Home.dc.html dan Live.dc.html). */}
+      <nav className="main-nav" aria-label="Navigasi utama">
+        <NavLink to="/" end className="main-nav-link">
+          Beranda
+        </NavLink>
+        <NavLink to="/live" className="main-nav-link">
+          Live
+        </NavLink>
+      </nav>
+      {/* key: isi kotak ikut berganti saat URL ?q= berubah (misalnya tombol Back). */}
+      <form className="search" role="search" onSubmit={onSearch} key={currentQuery}>
+        <label htmlFor="q" className="sr-only">
+          Cari video
+        </label>
+        <SearchIcon />
+        <input id="q" name="q" type="search" placeholder="Cari video" defaultValue={currentQuery} />
+        <button type="submit" className="btn btn-primary btn-small">
+          Cari
+        </button>
+      </form>
+      <div className="header-actions">
+        {status === 'authenticated' && (
+          <>
+            <Link to="/studio/live" className="btn btn-live" aria-label="Mulai live">
+              <span className="live-dot is-dark" aria-hidden="true" />
+              <span className="hide-narrow">Mulai live</span>
+            </Link>
+            <Link to="/upload" className="btn btn-primary" aria-label="Unggah video">
+              <UploadIcon />
+              <span className="hide-narrow">Unggah</span>
+            </Link>
+          </>
+        )}
+        <ThemeToggle />
+        {status === 'authenticated' && (
+          <>
+            <HistoryLink />
+            <WatchLaterLink />
+            <NotificationBell />
+          </>
+        )}
+        {status === 'authenticated' && user ? (
+          <UserMenu name={user.display_name || user.username} username={user.username} avatarUrl={user.avatar_url} onLogout={logout} />
+        ) : status === 'anonymous' ? (
+          <>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Masuk
+            </Link>
+            <Link to="/register" className="btn btn-amber">
+              Daftar
+            </Link>
+          </>
+        ) : null}
+      </div>
+    </header>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  )
+}
+
+function UserMenu({ name, username, avatarUrl, onLogout }: { name: string; username: string; avatarUrl: string; onLogout: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  const navigate = useNavigate()
+  const handleLogout = async () => {
+    setBusy(true)
+    try {
+      await onLogout()
+    } finally {
+      setBusy(false)
+      navigate('/')
+    }
+  }
+  return (
+    <div className="user-menu">
+      {/* Sesuai desain: avatar di header membuka kanal sendiri. Studio ada di tombol "Kelola video" di sana. */}
+      <Link to={`/channel/${encodeURIComponent(username)}`} className="user-link" title="Kanal saya">
+        <Avatar name={name} url={avatarUrl} size={40} />
+        <span className="user-name">{name}</span>
+      </Link>
+      <button type="button" className="btn btn-ghost" onClick={handleLogout} disabled={busy}>
+        Keluar
+      </button>
+    </div>
+  )
+}

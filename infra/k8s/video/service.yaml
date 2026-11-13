@@ -1,0 +1,22 @@
+# Alamat VideoService di dalam cluster: video:50052. Seperti AuthService,
+# tidak ada HTTPRoute, jadi hanya gateway yang bisa memanggilnya.
+# Port 8090 hanya dipanggil MediaMTX (hook auth siaran langsung).
+apiVersion: v1
+kind: Service
+metadata:
+  name: video
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: video
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: video
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: grpc
+      appProtocol: kubernetes.io/h2c
+    - name: live-hook
+      port: 8090
+      targetPort: live-hook

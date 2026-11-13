@@ -1,0 +1,216 @@
+# Baca .env (kalau ada) lalu jadikan environment variable untuk perintah di bawah.
+-include .env
+export
+
+.PHONY: run run-auth proto proto-lint docker-build-auth docker-push-auth test test-race fmt vet tidy docker-build docker-run docker-push k8s-up k8s-restart k8s-logs k8s-logs-auth k8s-forward migrate-build migrate-push k8s-migrate k8s-forward-db run-video docker-build-video docker-push-video k8s-logs-video k8s-migrate-video k8s-forward-storage run-transcoder docker-build-transcoder docker-push-transcoder k8s-logs-transcoder k8s-forward-nats docker-build-web docker-push-web k8s-restart-web k8s-logs-web k8s-make-admin test-coverage monitoring-up monitoring-down grafana-forward prometheus-forward deploy deploy-local
+
+IMAGE ?= $(DOCKERHUB_USER)/ice-stream-api:dev
+
+AUTH_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-auth:dev
+
+VIDEO_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-video:dev
+
+MIGRATE_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-migrations:dev
+
+TRANSCODER_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-transcoder:dev
+
+WEB_IMAGE ?= $(DOCKERHUB_USER)/ice-stream-web:dev
+
+docker-push: ## Upload image ke Docker Hub (jalankan docker login sekali dulu)
+	docker push $(IMAGE)
+
+docker-push-auth: ## Upload image AuthService ke Docker Hub
+	docker push $(AUTH_IMAGE)
+
+docker-push-video: ## Upload image VideoService ke Docker Hub
+	docker push $(VIDEO_IMAGE)
+
+docker-push-transcoder: ## Upload image transcoder ke Docker Hub
+	docker push $(TRANSCODER_IMAGE)
+
+docker-push-web: ## Upload image frontend (nginx) ke Docker Hub
+	docker push $(WEB_IMAGE)
+
+run: ## Jalankan API gateway
+	go run ./cmd/api
+
+
+# Bucket dan MEDIA_PUBLIC_URL diisi khusus di sini, karena .env dipakai
+# bersama VideoService (bucket videos). Foto profil ada di bucket images.
+run-auth: ## Jalankan AuthService + UserService (gRPC) di port 50051; butuh make k8s-forward-db
+	STORAGE_BUCKET=images MEDIA_PUBLIC_URL= go run ./cmd/auth
+
+# $$VIDEO_DB_PASSWORD (dua tanda $) dibaca oleh shell dari .env, bukan oleh
+# make, jadi password tidak ikut tercetak di terminal.
+run-video: ## Jalankan VideoService (gRPC) di port 50052; butuh make k8s-forward-db
+	DB_USER=video_svc DB_PASSWORD="$$VIDEO_DB_PASSWORD" GRPC_PORT=50052 go run ./cmd/video
+
+# HTTP_PORT=8081 supaya tidak bentrok dengan gateway (make run) di 8080.
+run-transcoder: ## Jalankan transcoder; butuh ffmpeg terpasang dan make k8s-forward-nats
+	HTTP_PORT=8081 go run ./cmd/transcoder
+
+proto: ## Buat ulang kode Go dari file .proto (folder gen/)
+	buf generate
+
+proto-lint: ## Periksa gaya penulisan file .proto
+	buf lint
+
+test: ## Jalankan semua test
+	go test ./...
+
+test-race: ## Test + pendeteksi race condition (butuh gcc: sudo apt install build-essential)
+	go test -race ./...
+
+test-coverage: ## Test + laporan coverage.out (dibaca SonarQube: sonar.go.coverage.reportPaths)
+	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out | tail -1
+
+fmt: ## Rapikan format kode
+	gofmt -w .
+
+vet: ## Cari bug umum secara statis
+	go vet ./...
+
+tidy: ## Sinkronkan go.mod dan go.sum
+	go mod tidy
+
+docker-build: ## Build image Docker untuk API gateway
+	docker build --target api -t $(IMAGE) .
+
+docker-build-auth: ## Build image Docker untuk AuthService
+	docker build --target auth -t $(AUTH_IMAGE) .
+
+docker-build-video: ## Build image Docker untuk VideoService
+	docker build --target video -t $(VIDEO_IMAGE) .
+
+docker-build-transcoder: ## Build image Docker untuk transcoder (Go + ffmpeg)
+	docker build --target transcoder -t $(TRANSCODER_IMAGE) .
+
+docker-build-web: ## Build image frontend: React di-build lalu disajikan nginx (Dockerfile ada di ../frontend)
+	docker build -t $(WEB_IMAGE) ../frontend
+
+docker-run: ## Jalankan image gateway di Docker (tanpa Kubernetes) di port 4000; AuthService dan VideoService harus jalan (make run-auth, make run-video)
+	docker run --rm -p 4000:8080 --env-file .env -e HTTP_PORT=8080 \
+		-e AUTH_GRPC_ADDR=host.docker.internal:50051 \
+		-e VIDEO_GRPC_ADDR=host.docker.internal:50052 \
+		-e JWT_PUBLIC_KEY_FILE=/secrets/jwt-public.pem \
+		-v $(CURDIR)/secrets/jwt-public.pem:/secrets/jwt-public.pem:ro \
+		$(IMAGE)
+
+k8s-up: ## Pasang atau perbarui semua manifest di namespace ice-stream
+	kubectl apply -k ../infra/k8s/
+
+k8s-restart: ## Restart pod gateway, auth, video, dan transcoder supaya memakai image yang baru di-push
+	kubectl -n ice-stream rollout restart deployment/api deployment/auth deployment/video deployment/transcoder
+	kubectl -n ice-stream rollout status deployment/auth --timeout=120s
+	kubectl -n ice-stream rollout status deployment/video --timeout=120s
+	kubectl -n ice-stream rollout status deployment/transcoder --timeout=120s
+	kubectl -n ice-stream rollout status deployment/api --timeout=60s
+
+k8s-restart-web: ## Restart pod frontend supaya memakai image web yang baru di-push
+	kubectl -n ice-stream rollout restart deployment/web
+	kubectl -n ice-stream rollout status deployment/web --timeout=60s
+
+k8s-logs: ## Lihat log API gateway secara live
+	kubectl -n ice-stream logs -f deployment/api
+
+k8s-logs-auth: ## Lihat log AuthService secara live
+	kubectl -n ice-stream logs -f deployment/auth
+
+k8s-logs-video: ## Lihat log VideoService secara live
+	kubectl -n ice-stream logs -f deployment/video
+
+k8s-logs-transcoder: ## Lihat log transcoder secara live
+	kubectl -n ice-stream logs -f deployment/transcoder
+
+k8s-logs-web: ## Lihat log nginx frontend secara live
+	kubectl -n ice-stream logs -f deployment/web
+
+k8s-forward: ## Akses API dari PC
+	kubectl -n ice-stream port-forward svc/api 4010:80
+
+migrate-build: ## Build image migrasi (Flyway + file SQL di folder migrations)
+	docker build -t $(MIGRATE_IMAGE) migrations
+
+migrate-push: ## Upload image migrasi ke Docker Hub
+	docker push $(MIGRATE_IMAGE)
+
+k8s-migrate: ## Jalankan migrasi schema AUTH_SVC di Kubernetes lalu tampilkan lognya
+	kubectl -n ice-stream delete job migrate-auth --ignore-not-found
+	kubectl apply -f ../infra/k8s/jobs/migrate-auth.yaml
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-auth --timeout=300s
+	kubectl -n ice-stream logs job/migrate-auth
+
+k8s-forward-db: ## Buka Oracle di localhost:1521 (untuk make run-auth dan aplikasi database di laptop)
+	kubectl -n ice-stream port-forward svc/oracle 1521:1521
+
+k8s-migrate-video: ## Buat user VIDEO_SVC + tabel videos di Kubernetes lalu tampilkan lognya
+	kubectl -n ice-stream delete job migrate-video --ignore-not-found
+	kubectl apply -f ../infra/k8s/jobs/migrate-video.yaml
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-video --timeout=300s
+	kubectl -n ice-stream logs job/migrate-video -c bootstrap
+	kubectl -n ice-stream logs job/migrate-video -c video
+
+# API S3 (localhost:9000) sudah selalu terbuka lewat Service storage-public,
+# jadi yang di-forward di sini hanya console.
+k8s-forward-storage: ## Buka console RustFS di localhost:9001 (API S3 sudah ada di localhost:9000)
+	kubectl -n ice-stream port-forward svc/storage 9001:9001
+
+k8s-forward-nats: ## Buka NATS di localhost:4222 (client) dan localhost:8222 (pemantauan)
+	kubectl -n ice-stream port-forward svc/nats 4222:4222 8222:8222
+# Langkah 28: halaman Moderasi hanya untuk role ADMIN. Perintah ini
+# menjalankan sqlplus di dalam pod Oracle sebagai auth_svc; password dibaca
+# dari env APP_USER_PASSWORD di pod (tanda $$ = dibaca shell di pod, bukan
+# oleh make), jadi tidak tercetak di terminal. Setelah itu user tersebut
+# harus keluar lalu masuk lagi, karena role dibaca dari access token.
+k8s-make-admin: ## Jadikan user admin: make k8s-make-admin USERNAME=budi
+	@echo "$(USERNAME)" | grep -Eq '^[a-z0-9_]{3,30}$$' || { echo "Isi USERNAME (huruf kecil, angka, _), misalnya: make k8s-make-admin USERNAME=budi"; exit 1; }
+	@printf "SET FEEDBACK ON\nUPDATE users SET role = 'ADMIN', updated_at = SYSTIMESTAMP WHERE username = '%s';\nCOMMIT;\nSELECT username, role FROM users WHERE username = '%s';\nEXIT\n" "$(USERNAME)" "$(USERNAME)" | \
+		kubectl -n ice-stream exec -i oracle-0 -c oracle -- bash -c 'sqlplus -s "$$APP_USER/$$APP_USER_PASSWORD@FREEPDB1"'
+
+# ---------- Monitoring (langkah 29): Prometheus + Grafana ----------
+KPS_VERSION ?= 93.2.2
+
+monitoring-up: ## Pasang/perbarui Prometheus + Grafana (butuh helm dan infra/k8s/secrets/grafana.env)
+	@test -s ../infra/k8s/secrets/grafana.env || { echo "Buat dulu ../infra/k8s/secrets/grafana.env (salin dari grafana.env.example)"; exit 1; }
+	kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n monitoring create secret generic grafana-admin --from-env-file=../infra/k8s/secrets/grafana.env --dry-run=client -o yaml | kubectl apply -f -
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--version $(KPS_VERSION) --namespace monitoring \
+		--values ../infra/monitoring/values.yaml --wait --timeout 10m
+	kubectl apply -k ../infra/monitoring/
+
+monitoring-down: ## Hapus Prometheus + Grafana (data metrik ikut hilang)
+	-kubectl delete -k ../infra/monitoring/
+	helm uninstall monitoring --namespace monitoring
+
+grafana-forward: ## Buka Grafana di http://localhost:3000
+	kubectl -n monitoring port-forward service/monitoring-grafana 3000:80
+
+prometheus-forward: ## Buka Prometheus di http://localhost:9095 (menu Status > Targets)
+	kubectl -n monitoring port-forward service/monitoring-kube-prometheus-prometheus 9095:9090
+
+# ---------- Online (langkah 29): backend di kube laptop + Cloudflare Tunnel ----------
+# Image :main dibuat GitHub Actions (.github/workflows/cd.yml) setiap ada
+# push ke branch main. Jalankan target ini SETELAH workflow CD hijau.
+
+DEPLOY_TAG ?= main
+
+deploy: ## Online: pasang infra/online + image :main (atau DEPLOY_TAG=dev), migrasi, restart service
+	@test -s ../infra/online/secrets/cloudflared.env || { echo "Buat dulu ../infra/online/secrets/cloudflared.env (salin dari cloudflared.env.example)"; exit 1; }
+	@test -s ../infra/online/secrets/smtp.env || { echo "Buat dulu ../infra/online/secrets/smtp.env (salin dari smtp.env.example)"; exit 1; }
+	@echo "$(DEPLOY_TAG)" | grep -Eq '^[A-Za-z0-9_.-]+$$' || { echo "DEPLOY_TAG tidak valid"; exit 1; }
+	kubectl kustomize ../infra/online/ | sed -E 's#(/ice-stream-[a-z]+):main$$#\1:$(DEPLOY_TAG)#' | kubectl apply -f -
+	kubectl -n ice-stream delete job migrate-auth migrate-video --ignore-not-found
+	sed 's#ice-stream-migrations:dev#ice-stream-migrations:$(DEPLOY_TAG)#' ../infra/k8s/jobs/migrate-auth.yaml | kubectl apply -f -
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-auth --timeout=300s
+	sed 's#ice-stream-migrations:dev#ice-stream-migrations:$(DEPLOY_TAG)#' ../infra/k8s/jobs/migrate-video.yaml | kubectl apply -f -
+	kubectl -n ice-stream wait --for=condition=complete job/migrate-video --timeout=300s
+	$(MAKE) k8s-restart
+	kubectl -n ice-stream rollout status deployment/cloudflared --timeout=120s
+
+deploy-local: ## Kembali ke versi lokal (image :dev, tanpa tunnel)
+	kubectl -n ice-stream delete deployment cloudflared --ignore-not-found
+	kubectl apply -k ../infra/k8s/
+	$(MAKE) k8s-restart

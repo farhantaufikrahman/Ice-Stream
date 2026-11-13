@@ -1,0 +1,94 @@
+# Transcoder: worker yang mengubah video mentah menjadi HLS (360p/720p) dan
+# thumbnail memakai ffmpeg. Tidak punya Service karena tidak menerima
+# request; ia mengambil tugas sendiri dari NATS JetStream.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcoder
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: transcoder
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: transcoder
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: transcoder
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      # Saat pod dimatikan, ffmpeg dihentikan dan videonya dikembalikan ke
+      # antrean, lalu dikerjakan ulang oleh pod berikutnya.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: transcoder
+          # Image dari akun Docker Hub kamu (farhanrahman27).
+          image: farhanrahman27/ice-stream-transcoder:dev
+          imagePullPolicy: Always
+          ports:
+            # /livez, /healthz, dan /metrics Prometheus (langkah 28).
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: transcoder-config
+          env:
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_ACCESS_KEY
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_SECRET_KEY
+          # 0/1 di `kubectl get pods` jika NATS atau RustFS tidak bisa dihubungi.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # Hanya memeriksa proses masih hidup (bukan NATS/RustFS), supaya pod
+          # tidak di-restart di tengah transcoding gara-gara RustFS lambat.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            # ffmpeg memakai sekitar 250 MB untuk video 1080p (diukur di
+            # sandbox). Batas CPU 2 core supaya PC tetap lancar.
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        # Folder kerja sementara di disk node, dihapus saat pod dihapus.
+        # Satu video bisa butuh 2-3 kali ukuran file aslinya.
+        - name: work
+          emptyDir:
+            sizeLimit: 10Gi

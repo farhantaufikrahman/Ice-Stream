@@ -1,0 +1,18 @@
+# Alamat AuthService di dalam cluster: auth:50051. Tidak ada HTTPRoute,
+# jadi AuthService tidak bisa diakses dari luar cluster, hanya oleh gateway.
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  selector:
+    app.kubernetes.io/name: auth
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      appProtocol: kubernetes.io/h2c

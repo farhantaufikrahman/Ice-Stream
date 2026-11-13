@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+// Kontrak gRPC UserService: profil dan channel user. Berjalan di proses yang
+// sama dengan AuthService (cmd/auth) dan memakai tabel users yang sama,
+// tapi kontraknya terpisah supaya nanti bisa dipindah ke service sendiri
+// tanpa mengubah gateway. Hanya dipanggil oleh API gateway; id user di
+// requester_id/viewer_id sudah diverifikasi gateway dari access token.
+package user.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service UserService {
+  // GetProfile mengambil profil satu user berdasarkan user_id atau
+  // username. Email hanya diisi jika viewer_id sama dengan user tersebut.
+  // Error NOT_FOUND jika user tidak ada atau diblokir (kecuali dirinya
+  // sendiri yang melihat).
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  // BatchGetProfiles mengambil banyak profil sekaligus, misalnya pemilik
+  // video di satu halaman feed. Id yang tidak ada dilewati (bukan error).
+  // Maksimal 100 id per panggilan.
+  rpc BatchGetProfiles(BatchGetProfilesRequest) returns (BatchGetProfilesResponse);
+  // UpdateProfile mengubah nama tampilan dan/atau bio milik requester.
+  // Field yang tidak dikirim tidak diubah.
+  // Error INVALID_ARGUMENT jika nilainya tidak valid.
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+  // UploadAvatar menyimpan foto profil baru. Gambar dipotong menjadi
+  // persegi di tengah, diperkecil ke 256x256, dan disimpan ulang sebagai
+  // JPEG (metadata seperti lokasi GPS ikut terbuang).
+  // Error INVALID_ARGUMENT jika bukan gambar JPEG/PNG/WebP, lebih dari 2 MiB,
+  // atau ukurannya di luar batas.
+  rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+  // RemoveAvatar menghapus foto profil requester.
+  rpc RemoveAvatar(RemoveAvatarRequest) returns (RemoveAvatarResponse);
+  // Subscribe membuat requester mengikuti channel_id. Aman dipanggil ulang.
+  // Error INVALID_ARGUMENT untuk subscribe diri sendiri,
+  // FAILED_PRECONDITION jika sudah mengikuti 1000 channel, NOT_FOUND jika
+  // channel tidak ada atau diblokir.
+  rpc Subscribe(SubscribeRequest) returns (SubscribeResponse);
+  // Unsubscribe berhenti mengikuti channel_id. Aman dipanggil walau belum
+  // pernah subscribe.
+  rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+  // ListSubscriptions mengambil channel yang diikuti requester, yang
+  // terakhir di-subscribe lebih dulu.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
+  // ListSubscribedChannelIds mengambil SEMUA id channel yang diikuti
+  // requester (maksimal 1000), untuk menyusun feed subscription.
+  rpc ListSubscribedChannelIds(ListSubscribedChannelIdsRequest) returns (ListSubscribedChannelIdsResponse);
+  // ListSubscriberIds mengambil id subscriber channel_id, urut dari yang
+  // terkecil, satu halaman setiap panggilan. Dipakai VideoService untuk
+  // mengirim notifikasi video baru (langkah 16); tidak dibuka di gateway.
+  rpc ListSubscriberIds(ListSubscriberIdsRequest) returns (ListSubscriberIdsResponse);
+  // CountNewSubscribers menghitung subscriber channel_id yang mulai
+  // mengikuti dalam dua periode berurutan (dasbor Creator Studio, langkah
+  // 22b). Yang sudah berhenti mengikuti tidak terhitung, karena barisnya
+  // sudah dihapus. Error INVALID_ARGUMENT jika urutan waktunya salah.
+  rpc CountNewSubscribers(CountNewSubscribersRequest) returns (CountNewSubscribersResponse);
+  // SearchUsers mencari kreator yang username atau nama tampilannya berisi
+  // setiap kata di query (langkah 22c, tab Kreator di halaman pencarian).
+  // Akun yang diblokir tidak ikut. Urutan: username yang sama persis, lalu
+  // username/nama yang diawali kata pertama, lalu subscriber terbanyak.
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+}
+
+message Profile {
+  int64 id = 1;
+  string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  // URL publik foto profil (JPEG 256x256). Kosong jika belum ada.
+  string avatar_url = 5;
+  google.protobuf.Timestamp created_at = 6;
+  // Hanya diisi untuk pemilik profil (lihat GetProfile).
+  string email = 7;
+  // Jumlah subscriber channel ini (langkah 10).
+  int64 subscriber_count = 8;
+}
+
+message GetProfileRequest {
+  // Isi salah satu.
+  oneof user {
+    int64 user_id = 1;
+    string username = 2;
+  }
+  // 0 berarti pengunjung belum login.
+  int64 viewer_id = 3;
+}
+
+message GetProfileResponse {
+  Profile profile = 1;
+  // true jika viewer_id mengikuti user ini. Selalu false tanpa login.
+  bool viewer_subscribed = 2;
+}
+
+message BatchGetProfilesRequest {
+  repeated int64 user_ids = 1;
+}
+
+message BatchGetProfilesResponse {
+  // Urutan tidak dijamin sama dengan user_ids. Tidak pernah berisi email.
+  repeated Profile profiles = 1;
+}
+
+message UpdateProfileRequest {
+  int64 requester_id = 1;
+  // "optional" membuat kita bisa membedakan "tidak dikirim" (jangan ubah)
+  // dari "dikirim kosong" (misalnya menghapus bio).
+  optional string display_name = 2;
+  optional string bio = 3;
+}
+
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+
+message UploadAvatarRequest {
+  int64 requester_id = 1;
+  // Isi file gambar apa adanya (maksimal 2 MiB).
+  bytes image = 2;
+}
+
+message UploadAvatarResponse {
+  Profile profile = 1;
+}
+
+message RemoveAvatarRequest {
+  int64 requester_id = 1;
+}
+
+message RemoveAvatarResponse {
+  Profile profile = 1;
+}
+
+message SubscribeRequest {
+  int64 requester_id = 1;
+  int64 channel_id = 2;
+}
+
+message SubscribeResponse {
+  // Selalu true.
+  bool subscribed = 1;
+  int64 subscriber_count = 2;
+}
+
+message UnsubscribeRequest {
+  int64 requester_id = 1;
+  int64 channel_id = 2;
+}
+
+message UnsubscribeResponse {
+  // Selalu false.
+  bool subscribed = 1;
+  int64 subscriber_count = 2;
+}
+
+message ListSubscriptionsRequest {
+  int64 requester_id = 1;
+  // 0 = default (20). Maksimal 50.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSubscriptionsResponse {
+  // Channel yang diblokir dilewati. Tidak pernah berisi email.
+  repeated Profile channels = 1;
+  string next_page_token = 2;
+}
+
+message ListSubscribedChannelIdsRequest {
+  int64 requester_id = 1;
+}
+
+message ListSubscribedChannelIdsResponse {
+  repeated int64 channel_ids = 1;
+}
+
+message ListSubscriberIdsRequest {
+  int64 channel_id = 1;
+  // Hanya id yang lebih besar dari ini. 0 = dari awal. Untuk halaman
+  // berikutnya, isi dengan id terakhir dari halaman sebelumnya.
+  int64 after_subscriber_id = 2;
+  // 1 sampai 1000. 0 = 1000.
+  int32 page_size = 3;
+}
+
+message ListSubscriberIdsResponse {
+  // Kurang dari page_size berarti ini halaman terakhir.
+  repeated int64 subscriber_ids = 1;
+}
+
+message CountNewSubscribersRequest {
+  int64 channel_id = 1;
+  // Periode sebelumnya = [previous_start, current_start),
+  // periode ini = [current_start, end).
+  google.protobuf.Timestamp previous_start = 2;
+  google.protobuf.Timestamp current_start = 3;
+  google.protobuf.Timestamp end = 4;
+}
+
+message CountNewSubscribersResponse {
+  int64 current = 1;
+  int64 previous = 2;
+}
+
+message SearchUsersRequest {
+  // Kata kunci, maksimal 100 karakter. Hanya 5 kata pertama yang dipakai.
+  string query = 1;
+  // Jumlah maksimal per halaman (1 sampai 50, default 20).
+  int32 page_size = 2;
+  // Kosong untuk halaman pertama, lalu isi dengan next_page_token.
+  string page_token = 3;
+}
+
+message SearchUsersResponse {
+  // Tanpa email.
+  repeated Profile profiles = 1;
+  // Kosong jika sudah halaman terakhir (maksimal 10 halaman).
+  string next_page_token = 2;
+  // Jumlah semua hasil (langkah 27), hanya diisi di halaman pertama.
+  // Dihitung paling banyak 1001: nilai 1001 berarti "lebih dari 1000".
+  int64 total_size = 3;
+}

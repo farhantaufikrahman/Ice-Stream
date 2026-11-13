@@ -1,0 +1,19 @@
+# Alamat Oracle di dalam cluster: oracle.ice-stream.svc.cluster.local:1521
+# (dari namespace yang sama cukup "oracle:1521").
+apiVersion: v1
+kind: Service
+metadata:
+  name: oracle
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: oracle
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  # Headless service: DNS langsung menunjuk ke pod StatefulSet.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: oracle
+  ports:
+    - name: oracle
+      port: 1521
+      targetPort: oracle

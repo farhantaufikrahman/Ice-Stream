@@ -1,0 +1,33 @@
+# Pintu API S3 RustFS untuk browser dan laptop: http://localhost:9000
+#
+# Browser mengunggah video langsung ke RustFS lewat URL presigned (dibuat
+# VideoService dengan STORAGE_PUBLIC_ENDPOINT=http://localhost:9000). Dulu
+# alamat ini dibuka dengan port-forward; sekarang dengan Service bertipe
+# LoadBalancer. Di Docker Desktop, Service LoadBalancer otomatis dibuka di
+# localhost PC (sama seperti Gateway di port 4000).
+#
+# Kenapa tidak lewat Gateway (port 4000)? Gateway (nginx) menyimpan dulu
+# seluruh isi upload ke file sementara sebelum meneruskannya, dan batas
+# body bawaan nginx hanya 1 MB. Untuk video sampai 2 GB, browser lebih baik
+# langsung bicara dengan storage, seperti aplikasi asli yang mengunggah
+# langsung ke S3.
+#
+# Hanya port S3 (9000) yang dibuka. Console (9001) tetap lewat
+# make k8s-forward-storage. File tetap aman: tanpa tanda tangan presigned
+# atau access key, RustFS hanya mengizinkan baca hls/* dan avatars/*.
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-public
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: storage
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3

@@ -1,0 +1,26 @@
+# Kotak masuk Mailpit dari PC: http://mail.ice-stream.localhost:4000
+#
+# Hanya untuk development. Siapa pun yang bisa membuka alamat ini bisa
+# membaca semua email (termasuk tautan reset password), jadi route ini
+# tidak boleh ikut dipasang di server yang bisa diakses orang lain.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mailpit
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: mailpit
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  parentRefs:
+    - name: ice-stream-gateway
+  hostnames:
+    - mail.ice-stream.localhost
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: mailpit
+          port: 8025

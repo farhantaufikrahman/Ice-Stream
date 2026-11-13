@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: ice-stream
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth
+        app.kubernetes.io/part-of: ice-stream
+    spec:
+      # Harus lebih lama dari SHUTDOWN_TIMEOUT (10s).
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        # File dari Secret dimiliki grup 65532, jadi bisa dibaca dengan
+        # izin 0440 (tanpa membuka akses untuk user lain).
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: auth
+          # Ganti dengan username Docker Hub kamu.
+          image: farhanrahman27/ice-stream-auth:dev
+          imagePullPolicy: Always
+          ports:
+            - name: grpc
+              containerPort: 50051
+            # Metrik Prometheus (langkah 28): GET /metrics. Tidak dibuka di
+            # Service maupun HTTPRoute, jadi hanya bisa diambil dari dalam cluster.
+            - name: metrics
+              containerPort: 9091
+          envFrom:
+            - configMapRef:
+                name: auth-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oracle-credentials
+                  key: AUTH_SVC_PASSWORD
+            # Untuk menyimpan foto profil (UserService) di RustFS.
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_ACCESS_KEY
+            - name: STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-credentials
+                  key: STORAGE_SECRET_KEY
+          volumeMounts:
+            - name: jwt
+              mountPath: /etc/ice-stream/jwt
+              readOnly: true
+          # Probe gRPC bawaan Kubernetes memanggil grpc.health.v1.Health/Check.
+          # Statusnya NOT_SERVING saat Oracle tidak bisa dihubungi, jadi pod
+          # dikeluarkan dari Service sampai Oracle pulih.
+          readinessProbe:
+            grpc:
+              port: 50051
+            periodSeconds: 5
+            failureThreshold: 3
+          # Liveness sengaja hanya cek port terbuka. Kalau memakai health gRPC,
+          # Oracle mati akan membuat pod auth di-restart terus padahal sehat.
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: jwt
+          secret:
+            secretName: auth-jwt
+            defaultMode: 0440
