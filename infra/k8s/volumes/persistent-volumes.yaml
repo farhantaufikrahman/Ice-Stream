@@ -1,0 +1,85 @@
+# Langkah 30: folder data yang TETAP di node Docker Desktop.
+#
+# Masalahnya: saat cluster Docker Desktop dibuat ulang (reset), PVC baru
+# mendapat folder kosong baru (/var/lib/k8s-pvs/<pvc>/pvc-<id-acak>),
+# padahal folder lama masih ada di disk. Akibatnya data Oracle, RustFS, dan
+# NATS seolah-olah hilang.
+#
+# Solusinya: PersistentVolume buatan sendiri dengan hostPath yang namanya
+# tetap, lalu "dipesan" untuk PVC milik StatefulSet lewat claimRef
+# (https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume).
+# Setelah reset, `make k8s-up` membuat PV ini lagi dengan path yang sama,
+# jadi pod memakai data lama.
+#
+# persistentVolumeReclaimPolicy: Retain = folder TIDAK dihapus walaupun PVC
+# dihapus. Pemilik folder diatur initContainer "fix-permissions" di tiap
+# StatefulSet.
+#
+# Perbandingan: di docker compose ini sama dengan bind mount
+# (./data/oracle:/opt/oracle/oradata). Di cloud (EKS/GKE) biasanya cukup
+# StorageClass dengan reclaimPolicy Retain, karena disknya ada di luar node.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ice-stream-oracle-data
+  labels:
+    app.kubernetes.io/name: oracle
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  # Sama dengan StorageClass default Docker Desktop, supaya PVC dari
+  # volumeClaimTemplates (tanpa storageClassName) cocok dengan PV ini.
+  storageClassName: hostpath
+  claimRef:
+    namespace: ice-stream
+    name: data-oracle-0
+  hostPath:
+    path: /var/lib/k8s-pvs/ice-stream/oracle
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ice-stream-storage-data
+  labels:
+    app.kubernetes.io/name: storage
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  # Sama dengan StorageClass default Docker Desktop, supaya PVC dari
+  # volumeClaimTemplates (tanpa storageClassName) cocok dengan PV ini.
+  storageClassName: hostpath
+  claimRef:
+    namespace: ice-stream
+    name: data-storage-0
+  hostPath:
+    path: /var/lib/k8s-pvs/ice-stream/storage
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ice-stream-nats-data
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/part-of: ice-stream
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  # Sama dengan StorageClass default Docker Desktop, supaya PVC dari
+  # volumeClaimTemplates (tanpa storageClassName) cocok dengan PV ini.
+  storageClassName: hostpath
+  claimRef:
+    namespace: ice-stream
+    name: data-nats-0
+  hostPath:
+    path: /var/lib/k8s-pvs/ice-stream/nats
+    type: DirectoryOrCreate

@@ -20,6 +20,8 @@ resources:
   - video/configmap.yaml
   - video/deployment.yaml
   - video/service.yaml
+  # Folder data tetap untuk Oracle, RustFS, dan NATS (langkah 30)
+  - volumes/persistent-volumes.yaml
   # Database Oracle
   - oracle/service.yaml
   - oracle/statefulset.yaml

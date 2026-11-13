@@ -2,11 +2,17 @@ package video
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	videov1 "github.com/farhantaufikrahman/ice-stream/backend/gen/video/v1"
 )
 
 func TestPartPlan(t *testing.T) {
@@ -103,4 +109,31 @@ func TestPurgeAbortsPendingMultipart(t *testing.T) {
 	_, err = svc.PurgeMedia(ctx, v)
 	require.NoError(t, err)
 	assert.Equal(t, []string{up.Video.UploadID}, store.aborted)
+}
+
+func TestGRPCPresignUploadParts(t *testing.T) {
+	ctx := context.Background()
+	svc, store, up := newMultipartService(t)
+	srv := NewGRPCServer(svc, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	store.putPart(up.Video.UploadID, 1, 500)
+
+	resp, err := srv.PresignUploadParts(ctx, &videov1.PresignUploadPartsRequest{
+		RequesterId: 7, VideoId: up.Video.ID, PartNumbers: []int32{2, 3},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetParts(), 2)
+	assert.Equal(t, int32(2), resp.GetParts()[0].GetPartNumber())
+	assert.Equal(t, int64(234), resp.GetParts()[1].GetSizeBytes())
+	assert.NotEmpty(t, resp.GetParts()[0].GetUrl())
+	assert.Equal(t, []int32{1}, resp.GetUploadedPartNumbers())
+	assert.True(t, resp.GetExpiresAt().AsTime().After(time.Now()))
+
+	// Upload multipart sudah hilang di storage: FailedPrecondition, supaya
+	// gateway menjawab 409 dan frontend tahu harus mulai dari awal.
+	require.NoError(t, store.AbortMultipart(ctx, "", up.Video.UploadID))
+	_, err = srv.PresignUploadParts(ctx, &videov1.PresignUploadPartsRequest{RequesterId: 7, VideoId: up.Video.ID})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+
+	_, err = srv.PresignUploadParts(ctx, &videov1.PresignUploadPartsRequest{RequesterId: 8, VideoId: up.Video.ID})
+	assert.Equal(t, codes.NotFound, status.Code(err), "bukan pemilik")
 }
